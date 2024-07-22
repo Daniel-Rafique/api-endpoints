@@ -3,6 +3,7 @@ const fs = require('fs');
 const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
+const WalletManager = require('./walletManager'); // Import the WalletManager class
 
 const app = express();
 const port = process.env.PORT || 443; // Use port 443 for HTTPS
@@ -13,23 +14,29 @@ const options = {
     cert: fs.readFileSync('/etc/letsencrypt/live/bot.koynlabs.com/fullchain.pem')
 };
 
+// Initialize WalletManager
+const walletManager = new WalletManager('koynlabs-2f749', 'firebaseServiceAccountKey.json');
+
 app.use(bodyParser.json());
 
 // Endpoint to handle incoming POST requests
-app.post('/api/start', (req, res) => {
-    const { chatId, boostType } = req.body;
+app.post('/api/start', async (req, res) => {
+    const { chatId, boostType, walletCount } = req.body;
 
-    if (!chatId || !boostType) {
-        return res.status(400).send('Missing chatId or boostType');
+    if (!chatId || !boostType || !walletCount || walletCount > 1000) {
+        return res.status(400).send('Missing chatId, boostType, or invalid walletCount');
     }
 
-    // Perform the necessary actions with chatId and boostType
-    console.log(`Received chatId: ${chatId}, boostType: ${boostType}`);
+    // Create Solana wallets and encrypt private keys
+    const wallets = walletManager.createSolanaWallets(walletCount);
 
-    // Example action: Log the data (Replace with your logic)
-    // You can integrate this with your market maker logic here
-
-    res.status(200).send('Data received successfully');
+    // Save to Firestore
+    try {
+        await walletManager.saveWallets(chatId, boostType, wallets);
+        res.status(200).send(`Created and saved ${walletCount} wallets successfully`);
+    } catch (error) {
+        res.status(500).send('Internal Server Error');
+    }
 });
 
 // Start the HTTPS server
