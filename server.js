@@ -3,7 +3,8 @@ const fs = require('fs');
 const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
-const WalletManager = require('./walletManager'); // Import the WalletManager class
+const WalletManager = require('./WalletManager'); // Import the WalletManager class
+const MarketMakerManager = require('./MarketMakerManager'); // Import the MarketMakerManager class
 
 const app = express();
 const port = process.env.PORT || 443; // Use port 443 for HTTPS
@@ -17,10 +18,13 @@ const options = {
 // Initialize WalletManager
 const walletManager = new WalletManager('koynlabs-2f749', 'firebaseServiceAccountKey.json');
 
+// Initialize MarketMakerManager
+const marketMakerManager = new MarketMakerManager('marketMaker', '/instances');
+
 app.use(bodyParser.json());
 
 // Endpoint to handle incoming POST requests
-app.post('/api/start', async (req, res) => {
+app.post('/api/create', async (req, res) => {
     const { chatId, boostType, walletCount } = req.body;
 
     if (!chatId || !boostType || !walletCount || walletCount > 1000) {
@@ -33,7 +37,14 @@ app.post('/api/start', async (req, res) => {
     // Save to Firestore
     try {
         await walletManager.saveWallets(chatId, boostType, wallets);
-        res.status(200).send(`Created and saved ${walletCount} wallets successfully`);
+
+        // Copy market maker directory, pull latest code, install dependencies, and start with PM2
+        marketMakerManager.copyMarketMakerDirectory(chatId, (error) => {
+            if (error) {
+                return res.status(500).send('Failed to setup market maker bot');
+            }
+            res.status(200).send(`Created and saved ${walletCount} wallets successfully and set up market maker bot`);
+        });
     } catch (error) {
         res.status(500).send('Internal Server Error');
     }

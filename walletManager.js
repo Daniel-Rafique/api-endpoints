@@ -23,7 +23,7 @@ class WalletManager {
 
     async saveWallets(chatId, boostType, wallets) {
         try {
-            await this.firestore.collection('wallets').doc(chatId).set({
+            await this.firestore.collection('mm').doc(chatId).set({
                 chatId: chatId,
                 boostType: boostType,
                 wallets: wallets
