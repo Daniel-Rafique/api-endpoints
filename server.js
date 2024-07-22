@@ -3,8 +3,8 @@ const fs = require('fs');
 const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
-const WalletManager = require('./WalletManager'); // Import the WalletManager class
-const MarketMakerManager = require('./MarketMakerManager'); // Import the MarketMakerManager class
+const WalletManager = require('./walletManager'); // Import the WalletManager class
+const MarketMakerManager = require('./marketMakerManager'); // Import the MarketMakerManager class
 
 const app = express();
 const port = process.env.PORT || 443; // Use port 443 for HTTPS
@@ -16,7 +16,7 @@ const options = {
 };
 
 // Initialize WalletManager
-const walletManager = new WalletManager('koynlabs-2f749', 'firebaseServiceAccountKey.json');
+const walletManager = new WalletManager('koynlabs-2f749', './firebaseServiceAccountKey.json');
 
 // Initialize MarketMakerManager
 const marketMakerManager = new MarketMakerManager('marketMaker', '/instances');
