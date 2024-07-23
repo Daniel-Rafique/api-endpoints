@@ -2,7 +2,7 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const admin = require('firebase-admin');
 
-class InstanceInitializer {
+class instanceInitializer {
     constructor(basePath, instancePath) {
         this.basePath = basePath;
         this.instancePath = instancePath;
