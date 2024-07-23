@@ -4,8 +4,15 @@ const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
+const admin = require('firebase-admin');
 const WalletManager = require('./walletManager'); // Import the WalletManager class
 const MarketMakerManager = require('./marketMakerManager'); // Import the MarketMakerManager class
+const InstanceInitializer = require('./instanceInitializer'); // Import the InstanceInitializer class
+
+admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    databaseURL: "https://your-database-name.firebaseio.com"
+});
 
 const app = express();
 const port = process.env.PORT || 443; // Use port 443 for HTTPS
@@ -21,6 +28,9 @@ const walletManager = new WalletManager('koynlabs-2f749', './firebaseServiceAcco
 
 // Initialize MarketMakerManager
 const marketMakerManager = new MarketMakerManager('./marketMaker', './instances');
+
+// Initialize InstanceInitializer
+const instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
 
 // Middleware
 app.use(bodyParser.json());
@@ -57,13 +67,10 @@ app.post('/api/create', async (req, res) => {
         // Save to Firestore
         await walletManager.saveWallets(chatId, boostType, wallets);
 
-        // Copy market maker directory, pull latest code, install dependencies, and start with PM2
-        marketMakerManager.copyMarketMakerDirectory(chatId, (error) => {
-            if (error) {
-                return res.status(500).send('Failed to setup market maker bot');
-            }
-            res.status(200).send(`Created and saved ${count} wallets successfully and set up market maker bot`);
-        });
+        // Initialize the market maker instance
+        await instanceInitializer.initializeMarketMakerInstance(chatId, boostType, count);
+
+        res.status(200).send(`Created and saved ${count} wallets successfully and set up market maker bot`);
     } catch (error) {
         console.error('Error processing request:', error);
         res.status(500).send('Internal Server Error');
