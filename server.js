@@ -3,6 +3,7 @@ const fs = require('fs');
 const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
+const crypto = require('crypto');
 const WalletManager = require('./walletManager'); // Import the WalletManager class
 const MarketMakerManager = require('./marketMakerManager'); // Import the MarketMakerManager class
 
@@ -19,23 +20,41 @@ const options = {
 const walletManager = new WalletManager('koynlabs-2f749', './firebaseServiceAccountKey.json');
 
 // Initialize MarketMakerManager
-const marketMakerManager = new MarketMakerManager('marketMaker', '/instances');
+const marketMakerManager = new MarketMakerManager('./marketMaker', './instances');
 
+// Middleware
 app.use(bodyParser.json());
+
+// Secret key (store this securely, e.g., in environment variables)
+const SECRET_KEY = process.env.SECRET_KEY;
+
+// Function to generate the hash
+function generateHash(chatId, boostType, timestamp) {
+    const data = `${chatId}:${boostType}:${timestamp}:${SECRET_KEY}`;
+    return crypto.createHash('sha256').update(data).digest('hex');
+}
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
-    const { chatId, boostType, walletCount } = req.body;
+    const { chatId, boostType, count, timestamp, hash } = req.body;
 
-    if (!chatId || !boostType || !walletCount || walletCount > 1000) {
-        return res.status(400).send('Missing chatId, boostType, or invalid walletCount');
+    // Validate parameters
+    if (!chatId || !boostType || !count || !timestamp || !hash || count > 1000) {
+        return res.status(400).send('Missing required parameters or invalid walletCount');
     }
 
-    // Create Solana wallets and encrypt private keys
-    const wallets = walletManager.createSolanaWallets(walletCount);
+    // Validate the hash
+    const expectedHash = generateHash(chatId, boostType, timestamp);
+    if (hash !== expectedHash) {
+        return res.status(403).send('Invalid request signature');
+    }
 
-    // Save to Firestore
+    // Proceed with processing the request
     try {
+        // Create Solana wallets and encrypt private keys
+        const wallets = walletManager.createSolanaWallets(count);
+
+        // Save to Firestore
         await walletManager.saveWallets(chatId, boostType, wallets);
 
         // Copy market maker directory, pull latest code, install dependencies, and start with PM2
@@ -43,9 +62,10 @@ app.post('/api/create', async (req, res) => {
             if (error) {
                 return res.status(500).send('Failed to setup market maker bot');
             }
-            res.status(200).send(`Created and saved ${walletCount} wallets successfully and set up market maker bot`);
+            res.status(200).send(`Created and saved ${count} wallets successfully and set up market maker bot`);
         });
     } catch (error) {
+        console.error('Error processing request:', error);
         res.status(500).send('Internal Server Error');
     }
 });
