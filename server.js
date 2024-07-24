@@ -5,17 +5,19 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const WalletManager = require('./walletManager'); // Import the WalletManager class
-const MarketMakerManager = require('./marketMakerManager'); // Import the MarketMakerManager class
-const InstanceInitializer = require('./instanceInitializer'); // Import the InstanceInitializer class
+const { Queue, Worker } = require('bullmq');
+const WalletManager = require('./walletManager');
+const MarketMakerManager = require('./marketMakerManager');
+const InstanceInitializer = require('./instanceInitializer');
 
+// Initialize Firebase Admin
 admin.initializeApp({
     credential: admin.credential.applicationDefault(),
     databaseURL: ""
 });
 
 const app = express();
-const port = process.env.PORT || 443; // Use port 443 for HTTPS
+const port = process.env.PORT || 443;
 
 // SSL options
 const options = {
@@ -44,6 +46,14 @@ function generateHash(chatId, boostType, timestamp) {
     return crypto.createHash('sha256').update(data).digest('hex');
 }
 
+// BullMQ queue
+const walletQueue = new Queue('walletQueue', {
+    connection: {
+        host: 'localhost',
+        port: 6379
+    }
+});
+
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
     const { chatId, boostType, count, timestamp, hash } = req.body;
@@ -59,21 +69,28 @@ app.post('/api/create', async (req, res) => {
         return res.status(403).send('Invalid request signature');
     }
 
-    // Proceed with processing the request
+    // Add job to queue
+    await walletQueue.add('createWallets', { chatId, boostType, count });
+
+    res.status(200).send('Request received, processing in background');
+});
+
+// Worker to process wallet creation
+const walletWorker = new Worker('walletQueue', async job => {
+    const { chatId, boostType, count } = job.data;
+
     try {
-        // Create Solana wallets and encrypt private keys
         const wallets = walletManager.createSolanaWallets(count);
-
-        // Save to Firestore
         await walletManager.saveWallets(chatId, boostType, wallets);
-
-        // Initialize the market maker instance
         await instanceInitializer.initializeMarketMakerInstance(chatId, boostType, count);
-
-        res.status(200).send(`Created and saved ${count} wallets successfully and set up market maker bot`);
+        console.log(`Processed job for chatId: ${chatId}`);
     } catch (error) {
-        console.error('Error processing request:', error);
-        res.status(500).send('Internal Server Error');
+        console.error('Error processing job:', error);
+    }
+}, {
+    connection: {
+        host: 'localhost',
+        port: 6379
     }
 });
 
