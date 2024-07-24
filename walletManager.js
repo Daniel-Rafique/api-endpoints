@@ -1,6 +1,6 @@
+const bs58 = require('bs58');
 const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
-const bs58 = require('bs58');
 
 class WalletManager {
     constructor(projectId, keyFilename) {
@@ -14,7 +14,7 @@ class WalletManager {
         const wallets = [];
         for (let i = 0; i < count; i++) {
             const keypair = Keypair.generate();
-            const privateKey = bs58.encode(keypair.secretKey);
+            const privateKey = bs58.encode(Buffer.from(keypair.secretKey)); // Ensure Buffer.from is used
             const publicKey = keypair.publicKey.toString();
             wallets.push({ privateKey, publicKey });
         }
