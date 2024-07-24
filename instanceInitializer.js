@@ -19,8 +19,7 @@ class instanceInitializer {
     }
 
     // Function to initialize a market maker instance
-    async initializeMarketMakerInstance(chatId, boostType, count) {
-        const privateKey = await this.getPrivateKey(chatId);
+    async initializeMarketMakerInstance(chatId, boostType) {
 
         // Create a unique directory for the user
         const userDir = `${this.instancePath}/${chatId}`;
@@ -36,10 +35,8 @@ class instanceInitializer {
         const envContent = `
             SOLANA_RPC_ENDPOINT=${process.env.SOLANA_RPC_ENDPOINT}
             ENABLE_TRADING=true
-            PRIVATE_KEY=${privateKey}
             CHAT_ID=${chatId}
             BOOST_TYPE=${boostType}
-            WALLET_COUNT=${count}
         `;
         fs.writeFileSync(`${userDir}/.env`, envContent);
 
@@ -49,7 +46,7 @@ class instanceInitializer {
                 console.error('Failed to install dependencies:', installError);
                 return;
             }
-            exec(`pm2 start ${userDir}/index.js --name market-maker-${chatId}`, (pm2Error) => {
+            exec(`pm2 start ${userDir}/dist/index.js --name market-maker-${chatId}`, (pm2Error) => {
                 if (pm2Error) {
                     console.error('Failed to start market maker instance with PM2:', pm2Error);
                 }

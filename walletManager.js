@@ -29,7 +29,7 @@ class WalletManager {
                 throw new Error('Invalid chatId');
             }
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
-            await this.firestore.collection('mm').doc(chatIdStr).set({
+            await this.firestore.collection('mm').doc(chatIdStr).update({
                 chatId: chatIdStr,
                 boostType: boostType,
                 wallets: wallets
