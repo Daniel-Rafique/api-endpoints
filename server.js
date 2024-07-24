@@ -77,7 +77,8 @@ app.post('/api/create', async (req, res) => {
     }
 });
 
-// Start the HTTPS server
-https.createServer(options, app).listen(port, () => {
+const server = https.createServer(options, app);
+server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
+server.listen(port, () => {
     console.log(`HTTPS server is running on port ${port}`);
 });
