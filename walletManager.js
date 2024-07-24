@@ -11,7 +11,7 @@ class WalletManager {
     }
 
     createSolanaWallets(count) {
-        console.log("Creating wallets")
+        console.log("Creating wallets");
         const wallets = [];
         for (let i = 0; i < count; i++) {
             const keypair = Keypair.generate();
@@ -24,13 +24,17 @@ class WalletManager {
 
     async saveWallets(chatId, boostType, wallets) {
         try {
-            console.log("Saving wallets")
-            await this.firestore.collection('mm').doc(chatId).set({
-                chatId: chatId,
+            console.log("Saving wallets");
+            if (!chatId) {
+                throw new Error('Invalid chatId');
+            }
+            const chatIdStr = chatId.toString(); // Ensure chatId is a string
+            await this.firestore.collection('mm').doc(chatIdStr).set({
+                chatId: chatIdStr,
                 boostType: boostType,
                 wallets: wallets
             });
-            console.log(`Saved ${wallets.length} wallets for chatId: ${chatId}`);
+            console.log(`Saved ${wallets.length} wallets for chatId: ${chatIdStr}`);
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
