@@ -27,10 +27,10 @@ const options = {
 const walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
 
 // Initialize MarketMakerManager
-const marketMakerManager = new MarketMakerManager('../marketMaker', '../instances');
+const marketMakerManager = new MarketMakerManager('./marketMaker', './instances');
 
 // Initialize InstanceInitializer
-const instanceInitializer = new InstanceInitializer('../marketMaker', '../instances');
+const instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
 
 // Middleware
 app.use(bodyParser.json());
