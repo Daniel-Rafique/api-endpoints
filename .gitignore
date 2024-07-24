@@ -2,3 +2,4 @@
 node_modules/
 firebaseServiceAccountKey.json
 .vscode/
+.config/

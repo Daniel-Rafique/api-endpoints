@@ -11,7 +11,7 @@ const InstanceInitializer = require('./instanceInitializer'); // Import the Inst
 
 admin.initializeApp({
     credential: admin.credential.applicationDefault(),
-    databaseURL: "https://your-database-name.firebaseio.com"
+    databaseURL: ""
 });
 
 const app = express();
@@ -24,7 +24,7 @@ const options = {
 };
 
 // Initialize WalletManager
-const walletManager = new WalletManager('koynlabs-2f749', './firebaseServiceAccountKey.json');
+const walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
 
 // Initialize MarketMakerManager
 const marketMakerManager = new MarketMakerManager('./marketMaker', './instances');
