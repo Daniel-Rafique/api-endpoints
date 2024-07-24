@@ -11,6 +11,7 @@ class WalletManager {
     }
 
     createSolanaWallets(count) {
+        console.log("Creating wallets")
         const wallets = [];
         for (let i = 0; i < count; i++) {
             const keypair = Keypair.generate();
@@ -23,6 +24,7 @@ class WalletManager {
 
     async saveWallets(chatId, boostType, wallets) {
         try {
+            console.log("Saving wallets")
             await this.firestore.collection('mm').doc(chatId).set({
                 chatId: chatId,
                 boostType: boostType,
