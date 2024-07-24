@@ -22,20 +22,23 @@ class WalletManager {
         return wallets;
     }
 
-    async saveWallets(chatId, boostType, wallets) {
+    async saveWallets(chatId, boostType, newWallets) {
         try {
             console.log("Saving wallets");
             if (!chatId) {
                 throw new Error('Invalid chatId');
             }
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
-            await this.firestore.collection('mm').doc(chatIdStr).update({
-                chatId: chatIdStr,
+            const docRef = this.firestore.collection('mm').doc(chatIdStr);
+            
+            // Add new wallets to the existing array
+            await docRef.update({
+                wallets: Firestore.FieldValue.arrayUnion(...newWallets),
                 boostType: boostType,
-                wallets: wallets,
                 instancesCreated: true
             });
-            console.log(`Saved ${wallets.length} wallets for chatId: ${chatIdStr}`);
+
+            console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
