@@ -32,7 +32,8 @@ class WalletManager {
             await this.firestore.collection('mm').doc(chatIdStr).update({
                 chatId: chatIdStr,
                 boostType: boostType,
-                wallets: wallets
+                wallets: wallets,
+                instancesCreated: true
             });
             console.log(`Saved ${wallets.length} wallets for chatId: ${chatIdStr}`);
         } catch (error) {
