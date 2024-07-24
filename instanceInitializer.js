@@ -2,7 +2,7 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const admin = require('firebase-admin');
 
-class instanceInitializer {
+class InstanceInitializer {
     constructor(basePath, instancePath) {
         this.basePath = basePath;
         this.instancePath = instancePath;
@@ -20,7 +20,6 @@ class instanceInitializer {
 
     // Function to initialize a market maker instance
     async initializeMarketMakerInstance(chatId, boostType) {
-
         // Create a unique directory for the user
         const userDir = `${this.instancePath}/${chatId}`;
         if (!fs.existsSync(userDir)) {
@@ -31,11 +30,14 @@ class instanceInitializer {
         fs.copyFileSync(`${this.basePath}/`, `${userDir}/`);
         fs.copyFileSync(`${this.basePath}/package.json`, `${userDir}/package.json`);
 
-        // Create a .env file with user-specific environment variables
-        const envContent = `
-            CHAT_ID=${chatId}
-        `;
-        fs.writeFileSync(`${userDir}/.env`, envContent);
+        // Append the CHAT_ID variable to the .env file without overwriting existing content
+        const envFilePath = `${userDir}/.env`;
+        const envContent = `CHAT_ID=${chatId}\n`;
+        if (fs.existsSync(envFilePath)) {
+            fs.appendFileSync(envFilePath, envContent);
+        } else {
+            fs.writeFileSync(envFilePath, envContent);
+        }
 
         // Install dependencies and start the instance using PM2
         exec(`npm install`, { cwd: userDir }, (installError) => {
@@ -52,4 +54,4 @@ class instanceInitializer {
     }
 }
 
-module.exports = instanceInitializer;
+module.exports = InstanceInitializer;
