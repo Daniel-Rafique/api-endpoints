@@ -33,10 +33,7 @@ class instanceInitializer {
 
         // Create a .env file with user-specific environment variables
         const envContent = `
-            SOLANA_RPC_ENDPOINT=${process.env.SOLANA_RPC_ENDPOINT}
-            ENABLE_TRADING=true
             CHAT_ID=${chatId}
-            BOOST_TYPE=${boostType}
         `;
         fs.writeFileSync(`${userDir}/.env`, envContent);
 
