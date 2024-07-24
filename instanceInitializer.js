@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const { exec } = require('child_process');
 const admin = require('firebase-admin');
 
@@ -26,9 +27,8 @@ class InstanceInitializer {
             fs.mkdirSync(userDir, { recursive: true });
         }
 
-        // Copy the base market maker files to the user directory
-        fs.copyFileSync(`${this.basePath}/`, `${userDir}/`);
-        fs.copyFileSync(`${this.basePath}/package.json`, `${userDir}/package.json`);
+        // Recursively copy the base market maker files to the user directory
+        this.copyRecursiveSync(this.basePath, userDir);
 
         // Append the CHAT_ID variable to the .env file without overwriting existing content
         const envFilePath = `${userDir}/.env`;
@@ -51,6 +51,23 @@ class InstanceInitializer {
                 }
             });
         });
+    }
+
+    // Function to recursively copy files and directories
+    copyRecursiveSync(src, dest) {
+        const exists = fs.existsSync(src);
+        const stats = exists && fs.statSync(src);
+        const isDirectory = exists && stats.isDirectory();
+        if (isDirectory) {
+            if (!fs.existsSync(dest)) {
+                fs.mkdirSync(dest);
+            }
+            fs.readdirSync(src).forEach((childItemName) => {
+                this.copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
+            });
+        } else {
+            fs.copyFileSync(src, dest);
+        }
     }
 }
 
