@@ -45,7 +45,7 @@ class InstanceInitializer {
                 console.error('Failed to install dependencies:', installError);
                 return;
             }
-            exec(`pm2 start ${userDir}/dist/index.js --name market-maker-${chatId}`, (pm2Error) => {
+            exec(`pm2 start dist/index.js --name market-maker-${chatId}`, { cwd: userDir }, (pm2Error) => {
                 if (pm2Error) {
                     console.error('Failed to start market maker instance with PM2:', pm2Error);
                 }
