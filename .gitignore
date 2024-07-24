@@ -4,3 +4,5 @@ firebaseServiceAccountKey.json
 .vscode/
 .config/
 .env
+marketMaker/
+instances/
