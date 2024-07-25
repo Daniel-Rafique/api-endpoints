@@ -75,7 +75,7 @@ app.post('/api/transaction', async (req, res) => {
     console.log("Transaction info received:")
 
     // Validate parameters
-    if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol || !boostType || !count || !contractAddress) {
+    if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol || !count || !contractAddress) {
         return res.status(400).send('Missing required parameters');
     }
 
@@ -86,7 +86,7 @@ app.post('/api/transaction', async (req, res) => {
     }
 
     // Add job to queue
-    await transactionManager.addJob({ chatId, publicKey, minimumSol, boostType, count, contractAddress });
+    await transactionManager.addJob({ chatId, publicKey, minimumSol, count, contractAddress });
 
     res.status(200).send('Request received, processing in background');
 });

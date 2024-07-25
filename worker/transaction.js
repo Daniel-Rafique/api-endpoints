@@ -10,13 +10,13 @@ class TransactionManager {
         this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
 
         this.worker = new Worker(queueName, async job => {
-            const { chatId, publicKey, minimumSol, boostType, count, contractAddress } = job.data;
+            const { chatId, publicKey, minimumSol, count, contractAddress } = job.data;
 
             try {
                 const isValid = await this.checkBalance(publicKey, minimumSol);
                 if (isValid) {
                     await this.sendTelegramMessage(chatId, `Your balance has been confirmed. Your wallet balance is sufficient.`);
-                    await this.createWallets(chatId, boostType, count, contractAddress);
+                    await this.createWallets(chatId, count, contractAddress);
                 } else {
                     await this.sendTelegramMessage(chatId, `Your balance does not meet the required minimum SOL.`);
                 }
