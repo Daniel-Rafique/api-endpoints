@@ -36,6 +36,8 @@ class TransactionManager {
             const balance = await this.connection.getBalance(publicKey);
             const solBalance = balance / 1_000_000_000; // Convert lamports to SOL
 
+            console.log(solBalance)
+
             return solBalance >= minimumSol;
         } catch (error) {
             console.error('Error checking balance:', error);
