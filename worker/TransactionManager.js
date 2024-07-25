@@ -5,6 +5,7 @@ const axios = require('axios');
 class TransactionManager {
     constructor(rpcEndpoint, telegramToken, queueName = 'transactionQueue', connectionOptions = { host: 'localhost', port: 6379 }) {
         this.connection = new Connection(rpcEndpoint, 'confirmed');
+        console.log(rpcEndpoint)
         this.telegramToken = telegramToken;
         this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
 
