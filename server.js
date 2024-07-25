@@ -71,24 +71,22 @@ app.post('/api/create', async (req, res) => {
 
 // Endpoint to handle transaction requests
 app.post('/api/transaction', async (req, res) => {
-    const { chatId, transactionId, timestamp, hash, publicKey, minimumSol } = req.body;
+    const { chatId, transactionId, timestamp, hash, publicKey, minimumSol, boostType, count, contractAddress } = req.body;
     console.log("Transaction info received:")
 
-    console.log(req.body)
-
     // Validate parameters
-    if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol) {
+    if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol || !boostType || !count || !contractAddress) {
         return res.status(400).send('Missing required parameters');
     }
 
     // Validate the hash
-    const expectedHash = generateHash(chatId, transactionId, timestamp, hash, publicKey, minimumSol);
+    const expectedHash = generateHash(chatId, transactionId, timestamp);
     if (hash !== expectedHash) {
         return res.status(403).send('Invalid request signature');
     }
 
     // Add job to queue
-    await transactionManager.addJob({ chatId, transactionId, publicKey, minimumSol });
+    await transactionManager.addJob({ chatId, publicKey, minimumSol, boostType, count, contractAddress });
 
     res.status(200).send('Request received, processing in background');
 });
