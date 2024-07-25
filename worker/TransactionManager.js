@@ -11,6 +11,7 @@ class TransactionManager {
 
         this.worker = new Worker(queueName, async job => {
             const { chatId, transactionId, minimumSol } = job.data;
+            console.log(minimumSol)
             console.log(transactionId)
 
             try {
