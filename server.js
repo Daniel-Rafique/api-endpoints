@@ -5,8 +5,10 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const { Queue } = require('bullmq');
-const TransactionManager = require('./worker/transaction');
+const { Queue, Worker } = require('bullmq');
+const WalletManager = require('./walletManager');
+const MarketMakerManager = require('./marketMakerManager');
+const InstanceInitializer = require('./instanceInitializer');
 
 // Initialize Firebase Admin
 admin.initializeApp({
@@ -23,21 +25,28 @@ const options = {
     cert: fs.readFileSync('/etc/letsencrypt/live/bot.koynlabs.com/fullchain.pem')
 };
 
+// Initialize WalletManager
+const walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
+
+// Initialize MarketMakerManager
+const marketMakerManager = new MarketMakerManager('./marketMaker', './instances');
+
+// Initialize InstanceInitializer
+const instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
+
 // Middleware
 app.use(bodyParser.json());
 
 // Secret key (store this securely, e.g., in environment variables)
 const SECRET_KEY = process.env.SECRET_KEY;
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT; // Solana RPC endpoint
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN; // Telegram bot token
 
 // Function to generate the hash
-function generateHash(chatId, transactionId, timestamp) {
-    const data = `${chatId}:${transactionId}:${timestamp}:${SECRET_KEY}`;
+function generateHash(chatId, boostType, timestamp) {
+    const data = `${chatId}:${boostType}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
 }
 
-// BullMQ queues
+// BullMQ queue
 const walletQueue = new Queue('walletQueue', {
     connection: {
         host: 'localhost',
@@ -45,10 +54,7 @@ const walletQueue = new Queue('walletQueue', {
     }
 });
 
-// Initialize TransactionManager
-const transactionManager = new TransactionManager(SOLANA_RPC_ENDPOINT, TELEGRAM_TOKEN);
-
-// Endpoint to handle wallet creation requests
+// Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
     const { chatId, boostType, count, timestamp, hash } = req.body;
 
@@ -69,26 +75,23 @@ app.post('/api/create', async (req, res) => {
     res.status(200).send('Request received, processing in background');
 });
 
-// Endpoint to handle transaction requests
-app.post('/api/transaction', async (req, res) => {
-    const { chatId, transactionId, timestamp, hash, publicKey, minimumSol, boostType, count, contractAddress } = req.body;
-    console.log("Transaction info received:", count)
+// Worker to process wallet creation
+const walletWorker = new Worker('walletQueue', async job => {
+    const { chatId, boostType, count, contractAddress } = job.data;
 
-    // Validate parameters
-    if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol || !boostType || !count || !contractAddress) {
-        return res.status(400).send('Missing required parameters');
+    try {
+        const wallets = walletManager.createSolanaWallets(count);
+        await walletManager.saveWallets(chatId, boostType, wallets);
+        await instanceInitializer.initializeMarketMakerInstance(chatId, boostType, count, contractAddress);
+        console.log(`Processed job for chatId: ${chatId}`);
+    } catch (error) {
+        console.error('Error processing job:', error);
     }
-
-    // Validate the hash
-    const expectedHash = generateHash(chatId, transactionId, timestamp);
-    if (hash !== expectedHash) {
-        return res.status(403).send('Invalid request signature');
+}, {
+    connection: {
+        host: 'localhost',
+        port: 6379
     }
-
-    // Add job to queue
-    await transactionManager.addJob({ chatId, publicKey, minimumSol, boostType, count, contractAddress });
-
-    res.status(200).send('Request received, processing in background');
 });
 
 const server = https.createServer(options, app);
