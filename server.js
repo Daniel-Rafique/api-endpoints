@@ -46,7 +46,7 @@ const walletQueue = new Queue('walletQueue', {
 });
 
 // Initialize TransactionProcessor
-const BalanceChecker = new TransactionManager(RPC_ENDPOINT, TELEGRAM_TOKEN);
+const BalanceChecker = new TransactionManager(SOLANA_RPC_ENDPOINT, TELEGRAM_TOKEN);
 
 // Endpoint to handle wallet creation requests
 app.post('/api/create', async (req, res) => {
