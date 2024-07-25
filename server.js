@@ -71,11 +71,11 @@ app.post('/api/create', async (req, res) => {
 
 // Endpoint to handle transaction requests
 app.post('/api/transaction', async (req, res) => {
-    const { chatId, transactionId, timestamp, hash, publicKey, minimumSol, count, contractAddress } = req.body;
+    const { chatId, transactionId, timestamp, hash, publicKey, minimumSol, boostType, count, contractAddress } = req.body;
     console.log("Transaction info received:")
 
     // Validate parameters
-    if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol || !count || !contractAddress) {
+    if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol || !boostType || !count || !contractAddress) {
         return res.status(400).send('Missing required parameters');
     }
 
