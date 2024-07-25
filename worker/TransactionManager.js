@@ -9,17 +9,17 @@ class TransactionManager {
         this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
 
         this.worker = new Worker(queueName, async job => {
-            const { chatId, publicKey, transactionId, minimumSol } = job.data;
+            const { chatId, publicKey, minimumSol } = job.data;
 
             try {
-                const isValid = await this.validateTransaction(publicKey, transactionId, minimumSol);
+                const isValid = await this.checkBalance(publicKey, minimumSol);
                 if (isValid) {
-                    await this.sendTelegramMessage(chatId, `Your transaction has been confirmed. Your wallet balance is sufficient.`);
+                    await this.sendTelegramMessage(chatId, `Your balance has been confirmed. Your wallet balance is sufficient.`);
                 } else {
-                    await this.sendTelegramMessage(chatId, `Transaction is not valid or does not meet the required minimum SOL.`);
+                    await this.sendTelegramMessage(chatId, `Your balance does not meet the required minimum SOL.`);
                 }
             } catch (error) {
-                console.error('Error processing transaction job:', error);
+                console.error('Error processing balance check job:', error);
             }
         }, {
             connection: connectionOptions
@@ -30,23 +30,15 @@ class TransactionManager {
         });
     }
 
-    async validateTransaction(publicKeyString, transactionId, minimumSol) {
+    async checkBalance(publicKeyString, minimumSol) {
         try {
             const publicKey = new PublicKey(publicKeyString);
-            const transaction = await this.connection.getTransaction(transactionId);
-            if (!transaction) {
-                throw new Error('Transaction not found');
-            }
-
             const balance = await this.connection.getBalance(publicKey);
-            const lamportsTransferred = transaction.meta.postBalances[0] - transaction.meta.preBalances[0];
-            const solTransferred = lamportsTransferred / 1_000_000_000;
+            const solBalance = balance / 1_000_000_000; // Convert lamports to SOL
 
-            console.log(solTransferred)
-
-            return solTransferred >= minimumSol;
+            return solBalance >= minimumSol;
         } catch (error) {
-            console.error('Error validating transaction:', error);
+            console.error('Error checking balance:', error);
             throw error;
         }
     }
