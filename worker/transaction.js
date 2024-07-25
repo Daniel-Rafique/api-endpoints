@@ -49,6 +49,7 @@ class TransactionManager {
     }
 
     async createWallets(chatId, boostType, count, contractAddress) {
+        console.log(count)
         await this.walletWorker.worker.add('createWallets', { chatId, boostType, count, contractAddress });
     }
 
