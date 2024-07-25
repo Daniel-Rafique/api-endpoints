@@ -33,6 +33,9 @@ class TransactionManager {
     async validateTransaction(publicKey, minimumSol) {
         try {
             const balance = await this.connection.getBalance(publicKey)
+
+            console.log(balance)
+            
             if (!balance) {
                 throw new Error('Insufficient balance');
             }
