@@ -20,7 +20,7 @@ class InstanceInitializer {
     }
 
     // Function to initialize a market maker instance
-    async initializeMarketMakerInstance(chatId, boostType) {
+    async initializeMarketMakerInstance(chatId, contractAddress) {
         // Create a unique directory for the user
         const userDir = `${this.instancePath}/${chatId}`;
         if (!fs.existsSync(userDir)) {
@@ -30,9 +30,9 @@ class InstanceInitializer {
         // Recursively copy the base market maker files to the user directory
         this.copyRecursiveSync(this.basePath, userDir);
 
-        // Append the CHAT_ID variable to the .env file without overwriting existing content
+        // Append the CHAT_ID and CONTRACT_ADDRESS variables to the .env file without overwriting existing content
         const envFilePath = `${userDir}/.env`;
-        const envContent = `CHAT_ID=${chatId}\n`;
+        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}`;
         if (fs.existsSync(envFilePath)) {
             fs.appendFileSync(envFilePath, envContent);
         } else {

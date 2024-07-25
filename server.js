@@ -77,12 +77,12 @@ app.post('/api/create', async (req, res) => {
 
 // Worker to process wallet creation
 const walletWorker = new Worker('walletQueue', async job => {
-    const { chatId, boostType, count } = job.data;
+    const { chatId, boostType, count, contractAddress } = job.data;
 
     try {
         const wallets = walletManager.createSolanaWallets(count);
         await walletManager.saveWallets(chatId, boostType, wallets);
-        await instanceInitializer.initializeMarketMakerInstance(chatId, boostType, count);
+        await instanceInitializer.initializeMarketMakerInstance(chatId, boostType, count, contractAddress);
         console.log(`Processed job for chatId: ${chatId}`);
     } catch (error) {
         console.error('Error processing job:', error);
