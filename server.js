@@ -6,7 +6,7 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
 const { Queue } = require('bullmq');
-const TransactionManager = require('./worker/TransactionManager');
+const TransactionManager = require('./worker/transaction');
 
 // Initialize Firebase Admin
 admin.initializeApp({
