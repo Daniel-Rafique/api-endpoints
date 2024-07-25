@@ -12,7 +12,7 @@ class TransactionManager {
             const { chatId, publicKey, transactionId, minimumSol } = job.data;
 
             try {
-                const isValid = await this.validateTransaction(publicKey, minimumSol);
+                const isValid = await this.validateTransaction(publicKey, transactionId, minimumSol);
                 if (isValid) {
                     await this.sendTelegramMessage(chatId, `Your transaction has been confirmed. Your wallet balance is sufficient.`);
                 } else {
@@ -30,23 +30,21 @@ class TransactionManager {
         });
     }
 
-    async validateTransaction(publicKey, minimumSol) {
+    async validateTransaction(publicKeyString, transactionId, minimumSol) {
         try {
-            const balance = await this.connection.getBalance(publicKey)
-
-            console.log(balance)
-
-            if (!balance) {
-                throw new Error('Insufficient balance');
+            const publicKey = new PublicKey(publicKeyString);
+            const transaction = await this.connection.getTransaction(transactionId);
+            if (!transaction) {
+                throw new Error('Transaction not found');
             }
 
+            const balance = await this.connection.getBalance(publicKey);
             const lamportsTransferred = transaction.meta.postBalances[0] - transaction.meta.preBalances[0];
-            console.log(lamportsTransferred)
-            const solTransferred = balance / 1_000_000_000;
+            const solTransferred = lamportsTransferred / 1_000_000_000;
 
             return solTransferred >= minimumSol;
         } catch (error) {
-            console.error('Balance too low', error);
+            console.error('Error validating transaction:', error);
             throw error;
         }
     }
