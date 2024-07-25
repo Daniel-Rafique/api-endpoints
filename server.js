@@ -46,7 +46,7 @@ const walletQueue = new Queue('walletQueue', {
 });
 
 // Initialize TransactionProcessor
-const TransactionManager = new TransactionManager(RPC_ENDPOINT, TELEGRAM_TOKEN);
+const BalanceChecker = new TransactionManager(RPC_ENDPOINT, TELEGRAM_TOKEN);
 
 // Endpoint to handle wallet creation requests
 app.post('/api/create', async (req, res) => {
@@ -85,7 +85,7 @@ app.post('/api/transaction', async (req, res) => {
     }
 
     // Add job to queue
-    await TransactionManager.worker.add('processTransaction', { chatId, transactionId, publicKey, minimumSol });
+    await BalanceChecker.worker.add('processTransaction', { chatId, transactionId, publicKey, minimumSol });
 
     res.status(200).send('Request received, processing in background');
 });
