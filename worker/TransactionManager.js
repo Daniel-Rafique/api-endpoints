@@ -5,17 +5,14 @@ const axios = require('axios');
 class TransactionManager {
     constructor(rpcEndpoint, telegramToken, queueName = 'transactionQueue', connectionOptions = { host: 'localhost', port: 6379 }) {
         this.connection = new Connection(rpcEndpoint, 'confirmed');
-        console.log(rpcEndpoint)
         this.telegramToken = telegramToken;
         this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
 
         this.worker = new Worker(queueName, async job => {
-            const { chatId, transactionId, minimumSol } = job.data;
-            console.log(minimumSol)
-            console.log(transactionId)
+            const { chatId, publicKey, transactionId, minimumSol } = job.data;
 
             try {
-                const isValid = await this.validateTransaction(transactionId, minimumSol);
+                const isValid = await this.validateTransaction(publicKey, minimumSol);
                 if (isValid) {
                     await this.sendTelegramMessage(chatId, `Your transaction has been confirmed. Your wallet balance is sufficient.`);
                 } else {
@@ -33,23 +30,19 @@ class TransactionManager {
         });
     }
 
-    async validateTransaction(transactionId, minimumSol) {
-      console.log(transactionId)
-      console.log(minimumSol)
+    async validateTransaction(publicKey, minimumSol) {
         try {
-            const transaction = await this.connection.getTransaction(transactionId);
-            if (!transaction) {
-                throw new Error('Transaction not found');
+            const balance = await this.connection.getBalance(publicKey)
+            if (!balance) {
+                throw new Error('Insufficient balance');
             }
 
             const lamportsTransferred = transaction.meta.postBalances[0] - transaction.meta.preBalances[0];
-            const solTransferred = lamportsTransferred / 1_000_000_000;
-
-            console.log(solTransferred)
+            const solTransferred = balance / 1_000_000_000;
 
             return solTransferred >= minimumSol;
         } catch (error) {
-            console.error('Error validating transaction:', error);
+            console.error('Balance too low', error);
             throw error;
         }
     }
