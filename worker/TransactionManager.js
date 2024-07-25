@@ -35,6 +35,7 @@ class TransactionManager {
 
     async validateTransaction(transactionId, minimumSol) {
       console.log(transactionId)
+      console.log(minimumSol)
         try {
             const transaction = await this.connection.getTransaction(transactionId);
             if (!transaction) {
