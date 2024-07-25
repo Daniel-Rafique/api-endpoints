@@ -35,12 +35,13 @@ class TransactionManager {
             const balance = await this.connection.getBalance(publicKey)
 
             console.log(balance)
-            
+
             if (!balance) {
                 throw new Error('Insufficient balance');
             }
 
             const lamportsTransferred = transaction.meta.postBalances[0] - transaction.meta.preBalances[0];
+            console.log(lamportsTransferred)
             const solTransferred = balance / 1_000_000_000;
 
             return solTransferred >= minimumSol;
