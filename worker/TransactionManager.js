@@ -9,10 +9,11 @@ class TransactionManager {
         this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
 
         this.worker = new Worker(queueName, async job => {
-            const { chatId, publicKey, transactionId, minimumSol } = job.data;
+            const { chatId, transactionId, minimumSol } = job.data;
+            console.log(transactionId)
 
             try {
-                const isValid = await this.validateTransaction(publicKey, transactionId, minimumSol);
+                const isValid = await this.validateTransaction(transactionId, minimumSol);
                 if (isValid) {
                     await this.sendTelegramMessage(chatId, `Your transaction has been confirmed. Your wallet balance is sufficient.`);
                 } else {
@@ -30,7 +31,8 @@ class TransactionManager {
         });
     }
 
-    async validateTransaction(publicKey, transactionId, minimumSol) {
+    async validateTransaction(transactionId, minimumSol) {
+      console.log(transactionId)
         try {
             const transaction = await this.connection.getTransaction(transactionId);
             if (!transaction) {
