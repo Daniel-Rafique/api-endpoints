@@ -82,7 +82,7 @@ app.post('/api/transaction', async (req, res) => {
     }
 
     // Validate the hash
-    const expectedHash = generateHash(chatId, transactionId, timestamp);
+    const expectedHash = generateHash(chatId, transactionId, timestamp, hash, publicKey, minimumSol);
     if (hash !== expectedHash) {
         return res.status(403).send('Invalid request signature');
     }
