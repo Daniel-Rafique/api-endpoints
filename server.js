@@ -74,6 +74,8 @@ app.post('/api/transaction', async (req, res) => {
     const { chatId, transactionId, timestamp, hash, publicKey, minimumSol } = req.body;
     console.log("Transaction info received:")
 
+    console.log(req.body)
+
     // Validate parameters
     if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol) {
         return res.status(400).send('Missing required parameters');
