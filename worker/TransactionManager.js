@@ -45,6 +45,8 @@ class TransactionManager {
             const lamportsTransferred = transaction.meta.postBalances[0] - transaction.meta.preBalances[0];
             const solTransferred = lamportsTransferred / 1_000_000_000;
 
+            console.log(solTransferred)
+
             return solTransferred >= minimumSol;
         } catch (error) {
             console.error('Error validating transaction:', error);
