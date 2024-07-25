@@ -72,7 +72,7 @@ app.post('/api/create', async (req, res) => {
 // Endpoint to handle transaction requests
 app.post('/api/transaction', async (req, res) => {
     const { chatId, transactionId, timestamp, hash, publicKey, minimumSol, boostType, count, contractAddress } = req.body;
-    console.log("Transaction info received:")
+    console.log("Transaction info received:", count)
 
     // Validate parameters
     if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol || !boostType || !count || !contractAddress) {
