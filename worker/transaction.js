@@ -1,7 +1,7 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
 const { Queue, Worker } = require('bullmq');
 const axios = require('axios');
-const WalletWorker = require('./wallet');
+const WalletWorker = require('./wallet'); // Ensure correct path to WalletWorker
 
 class TransactionManager {
     constructor(rpcEndpoint, telegramToken, queueName = 'transactionQueue', connectionOptions = { host: 'localhost', port: 6379 }) {
@@ -10,13 +10,13 @@ class TransactionManager {
         this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
 
         this.worker = new Worker(queueName, async job => {
-            const { chatId, publicKey, minimumSol, count, contractAddress } = job.data;
+            const { chatId, publicKey, minimumSol, boostType, count, contractAddress } = job.data;
 
             try {
                 const isValid = await this.checkBalance(publicKey, minimumSol);
                 if (isValid) {
                     await this.sendTelegramMessage(chatId, `Your balance has been confirmed. Your wallet balance is sufficient.`);
-                    await this.createWallets(chatId, count, contractAddress);
+                    await this.createWallets(chatId, boostType, count, contractAddress);
                 } else {
                     await this.sendTelegramMessage(chatId, `Your balance does not meet the required minimum SOL.`);
                 }
@@ -31,7 +31,8 @@ class TransactionManager {
             connection: connectionOptions
         });
 
-        this.walletWorker = new WalletWorker(walletManager, instanceInitializer, 'walletQueue', connectionOptions);
+        // Initialize WalletWorker here
+        this.walletWorker = new WalletWorker('walletQueue', connectionOptions);
     }
 
     async checkBalance(publicKeyString, minimumSol) {

@@ -6,7 +6,7 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
 const { Queue } = require('bullmq');
-const TransactionManager = require('./worker/transaction');
+const TransactionManager = require('./worker/TransactionManager');
 
 // Initialize Firebase Admin
 admin.initializeApp({
@@ -71,7 +71,7 @@ app.post('/api/create', async (req, res) => {
 
 // Endpoint to handle transaction requests
 app.post('/api/transaction', async (req, res) => {
-    const { chatId, transactionId, timestamp, hash, publicKey, minimumSol, boostType, count, contractAddress } = req.body;
+    const { chatId, transactionId, timestamp, hash, publicKey, minimumSol, count, contractAddress } = req.body;
     console.log("Transaction info received:")
 
     // Validate parameters
@@ -86,7 +86,7 @@ app.post('/api/transaction', async (req, res) => {
     }
 
     // Add job to queue
-    await transactionManager.addJob({ chatId, publicKey, minimumSol, count, contractAddress });
+    await transactionManager.addJob({ chatId, publicKey, minimumSol, boostType, count, contractAddress });
 
     res.status(200).send('Request received, processing in background');
 });
