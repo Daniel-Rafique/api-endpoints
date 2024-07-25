@@ -45,8 +45,8 @@ const walletQueue = new Queue('walletQueue', {
     }
 });
 
-// Initialize TransactionProcessor
-const BalanceChecker = new TransactionManager(SOLANA_RPC_ENDPOINT, TELEGRAM_TOKEN);
+// Initialize TransactionManager
+const transactionManager = new TransactionManager(SOLANA_RPC_ENDPOINT, TELEGRAM_TOKEN);
 
 // Endpoint to handle wallet creation requests
 app.post('/api/create', async (req, res) => {
@@ -71,8 +71,8 @@ app.post('/api/create', async (req, res) => {
 
 // Endpoint to handle transaction requests
 app.post('/api/transaction', async (req, res) => {
-    console.log("Transaction info received:")
     const { chatId, transactionId, timestamp, hash, publicKey, minimumSol } = req.body;
+    console.log("Transaction info received:")
 
     // Validate parameters
     if (!chatId || !transactionId || !timestamp || !hash || !publicKey || !minimumSol) {
@@ -86,7 +86,7 @@ app.post('/api/transaction', async (req, res) => {
     }
 
     // Add job to queue
-    await BalanceChecker.worker.add('processTransaction', { chatId, transactionId, publicKey, minimumSol });
+    await transactionManager.addJob({ chatId, transactionId, publicKey, minimumSol });
 
     res.status(200).send('Request received, processing in background');
 });
