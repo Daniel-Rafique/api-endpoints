@@ -1,6 +1,9 @@
+require('dotenv').config();
 const bs58 = require('bs58');
 const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
+
+const DATABASE = process.env.DATABASE;
 
 class WalletManager {
     constructor(projectId, keyFilename) {
@@ -29,7 +32,7 @@ class WalletManager {
                 throw new Error('Invalid chatId');
             }
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
-            const docRef = this.firestore.collection('mm').doc(chatIdStr);
+            const docRef = this.firestore.collection(`${DATABASE}`).doc(chatIdStr);
             
             // Add new wallets to the existing array
             await docRef.update({
