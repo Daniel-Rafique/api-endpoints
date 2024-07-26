@@ -10,19 +10,23 @@ const WalletManager = require('./walletManager');
 const MarketMakerManager = require('./marketMakerManager');
 const InstanceInitializer = require('./instanceInitializer');
 
+const app = express();
+const port = process.env.PORT || 444;
+
 // Initialize Firebase Admin
 admin.initializeApp({
     credential: admin.credential.applicationDefault(),
     databaseURL: ""
 });
 
-const app = express();
-const port = process.env.PORT || 444;
+// Load environment variables
+const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
+const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
 
 // SSL options
 const options = {
-    key: fs.readFileSync('/etc/letsencrypt/live/bot.koynlabs.com/privkey.pem'),
-    cert: fs.readFileSync('/etc/letsencrypt/live/bot.koynlabs.com/fullchain.pem')
+    key: fs.readFileSync(SSL_KEY_PATH),
+    cert: fs.readFileSync(SSL_CERT_PATH)
 };
 
 // Initialize WalletManager
