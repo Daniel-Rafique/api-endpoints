@@ -1,7 +1,9 @@
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const admin = require('firebase-admin');
+const DATABASE = process.env.DATABASE;
 
 class InstanceInitializer {
     constructor(basePath, instancePath) {
@@ -11,7 +13,7 @@ class InstanceInitializer {
 
     // Function to get the private key from Firestore
     async getPrivateKey(chatId) {
-        const doc = await admin.firestore().collection('mm').doc(chatId.toString()).get();
+        const doc = await admin.firestore().collection(`${DATABASE}`).doc(chatId.toString()).get();
         if (!doc.exists) {
             throw new Error('No such document!');
         }
