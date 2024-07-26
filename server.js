@@ -7,7 +7,6 @@ const crypto = require('crypto');
 const admin = require('firebase-admin');
 const { Queue, Worker } = require('bullmq');
 const WalletManager = require('./walletManager');
-const MarketMakerManager = require('./marketMakerManager');
 const InstanceInitializer = require('./instanceInitializer');
 
 const app = express();
@@ -31,9 +30,6 @@ const options = {
 
 // Initialize WalletManager
 const walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
-
-// Initialize MarketMakerManager
-const marketMakerManager = new MarketMakerManager('./marketMaker', './instances');
 
 // Initialize InstanceInitializer
 const instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
