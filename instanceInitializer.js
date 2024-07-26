@@ -1,9 +1,10 @@
-require('dotenv').config();
+require('dotenv').config();s
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const admin = require('firebase-admin');
 const DATABASE = process.env.DATABASE;
+const ENV = process.env.ENV;
 
 class InstanceInitializer {
     constructor(basePath, instancePath) {
@@ -47,7 +48,7 @@ class InstanceInitializer {
                 console.error('Failed to install dependencies:', installError);
                 return;
             }
-            exec(`cd ${userDir} && pm2 start dist/index.js --name market-maker-${chatId}`, (pm2Error) => {
+            exec(`cd ${userDir} && pm2 start dist/index.js --name ${ENV}-market-maker-${chatId}`, (pm2Error) => {
                 if (pm2Error) {
                     console.error('Failed to start market maker instance with PM2:', pm2Error);
                 }
