@@ -11,7 +11,7 @@ const MarketMakerManager = require('./marketMakerManager');
 const InstanceInitializer = require('./instanceInitializer');
 
 const app = express();
-const port = process.env.PORT || 444;
+const port = process.env.PORT
 
 // Initialize Firebase Admin
 admin.initializeApp({
