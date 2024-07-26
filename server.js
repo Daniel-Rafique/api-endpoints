@@ -17,7 +17,7 @@ admin.initializeApp({
 });
 
 const app = express();
-const port = process.env.PORT || 443;
+const port = process.env.PORT || 444;
 
 // SSL options
 const options = {
