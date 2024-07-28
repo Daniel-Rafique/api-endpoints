@@ -10,7 +10,7 @@ class TransactionManager {
         this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
 
         this.worker = new Worker(queueName, async job => {
-            const { chatId, publicKey, minimumSol, boostType, count, contractAddress } = job.data;
+            const { chatId, publicKey, minimumSol, boostType, maker, contractAddress } = job.data;
 
             try {
                 const isValid = await this.checkBalance(publicKey, minimumSol);
@@ -48,9 +48,9 @@ class TransactionManager {
         }
     }
 
-    async createWallets(chatId, boostType, count, contractAddress) {
+    async createWallets(chatId, boostType, maker, contractAddress) {
         console.log(count)
-        await this.walletWorker.worker.add('createWallets', { chatId, boostType, count, contractAddress });
+        await this.walletWorker.worker.add('createWallets', { chatId, boostType, maker, contractAddress });
     }
 
     async sendTelegramMessage(chatId, text) {
