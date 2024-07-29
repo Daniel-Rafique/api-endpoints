@@ -85,7 +85,7 @@ const walletWorker = new Worker('walletQueue', async job => {
     try {
         const wallets = walletManager.createSolanaWallets(makers);
         await walletManager.saveWallets(chatId, wallets);
-        await instanceInitializer.initializeMarketMakerInstance(chatId);
+        await instanceInitializer.initializeMarketMakerInstance(chatId, instances, contractAddress);
         console.log(`Processed job for chatId: ${chatId}`);
     } catch (error) {
         console.error('Error processing job:', error);

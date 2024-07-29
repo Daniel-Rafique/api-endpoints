@@ -12,19 +12,8 @@ class InstanceInitializer {
         this.instancePath = instancePath;
     }
 
-    // Function to get the number of instances from Firestore
-    async getData(chatId) {
-        const doc = await admin.firestore().collection(`${DATABASE}`).doc(chatId).get();
-        if (!doc.exists) {
-            throw new Error('No such document!');
-        }
-        const data = doc.data();
-        console.log(data)
-        return data; // Ensure your Firestore document has the 'instances' field
-    }
-
     // Function to initialize a market maker instance
-    async initializeMarketMakerInstance(chatId) {
+    async initializeMarketMakerInstance(chatId, instances, contractAddress) {
         // Create a unique directory for the user
         const userDir = `${this.instancePath}/${chatId}`;
         if (!fs.existsSync(userDir)) {
@@ -36,7 +25,7 @@ class InstanceInitializer {
 
         // Append the CHAT_ID and CONTRACT_ADDRESS variables to the .env file without overwriting existing content
         const envFilePath = `${userDir}/.env`;
-        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${this.getData().contractAddress}`;
+        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}`;
         if (fs.existsSync(envFilePath)) {
             fs.appendFileSync(envFilePath, envContent);
         } else {
