@@ -25,7 +25,7 @@ class WalletManager {
         return wallets;
     }
 
-    async saveWallets(chatId, boostType, newWallets) {
+    async saveWallets(chatId, newWallets) {
         try {
             console.log("Saving wallets");
             if (!chatId) {

@@ -13,7 +13,7 @@ class WalletWorker {
             try {
                 const wallets = this.walletManager.createSolanaWallets(count);
                 await this.walletManager.saveWallets(chatId, boostType, wallets);
-                await this.instanceInitializer.initializeMarketMakerInstance(chatId, boostType, makers, contractAddress);
+                await this.instanceInitializer.initializeMarketMakerInstance(chatId);
                 console.log(`Processed job for chatId: ${chatId}`);
             } catch (error) {
                 console.error('Error processing job:', error);
