@@ -40,8 +40,8 @@ app.use(bodyParser.json());
 const SECRET_KEY = process.env.SECRET_KEY;
 
 // Function to generate the hash
-function generateHash(chatId, contractAddress, boostType, boostCost, wallet, instances, makers,timestamp) {
-    const data = `${chatId}:${contractAddress}:${boostType}:${boostCost}:${wallet}:${instances}:${makers}:${timestamp}:${SECRET_KEY}`;
+function generateHash(chatId, contractAddress, boostType, boostCost, wallet, walletPk,instances, makers,timestamp) {
+    const data = `${chatId}:${contractAddress}:${boostType}:${boostCost}:${wallet}:${walletPk}:${instances}:${makers}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
   }
 
@@ -53,6 +53,7 @@ app.post('/api/create', async (req, res) => {
         boostType,
         boostCost,
         wallet,
+        walletPk,
         instances,
         makers,
         timestamp,
@@ -62,12 +63,12 @@ app.post('/api/create', async (req, res) => {
     console.log(req.body)
 
     // Validate parameters
-    if (!chatId || !contractAddress || !boostType || !boostCost || !wallet || !instances || !timestamp || !hash || makers > 2000) {
+    if (!chatId || !contractAddress || !boostType || !boostCost || !wallet || !walletPk || !instances || !timestamp || !hash || makers > 2000) {
         return res.status(400).send('Missing required parameters or invalid walletCount');
     }
 
     // Validate the hash
-    const expectedHash = generateHash(chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp);
+    const expectedHash = generateHash(chatId, contractAddress, boostType, boostCost, wallet, walletPk, instances, makers, timestamp);
     ;
     
     if (hash !== expectedHash) {
@@ -75,7 +76,7 @@ app.post('/api/create', async (req, res) => {
         return res.status(403).send('Invalid request signature');
     }
     // Add balance processor to job queue
-    await balanceProcessor.addJob({ chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp });
+    await balanceProcessor.addJob({ chatId, contractAddress, boostType, boostCost, wallet, walletPk, instances, makers, timestamp });
 
     res.status(200).send('Request received, processing in background');
 });
