@@ -13,10 +13,10 @@ class InstanceInitializer {
     }
 
     // Function to initialize a market maker instance
-    async initializeMarketMakerInstance(chatId, instances, contractAddress) {
+    async initializeMarketMakerInstance(chatId, contractAddress, instances) {
         // Create a unique directory for the user
         const numberOrInstances = instances;
-        
+
         const userDir = `${this.instancePath}/${chatId}`;
         if (!fs.existsSync(userDir)) {
             fs.mkdirSync(userDir, { recursive: true });
