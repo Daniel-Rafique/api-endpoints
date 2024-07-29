@@ -5,7 +5,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const walletProcessor = require('./wallet');
+const WalletProcessor = require('./wallet');
 
 const app = express();
 const port = process.env.PORT
