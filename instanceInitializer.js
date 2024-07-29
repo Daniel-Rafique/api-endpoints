@@ -36,7 +36,7 @@ class InstanceInitializer {
 
         // Append the CHAT_ID and CONTRACT_ADDRESS variables to the .env file without overwriting existing content
         const envFilePath = `${userDir}/.env`;
-        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${this.getData.contractAddress}`;
+        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${this.getData().contractAddress}`;
         if (fs.existsSync(envFilePath)) {
             fs.appendFileSync(envFilePath, envContent);
         } else {
