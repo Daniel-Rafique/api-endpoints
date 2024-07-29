@@ -41,8 +41,8 @@ app.use(bodyParser.json());
 const SECRET_KEY = process.env.SECRET_KEY;
 
 // Function to generate the hash
-function generateHash(chatId, boostType, boostCost, wallet, instances, makers, timestamp) {
-    const data = `${chatId}:${boostType}:${boostCost}:${wallet}:${instances}:${makers}:${timestamp}:${SECRET_KEY}`;
+function generateHash(chatId, contractAddress, boostType, boostCost, wallet, instances, makers,timestamp) {
+    const data = `${chatId}:${contractAddress}:${boostType}:${boostCost}:${wallet}:${instances}:${makers}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
   }
 
@@ -56,36 +56,38 @@ const walletQueue = new Queue('walletQueue', {
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
-    const { chatId, boostType, boostCost, wallet, instances, makers, timestamp, hash } = req.body;
+    const { chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp, hash } = req.body;
 
     console.log(req.body)
 
     // Validate parameters
-    if (!chatId || !boostType || !boostCost || !wallet || !instances || !makers || !timestamp || !hash || makers > 2000) {
+    if (!chatId || !contractAddress || !boostType || !boostCost || !wallet || !instances || !makers || !timestamp || !hash || makers > 2000) {
         return res.status(400).send('Missing required parameters or invalid walletCount');
     }
 
     // Validate the hash
-    const expectedHash = generateHash(chatId, boostType, boostCost, wallet, instances, makers, timestamp);
+    const expectedHash = generateHash(chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp);
+    ;
+    
     if (hash !== expectedHash) {
         console.log(expectedHash)
         return res.status(403).send('Invalid request signature');
     }
 
     // Add job to queue
-    await walletQueue.add('createWallets', { chatId, boostType, boostCost, wallet, instances, makers, timestamp });
+    await walletQueue.add('createWallets', { chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp });
 
     res.status(200).send('Request received, processing in background');
 });
 
 // Worker to process wallet creation
 const walletWorker = new Worker('walletQueue', async job => {
-    const { chatId, boostType, boostCost, wallet, instances, makers, timestamp, contractAddress } = job.data;
+    const { chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp } = job.data;
 
     try {
         const wallets = walletManager.createSolanaWallets(makers);
         await walletManager.saveWallets(chatId, wallets);
-        await instanceInitializer.initializeMarketMakerInstance(chatId, instances, contractAddress);
+        await instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, instances);
         console.log(`Processed job for chatId: ${chatId}`);
     } catch (error) {
         console.error('Error processing job:', error);
