@@ -15,7 +15,7 @@ class TransactionManager {
             try {
                 const isValid = await this.checkBalance(publicKey, minimumSol);
                 if (isValid) {
-                    await this.sendTelegramMessage(chatId, `Your balance has been confirmed. Your wallet balance is sufficient.`);
+                    await this.sendTelegramMessage(chatId, `Your balance has been confirmed. Your wallet balance is ${minimumSol}.`);
                     await this.createWallets(chatId, boostType, count, contractAddress);
                 } else {
                     await this.sendTelegramMessage(chatId, `Your balance does not meet the required minimum SOL.`);

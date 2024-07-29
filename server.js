@@ -5,9 +5,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const { Queue, Worker } = require('bullmq');
-const WalletManager = require('./walletManager');
-const InstanceInitializer = require('./instanceInitializer');
+const WalletProcessor = require('./wallet');
 
 const app = express();
 const port = process.env.PORT
@@ -28,11 +26,8 @@ const options = {
     cert: fs.readFileSync(SSL_CERT_PATH)
 };
 
-// Initialize WalletManager
-const walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
-
-// Initialize InstanceInitializer
-const instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
+// Initialize TaskProcessor
+const WalletProcessor = new WalletProcessor();
 
 // Middleware
 app.use(bodyParser.json());
@@ -45,14 +40,6 @@ function generateHash(chatId, contractAddress, boostType, boostCost, wallet, ins
     const data = `${chatId}:${contractAddress}:${boostType}:${boostCost}:${wallet}:${instances}:${makers}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
   }
-
-// BullMQ queue
-const walletQueue = new Queue('walletQueue', {
-    connection: {
-        host: 'localhost',
-        port: 6379
-    }
-});
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
@@ -85,28 +72,9 @@ app.post('/api/create', async (req, res) => {
     }
 
     // Add job to queue
-    await walletQueue.add('createWallets', { chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp });
+    await WalletProcessor.addJob({ chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp });
 
     res.status(200).send('Request received, processing in background');
-});
-
-// Worker to process wallet creation
-const walletWorker = new Worker('walletQueue', async job => {
-    const { chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp } = job.data;
-
-    try {
-        const wallets = walletManager.createSolanaWallets(makers);
-        await walletManager.saveWallets(chatId, wallets);
-        await instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, instances);
-        console.log(`Processed job for chatId: ${chatId}`);
-    } catch (error) {
-        console.error('Error processing job:', error);
-    }
-}, {
-    connection: {
-        host: 'localhost',
-        port: 6379
-    }
 });
 
 const server = https.createServer(options, app);
