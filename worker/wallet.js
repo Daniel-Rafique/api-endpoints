@@ -11,7 +11,7 @@ class WalletWorker {
             const { chatId, boostType, makers, contractAddress } = job.data;
 
             try {
-                const wallets = this.walletManager.createSolanaWallets(count);
+                const wallets = this.walletManager.createSolanaWallets(makers);
                 await this.walletManager.saveWallets(chatId, boostType, wallets);
                 await this.instanceInitializer.initializeMarketMakerInstance(chatId);
                 console.log(`Processed job for chatId: ${chatId}`);

@@ -56,12 +56,22 @@ const walletQueue = new Queue('walletQueue', {
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
-    const { chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp, hash } = req.body;
+    const {
+        chatId,
+        contractAddress,
+        boostType,
+        boostCost,
+        wallet,
+        instances,
+        makers,
+        timestamp,
+        hash
+    } = req.body;
 
     console.log(req.body)
 
     // Validate parameters
-    if (!chatId || !contractAddress || !boostType || !boostCost || !wallet || !instances || !makers || !timestamp || !hash || makers > 2000) {
+    if (!chatId || !contractAddress || !boostType || !boostCost || !wallet || !instances || !timestamp || !hash || makers > 2000) {
         return res.status(400).send('Missing required parameters or invalid walletCount');
     }
 
