@@ -13,10 +13,10 @@ class WalletManager {
         });
     }
 
-    createSolanaWallets(count) {
+    createSolanaWallets(makers) {
         console.log("Creating wallets");
         const wallets = [];
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < makers; i++) {
             const keypair = Keypair.generate();
             const privateKey = bs58.encode(Buffer.from(keypair.secretKey)); // Ensure Buffer.from is used
             const publicKey = keypair.publicKey.toString();

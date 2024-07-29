@@ -68,6 +68,7 @@ app.post('/api/create', async (req, res) => {
     // Validate the hash
     const expectedHash = generateHash(chatId, boostType, boostCost, wallet, instances, makers, timestamp);
     if (hash !== expectedHash) {
+        console.log(expectedHash)
         return res.status(403).send('Invalid request signature');
     }
 
