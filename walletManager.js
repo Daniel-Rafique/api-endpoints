@@ -37,7 +37,6 @@ class WalletManager {
             // Add new wallets to the existing array
             await docRef.update({
                 wallets: Firestore.FieldValue.arrayUnion(...newWallets),
-                boostType: boostType,
                 instancesCreated: true
             });
 
