@@ -5,6 +5,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
+const BalanceProcessor = require('./balance')
 const WalletProcessor = require('./wallet');
 
 const app = express();
@@ -25,6 +26,9 @@ const options = {
     key: fs.readFileSync(SSL_KEY_PATH),
     cert: fs.readFileSync(SSL_CERT_PATH)
 };
+
+// Initialize BalanceProcessor
+const balanceProcessor = new BalanceProcessor(process.env.SOLANA_RPC_ENDPOINT, process.env.TELEGRAM_TOKEN);
 
 // Initialize WalletProcessor
 const walletProcessor = new WalletProcessor();
@@ -70,9 +74,8 @@ app.post('/api/create', async (req, res) => {
         console.log(expectedHash)
         return res.status(403).send('Invalid request signature');
     }
-
-    // Add job to queue
-    await walletProcessor.addJob({ chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp });
+    // Add balance processor to job queue
+    await balanceProcessor.addJob({ chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp });
 
     res.status(200).send('Request received, processing in background');
 });
