@@ -5,7 +5,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const WalletProcessor = require('./wallet');
+const walletProcessor = require('./wallet');
 
 const app = express();
 const port = process.env.PORT
@@ -26,8 +26,8 @@ const options = {
     cert: fs.readFileSync(SSL_CERT_PATH)
 };
 
-// Initialize TaskProcessor
-const WalletProcessor = new WalletProcessor();
+// Initialize WalletProcessor
+const walletProcessor = new WalletProcessor();
 
 // Middleware
 app.use(bodyParser.json());
@@ -72,7 +72,7 @@ app.post('/api/create', async (req, res) => {
     }
 
     // Add job to queue
-    await WalletProcessor.addJob({ chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp });
+    await walletProcessor.addJob({ chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp });
 
     res.status(200).send('Request received, processing in background');
 });
