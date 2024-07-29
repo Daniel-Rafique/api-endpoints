@@ -1,6 +1,6 @@
 const { Queue, Worker } = require('bullmq');
-const WalletManager = require('./walletManager');
-const InstanceInitializer = require('./instanceInitializer');
+const WalletManager = require('../walletManager');
+const InstanceInitializer = require('../instanceInitializer');
 
 class TaskProcessor {
   constructor() {
