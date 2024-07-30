@@ -5,17 +5,26 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const BalanceProcessor = require('./balance')
-const WalletProcessor = require('./wallet');
+const BalanceChecker = require('./balance'); 
+const WalletProcessor = require('./wallets');
+const { TELEGRAM   } = require('./telegram');
 
 const app = express();
-const port = process.env.PORT
+const port = process.env.PORT;
 
 // Initialize Firebase Admin
 admin.initializeApp({
     credential: admin.credential.applicationDefault(),
-    databaseURL: ""
+    databaseURL: process.env.DATABASE_URL
 });
+
+// Initialize BalanceChecker
+const rpcEndpoints = [
+    process.env.SOLANA_RPC_ENDPOINT_1,
+    process.env.SOLANA_RPC_ENDPOINT_2,
+];
+const cron = process.env.CRON_JOB_INTERVAL;
+const telegramToken = process.env.TELEGRAM_TOKEN;
 
 // Load environment variables
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
@@ -27,8 +36,7 @@ const options = {
     cert: fs.readFileSync(SSL_CERT_PATH)
 };
 
-// Initialize BalanceProcessor
-const balanceProcessor = new BalanceProcessor(process.env.SOLANA_RPC_ENDPOINT, process.env.TELEGRAM_TOKEN);
+const telegram = new TELEGRAM();
 
 // Initialize WalletProcessor
 const walletProcessor = new WalletProcessor();
@@ -40,10 +48,13 @@ app.use(bodyParser.json());
 const SECRET_KEY = process.env.SECRET_KEY;
 
 // Function to generate the hash
-function generateHash(chatId, contractAddress, boostType, boostCost, wallet, walletPk, batchSize, makers,timestamp) {
+function generateHash(chatId, contractAddress, boostType, boostCost, wallet, walletPk, batchSize, makers, timestamp) {
     const data = `${chatId}:${contractAddress}:${boostType}:${boostCost}:${wallet}:${walletPk}:${batchSize}:${makers}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
-  }
+}
+
+const walletASecretKey = walletPk;
+const balanceChecker = new BalanceChecker(rpcEndpoints, telegramToken, walletASecretKey);
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
@@ -60,7 +71,7 @@ app.post('/api/create', async (req, res) => {
         hash
     } = req.body;
 
-    console.log(req.body)
+    console.log(req.body);
 
     // Validate parameters
     if (!chatId || !contractAddress || !boostType || !boostCost || !wallet || !walletPk || !batchSize || !timestamp || !hash || makers > 2000) {
@@ -69,16 +80,16 @@ app.post('/api/create', async (req, res) => {
 
     // Validate the hash
     const expectedHash = generateHash(chatId, contractAddress, boostType, boostCost, wallet, walletPk, batchSize, makers, timestamp);
-    ;
-    
     if (hash !== expectedHash) {
-        console.log(expectedHash)
+        console.log(expectedHash);
         return res.status(403).send('Invalid request signature');
     }
-    // Add balance processor to job queue
-    await balanceProcessor.addJob({ chatId, contractAddress, boostType, boostCost, wallet, walletPk, batchSize, makers, timestamp });
 
-    res.status(200).send('Request received, processing in background');
+    // Start the periodic check
+    balanceChecker.startPeriodicCheck(chatId, contractAddress, boostCost, wallet, walletPk, cron);
+    telegram.sendTelegramBalanceCheckMessage(chatId);
+    res.status(200).send('Checking balance...');
+
 });
 
 const server = https.createServer(options, app);
