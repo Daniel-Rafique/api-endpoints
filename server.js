@@ -5,8 +5,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const balanceChecker = require('./BalanceChecker'); 
-const telegramNotifier = require('./TelegramNotifier'); // Ensure correct case
+const BalanceChecker = require('./BalanceChecker'); // Ensure correct case
+const TelegramNotifier = require('./TelegramNotifier'); // Ensure correct case
 
 const app = express();
 const port = process.env.PORT;
@@ -17,14 +17,6 @@ admin.initializeApp({
     databaseURL: process.env.DATABASE_URL
 });
 
-// Initialize BalanceChecker
-const rpcEndpoints = [
-    process.env.SOLANA_RPC_ENDPOINT_1,
-    process.env.SOLANA_RPC_ENDPOINT_2,
-];
-const interval = process.env.CRON_JOB_INTERVAL;
-const telegramToken = process.env.TELEGRAM_TOKEN;
-
 // Load environment variables
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
 const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
@@ -34,6 +26,7 @@ const options = {
     key: fs.readFileSync(SSL_KEY_PATH),
     cert: fs.readFileSync(SSL_CERT_PATH)
 };
+
 // Middleware
 app.use(bodyParser.json());
 
@@ -45,6 +38,20 @@ function generateHash(chatId, contractAddress, boostType, boostCost, wallet, wal
     const data = `${chatId}:${contractAddress}:${boostType}:${boostCost}:${wallet}:${walletPk}:${batchSize}:${makers}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
 }
+
+// Initialize TelegramNotifier
+const telegramToken = process.env.TELEGRAM_TOKEN;
+const telegramNotifier = new TelegramNotifier(telegramToken);
+
+// Initialize BalanceChecker
+const rpcEndpoints = [
+    process.env.SOLANA_RPC_ENDPOINT_1,
+    process.env.SOLANA_RPC_ENDPOINT_2,
+];
+const walletASecretKey = process.env.WALLET_A_SECRET_KEY;
+const interval = process.env.CRON_JOB_INTERVAL || '*/1 * * * *';
+
+const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
@@ -79,7 +86,6 @@ app.post('/api/create', async (req, res) => {
     balanceChecker.startPeriodicCheck(chatId, contractAddress, boostCost, wallet, walletPk, interval);
     telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
     res.status(200).send('Checking balance...');
-
 });
 
 const server = https.createServer(options, app);

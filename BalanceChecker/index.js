@@ -1,14 +1,14 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const cron = require('node-cron');
-const TelegramNotifier = require('../TelegramNotifier');
-const WalletProcessor = require('../WalletProcessor');
+const TelegramNotifier = require('../TelegramNotifier'); // Ensure correct path
+const WalletProcessor = require('../WalletProcessor'); // Ensure correct path
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletASecretKey) {
     this.rpcEndpoints = rpcEndpoints;
     this.currentEndpointIndex = 0;
-    this.telegramNotifier = TelegramNotifier;
+    this.telegramNotifier = telegramNotifier;
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletASecretKey));
     this.previousBalance = 0;
     this.walletProcessor = new WalletProcessor();
