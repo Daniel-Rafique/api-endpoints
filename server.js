@@ -5,18 +5,12 @@ const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
-const admin = require('firebase-admin');
 const BalanceChecker = require('./BalanceChecker'); // Ensure correct case
 const TelegramNotifier = require('./TelegramNotifier'); // Ensure correct case
 
 const app = express();
 const port = process.env.PORT;
 
-// Initialize Firebase Admin
-admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    databaseURL: ""
-});
 
 // Load environment variables
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
