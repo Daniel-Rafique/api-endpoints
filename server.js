@@ -69,6 +69,9 @@ app.post('/api/create', async (req, res) => {
     }
     const userData = await dataManager.getCollection(chatId);
 
+    console.log(chatId)
+    console.log(userData)
+
     // Start the periodic check
     const walletASecretKey = userData.walletPk;
 
