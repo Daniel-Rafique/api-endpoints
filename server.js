@@ -7,6 +7,8 @@ admin.initializeApp({
     databaseURL: process.env.DATABASE_URL
 });
 
+const DataManager = require('./database');
+
 const fs = require('fs');
 const https = require('https');
 const express = require('express');
@@ -17,7 +19,6 @@ const TelegramNotifier = require('./TelegramNotifier');
 
 // Initialize Firebase Admin with service account
 
-const DataManager = require('./database');
 const dataManager = new DataManager();
 
 const app = express();
