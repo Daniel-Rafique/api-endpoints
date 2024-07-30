@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const admin = require('firebase-admin');
 const BalanceChecker = require('./BalanceChecker'); 
 const WalletProcessor = require('./WalletProcessor');
-const { TELEGRAM   } = require('./TelegramNotifier');
+const TelegramNotifier = require('./TelegramNotifier'); // Ensure correct case
 
 const app = express();
 const port = process.env.PORT;
@@ -36,10 +36,10 @@ const options = {
     cert: fs.readFileSync(SSL_CERT_PATH)
 };
 
-const telegram = new TELEGRAM();
+const telegram = new TelegramNotifier();
 
 // Initialize WalletProcessor
-const walletProcessor = new WalletProcessor();
+const WalletProcessor = new WalletProcessor();
 
 // Middleware
 app.use(bodyParser.json());
