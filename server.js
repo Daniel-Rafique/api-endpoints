@@ -1,4 +1,5 @@
 require('dotenv').config();
+const admin = require('firebase-admin');
 const fs = require('fs');
 const https = require('https');
 const express = require('express');
@@ -7,11 +8,10 @@ const crypto = require('crypto');
 const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./TelegramNotifier'); 
 
-// Initialize Firebase Admin with service account
-const serviceAccount = require('./firebaseServiceAccountKey.json');
-
+// Initialize Firebase Admin
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+    credential: admin.credential.applicationDefault(),
+    databaseURL: ""
 });
 
 const DataManager = require('./database');
