@@ -1,9 +1,11 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const cron = require('node-cron');
-const TelegramNotifier = require('../TelegramNotifier'); // Ensure correct path
-const WalletProcessor = require('../WalletProcessor'); // Ensure correct path
+const TelegramNotifier = require('../TelegramNotifier'); 
+const WalletProcessor = require('../WalletProcessor'); 
+const DataManager = require('../database');
 const interval = process.env.CRON_JOB_INTERVAL || "*/1 * * * *";
+
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletASecretKey) {
     this.rpcEndpoints = rpcEndpoints;
@@ -12,8 +14,9 @@ class BalanceChecker {
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletASecretKey));
     this.previousBalance = 0;
     this.walletProcessor = new WalletProcessor();
+    this.dataManager = new DataManager();
   }
-
+  
   getNextConnection() {
     this.currentEndpointIndex = (this.currentEndpointIndex + 1) % this.rpcEndpoints.length;
     const connection = new Connection(this.rpcEndpoints[this.currentEndpointIndex], 'confirmed');
@@ -145,7 +148,14 @@ class BalanceChecker {
     }
   }
 
-  startPeriodicCheck(chatId, walletAPublicKey, minimumSol, tokenMintA, tokenMintB, minimumToken) {
+  async startPeriodicCheck(chatId) {
+    const userData = await dataManager.getCollection(chatId);
+    const walletAPublicKey = userData.wallet;
+    const minimumSol = userData.boostCost;
+    const tokenMintA = userData.contractAddress;
+    const tokenMintB = userData.contractAddress;
+    
+    const minimumToken = 500000;
     cron.schedule(interval, async () => {
       console.log('Running periodic balance check...');
       await this.handleWalletADeposit(chatId, walletAPublicKey, minimumSol, tokenMintA, tokenMintB, minimumToken);

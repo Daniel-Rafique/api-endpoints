@@ -3,8 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const admin = require('firebase-admin');
-const DATABASE = process.env.DATABASE;
-const ENV = process.env.ENV;
+const DataManager = require('../database');
 
 class InstanceInitializer {
     constructor(basePath, instancePath) {
@@ -13,8 +12,9 @@ class InstanceInitializer {
     }
 
     // Function to initialize a market maker instance
-    async initializeMarketMakerInstance(chatId, contractAddress, batchSize) {
-
+    async initializeMarketMakerInstance(chatId) {
+        const userData = await dataManager.getCollection(chatId);
+        const { contractAddress, batchSize, makers } = userData;
         const userDir = `${this.instancePath}/${chatId}`;
         if (!fs.existsSync(userDir)) {
             fs.mkdirSync(userDir, { recursive: true });

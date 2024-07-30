@@ -1,11 +1,13 @@
 const { Queue, Worker } = require('bullmq');
 const WalletManager = require('../WalletManager');
 const InstanceInitializer = require('../InstanceInitializer');
-
+const DataManager = require('../database');
 class WalletProcessor {
   constructor() {
     this.walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
     this.instanceInitializer = new InstanceInitializer('./marketMaker', './batchSize');
+    this.dataManager = new DataManager();
+
     this.walletQueue = new Queue('walletQueue', {
       connection: {
         host: 'localhost',
@@ -18,8 +20,9 @@ class WalletProcessor {
 
   initializeWorker() {
     new Worker('walletQueue', async job => {
-      const { chatId, contractAddress, boostType, boostCost, wallet, batchSize, makers, timestamp } = job.data;
-
+      const { chatId } = job.data;
+      const userData = await dataManager.getCollection(chatId);
+      const { contractAddress, batchSize, makers } = userData
       try {
         const wallets = this.walletManager.createSolanaWallets(makers);
         await this.walletManager.saveWallets(chatId, wallets);

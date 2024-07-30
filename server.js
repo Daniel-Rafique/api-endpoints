@@ -53,13 +53,6 @@ const rpcEndpoints = [
 app.post('/api/create', async (req, res) => {
     const {
         chatId,
-        contractAddress,
-        boostType,
-        boostCost,
-        wallet,
-        walletPk,
-        batchSize,
-        makers,
         timestamp,
         hash
     } = req.body;
@@ -67,12 +60,12 @@ app.post('/api/create', async (req, res) => {
     console.log(req.body);
 
     // Validate parameters
-    if (!chatId || !contractAddress || !boostType || !boostCost || !wallet || !walletPk || !batchSize || !timestamp || !hash || makers > 2000) {
+    if (!chatId || !hash ) {
         return res.status(400).send('Missing required parameters');
     }
 
     // Validate the hash
-    const expectedHash = generateHash(chatId, contractAddress, boostType, boostCost, wallet, walletPk, batchSize, makers, timestamp);
+    const expectedHash = generateHash(chatId, timestamp);
     if (hash !== expectedHash) {
         console.log(expectedHash);
         return res.status(403).send('Invalid request signature');
@@ -83,7 +76,7 @@ app.post('/api/create', async (req, res) => {
 
     const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
     
-    balanceChecker.startPeriodicCheck(chatId, contractAddress, boostCost, wallet, walletPk);
+    balanceChecker.startPeriodicCheck(chatId);
     telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
     res.status(200).send('Checking balance...');
 });
