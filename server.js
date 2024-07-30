@@ -47,7 +47,6 @@ function generateHash(chatId, contractAddress, boostType, boostCost, wallet, wal
 }
 
 const walletASecretKey = walletPk;
-const balanceChecker = new BalanceChecker(rpcEndpoints, telegramToken, walletASecretKey);
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
