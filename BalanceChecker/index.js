@@ -3,7 +3,7 @@ const bs58 = require('bs58');
 const cron = require('node-cron');
 const TelegramNotifier = require('../TelegramNotifier'); // Ensure correct path
 const WalletProcessor = require('../WalletProcessor'); // Ensure correct path
-
+const interval = process.env.CRON_JOB_INTERVAL || "*/1 * * * *";
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletASecretKey) {
     this.rpcEndpoints = rpcEndpoints;
@@ -145,7 +145,7 @@ class BalanceChecker {
     }
   }
 
-  startPeriodicCheck(chatId, walletAPublicKey, minimumSol, tokenMintA, tokenMintB, minimumToken, interval) {
+  startPeriodicCheck(chatId, walletAPublicKey, minimumSol, tokenMintA, tokenMintB, minimumToken) {
     cron.schedule(interval, async () => {
       console.log('Running periodic balance check...');
       await this.handleWalletADeposit(chatId, walletAPublicKey, minimumSol, tokenMintA, tokenMintB, minimumToken);
