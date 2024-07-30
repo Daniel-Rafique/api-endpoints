@@ -8,7 +8,7 @@ const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./TelegramNotifier'); 
 
 // Initialize Firebase Admin with service account
-const serviceAccount = require('firebaseServiceAccountKey.json');
+const serviceAccount = require('./firebaseServiceAccountKey.json');
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
