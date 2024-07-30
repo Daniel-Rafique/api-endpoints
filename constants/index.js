@@ -1,4 +1,4 @@
-const TRANSACTION_CHECK = `🔍 *We are checking your wallet balance now...* 🔍\n\n`;
+const BALANCE_CHECK = `🔍 *We are checking your wallet balance now...* 🔍\n\n`;
 module.exports = {
-    TRANSACTION_CHECK
+    BALANCE_CHECK
 }
