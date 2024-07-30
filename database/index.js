@@ -1,6 +1,5 @@
 require('dotenv').config();
 const admin = require('firebase-admin');
-admin.initializeApp();
 const db = admin.firestore();
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;

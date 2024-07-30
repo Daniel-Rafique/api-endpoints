@@ -1,5 +1,6 @@
 require('dotenv').config();
-
+const admin = require('firebase-admin');
+admin.initializeApp();
 const fs = require('fs');
 const https = require('https');
 const express = require('express');
@@ -70,7 +71,7 @@ app.post('/api/create', async (req, res) => {
     const userData = await dataManager.getCollection(chatId);
 
     console.log(chatId)
-    console.log(userData)
+    console.log
 
     // Start the periodic check
     const walletASecretKey = userData.walletPk;
