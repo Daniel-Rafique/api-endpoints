@@ -8,10 +8,11 @@ const crypto = require('crypto');
 const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./TelegramNotifier'); 
 
-// Initialize Firebase Admin
+// Initialize Firebase Admin with service account
+const serviceAccount = require('./firebaseServiceAccountKey.json');
+
 admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    databaseURL: ""
+    credential: admin.credential.cert(serviceAccount)
 });
 
 const DataManager = require('./database');
