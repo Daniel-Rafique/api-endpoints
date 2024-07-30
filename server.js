@@ -40,7 +40,7 @@ app.use(bodyParser.json());
 const SECRET_KEY = process.env.SECRET_KEY;
 
 // Function to generate the hash
-function generateHash(chatId, contractAddress, boostType, boostCost, wallet, walletPk,batchSize, makers,timestamp) {
+function generateHash(chatId, contractAddress, boostType, boostCost, wallet, walletPk, batchSize, makers,timestamp) {
     const data = `${chatId}:${contractAddress}:${boostType}:${boostCost}:${wallet}:${walletPk}:${batchSize}:${makers}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
   }
@@ -64,7 +64,7 @@ app.post('/api/create', async (req, res) => {
 
     // Validate parameters
     if (!chatId || !contractAddress || !boostType || !boostCost || !wallet || !walletPk || !batchSize || !timestamp || !hash || makers > 2000) {
-        return res.status(400).send('Missing required parameters or invalid walletCount');
+        return res.status(400).send('Missing required parameters');
     }
 
     // Validate the hash
