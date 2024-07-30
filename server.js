@@ -47,11 +47,7 @@ const telegramNotifier = new TelegramNotifier(telegramToken);
 const rpcEndpoints = [
     process.env.SOLANA_RPC_ENDPOINT_1,
     process.env.SOLANA_RPC_ENDPOINT_2,
-];
-const walletASecretKey = process.env.WALLET_A_SECRET_KEY;
-const interval = process.env.CRON_JOB_INTERVAL || '*/1 * * * *';
-
-const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
+]
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
@@ -84,6 +80,11 @@ app.post('/api/create', async (req, res) => {
 
     // Start the periodic check
     console.log(walletPk)
+    const walletASecretKey = walletPk;
+    const interval = process.env.CRON_JOB_INTERVAL || '*/1 * * * *';
+
+    const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
+    
     balanceChecker.startPeriodicCheck(chatId, contractAddress, boostCost, wallet, walletPk, interval);
     telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
     res.status(200).send('Checking balance...');
