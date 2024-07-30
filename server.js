@@ -46,8 +46,6 @@ function generateHash(chatId, contractAddress, boostType, boostCost, wallet, wal
     return crypto.createHash('sha256').update(data).digest('hex');
 }
 
-const walletASecretKey = walletPk;
-
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
     const {
