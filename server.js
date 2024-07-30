@@ -6,6 +6,7 @@ admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
     databaseURL: process.env.DATABASE_URL
 });
+
 const fs = require('fs');
 const https = require('https');
 const express = require('express');
