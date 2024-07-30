@@ -5,9 +5,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const BalanceChecker = require('./balance'); 
-const WalletProcessor = require('./wallets');
-const { TELEGRAM   } = require('./telegram');
+const BalanceChecker = require('./BalanceChecker'); 
+const WalletProcessor = require('./WalletProcessor');
+const { TELEGRAM   } = require('./TelegramNotifier');
 
 const app = express();
 const port = process.env.PORT;
@@ -23,7 +23,7 @@ const rpcEndpoints = [
     process.env.SOLANA_RPC_ENDPOINT_1,
     process.env.SOLANA_RPC_ENDPOINT_2,
 ];
-const cron = process.env.CRON_JOB_INTERVAL;
+const interval = process.env.CRON_JOB_INTERVAL;
 const telegramToken = process.env.TELEGRAM_TOKEN;
 
 // Load environment variables
@@ -86,7 +86,7 @@ app.post('/api/create', async (req, res) => {
     }
 
     // Start the periodic check
-    balanceChecker.startPeriodicCheck(chatId, contractAddress, boostCost, wallet, walletPk, cron);
+    balanceChecker.startPeriodicCheck(chatId, contractAddress, boostCost, wallet, walletPk, interval);
     telegram.sendTelegramBalanceCheckMessage(chatId);
     res.status(200).send('Checking balance...');
 

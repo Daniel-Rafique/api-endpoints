@@ -1,20 +1,17 @@
-require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
-const axios = require('axios');
 const bs58 = require('bs58');
 const cron = require('node-cron');
-const TaskProcessor = require('./TaskProcessor'); // Adjust path as necessary
-
-const taskProcessor = new TaskProcessor();
+const TelegramNotifier = require('../TelegramNotifier');
+const WalletProcessor = require('../WalletProcessor');
 
 class BalanceChecker {
-  constructor(rpcEndpoints, telegramToken, walletASecretKey) {
+  constructor(rpcEndpoints, telegramNotifier, walletASecretKey) {
     this.rpcEndpoints = rpcEndpoints;
     this.currentEndpointIndex = 0;
-    this.telegramToken = telegramToken;
-    this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
+    this.telegramNotifier = TelegramNotifier;
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletASecretKey));
     this.previousBalance = 0;
+    this.walletProcessor = new WalletProcessor();
   }
 
   getNextConnection() {
@@ -72,18 +69,6 @@ class BalanceChecker {
     }
   }
 
-  async sendTelegramMessage(chatId, text) {
-    const url = `${this.telegramApiUrl}/sendMessage`;
-    try {
-      await axios.post(url, {
-        chat_id: chatId,
-        text: text,
-      });
-    } catch (error) {
-      console.error('Error sending message:', error);
-    }
-  }
-
   async returnSolToWalletB(walletBPublicKeyString, amount) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
@@ -121,10 +106,22 @@ class BalanceChecker {
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey, tokenMintB);
       const totalTokenBalance = tokenBalanceA + tokenBalanceB;
 
-      if (totalTokenBalance >= minimumToken) {
-        const responseMessage = `SOL and token balances are valid. Initializing wallet creation and instance setup.`;
-        await this.sendTelegramMessage(chatId, responseMessage);
-        taskProcessor.addJob({
+      let message = `🔍 *Balance Check Report* 🔍\n\n`;
+      message += `💰 *SOL Balance of Wallet A:* ${solBalanceA.toFixed(9)} SOL\n`;
+      const isSolValid = solBalanceA >= minimumSol;
+      const isTokenValid = totalTokenBalance >= minimumToken;
+
+      message += isSolValid ? `✅ Sufficient SOL balance! (Minimum required: ${minimumSol} SOL)\n\n` : `❌ Insufficient SOL balance. (Minimum required: ${minimumSol} SOL)\n\n`;
+      message += `💸 *Token Balance of Wallet B:*\n`;
+      message += `- Token A: ${tokenBalanceA} tokens\n`;
+      message += `- Token B: ${tokenBalanceB} tokens\n`;
+      message += `- Total: ${totalTokenBalance} tokens\n`;
+      message += isTokenValid ? `✅ Sufficient token balance! (Minimum required: ${minimumToken} tokens)\n\n` : `❌ Insufficient token balance. (Minimum required: ${minimumToken} tokens)\n\n`;
+
+      if (isSolValid && isTokenValid) {
+        message += `🎉 *Both balances are sufficient! Proceeding with the next steps.* 🚀\n`;
+        await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        this.walletProcessor.addJob({
           chatId,
           contractAddress: walletAPublicKey,
           boostType: "type",
@@ -135,9 +132,13 @@ class BalanceChecker {
           timestamp: Date.now()
         });
       } else {
-        const responseMessage = `Wallet B's total token balance does not meet the required minimum of ${minimumToken} tokens. Returning SOL.`;
-        await this.sendTelegramMessage(chatId, responseMessage);
-        await this.returnSolToWalletB(walletBPublicKey, solBalanceA);
+        if (!isSolValid || !isTokenValid) {
+          message += `⚠️ *Action Required:* Please ensure your balances meet the minimum requirements.\n`;
+          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+          const returnAmount = Math.min(solBalanceA, minimumSol);
+          const signature = await this.returnSolToWalletB(walletBPublicKey, returnAmount);
+          console.log(`Returned ${returnAmount} SOL to Wallet B. Transaction signature: ${signature}`);
+        }
       }
 
       this.previousBalance = solBalanceA;
@@ -152,20 +153,4 @@ class BalanceChecker {
   }
 }
 
-// Test the balance checker
-const rpcEndpoints = [
-  process.env.SOLANA_RPC_ENDPOINT_1,
-  process.env.SOLANA_RPC_ENDPOINT_2,
-]; // Replace with your actual RPC endpoints
-const telegramToken = process.env.TELEGRAM_TOKEN;
-const chatId = '243733813'; // Replace with your Telegram chat ID
-const walletAPublicKey = 'DogXeemGkG3hjeuF8LJmE2SmuCLDZvFnYga7PUZFj4uU'; // Replace with Wallet A public key
-const walletASecretKey = '2CJWKMDdy62vop3knPNbgUX2CJvmBLGNyb3FWkaBS1PdsyFnCnz18qfE5BEgzCvz7h5fkkaKEhkQ2xrqmkaPCryr'; // Wallet A's secret key in base58 format
-const minimumSol = 4; // Minimum SOL balance required in Wallet A
-const minimumToken = 5000; // Minimum token balance required in Wallet B
-const tokenMintA = '7CXCCZNBs5U72RPVtEVPjy5Gr9XcyqqVZoPvy446FMGP'; // Replace with the token mint A address
-const tokenMintB = '4k3Dyjzvzp8eMLLhxjYhNGxdjLWi91Q1aj3h4F78A7RW'; // Replace with the token mint B address
-const interval = '*/1 * * * *'; // Check every minute
-
-const balanceChecker = new BalanceChecker(rpcEndpoints, telegramToken, walletASecretKey);
-balanceChecker.startPeriodicCheck(chatId, walletAPublicKey, minimumSol, tokenMintA, tokenMintB, minimumToken, interval);
+module.exports = BalanceChecker;
