@@ -6,4 +6,5 @@ firebaseServiceAccountKey.json
 .env
 marketMaker/
 instances/
-tokenBalance.js
+tests/checkBalance.js
+tests/tokenBalance.js
