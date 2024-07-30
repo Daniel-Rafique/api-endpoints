@@ -5,8 +5,9 @@ const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
-const BalanceChecker = require('./BalanceChecker'); // Ensure correct case
-const TelegramNotifier = require('./TelegramNotifier'); // Ensure correct case
+const BalanceChecker = require('./BalanceChecker');
+const TelegramNotifier = require('./TelegramNotifier'); 
+const DataManager = require('./database');
 
 const app = express();
 const port = process.env.PORT;
@@ -64,9 +65,11 @@ app.post('/api/create', async (req, res) => {
         console.log(expectedHash);
         return res.status(403).send('Invalid request signature');
     }
+    const dataManager = new DataManager();
+    const userData = await dataManager.getCollection(chatId);
 
     // Start the periodic check
-    const walletASecretKey = walletPk;
+    const walletASecretKey = userData.walletPk;
 
     const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
     
