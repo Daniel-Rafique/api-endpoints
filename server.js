@@ -11,8 +11,7 @@ const TelegramNotifier = require('./TelegramNotifier');
 const serviceAccount = require('./firebaseServiceAccountKey.json');
 
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: process.env.DATABASE_URL
+    credential: admin.credential.cert(serviceAccount)
 });
 
 const DataManager = require('./database');
