@@ -13,9 +13,7 @@ class InstanceInitializer {
     }
 
     // Function to initialize a market maker instance
-    async initializeMarketMakerInstance(chatId, contractAddress, instances) {
-        // Create a unique directory for the user
-        const numberOrInstances = instances;
+    async initializeMarketMakerInstance(chatId, contractAddress, batchSize) {
 
         const userDir = `${this.instancePath}/${chatId}`;
         if (!fs.existsSync(userDir)) {
@@ -27,7 +25,7 @@ class InstanceInitializer {
 
         // Append the CHAT_ID and CONTRACT_ADDRESS variables to the .env file without overwriting existing content
         const envFilePath = `${userDir}/.env`;
-        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}`;
+        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
         if (fs.existsSync(envFilePath)) {
             fs.appendFileSync(envFilePath, envContent);
         } else {

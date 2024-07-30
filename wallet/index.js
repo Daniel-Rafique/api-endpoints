@@ -5,7 +5,7 @@ const InstanceInitializer = require('../instanceInitializer');
 class TaskProcessor {
   constructor() {
     this.walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
-    this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
+    this.instanceInitializer = new InstanceInitializer('./marketMaker', './batchSize');
     this.walletQueue = new Queue('walletQueue', {
       connection: {
         host: 'localhost',
@@ -18,12 +18,12 @@ class TaskProcessor {
 
   initializeWorker() {
     new Worker('walletQueue', async job => {
-      const { chatId, contractAddress, boostType, boostCost, wallet, instances, makers, timestamp } = job.data;
+      const { chatId, contractAddress, boostType, boostCost, wallet, batchSize, makers, timestamp } = job.data;
 
       try {
         const wallets = this.walletManager.createSolanaWallets(makers);
         await this.walletManager.saveWallets(chatId, wallets);
-        await this.instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, instances);
+        await this.instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, batchSize);
         console.log(`Processed job for chatId: ${chatId}`);
       } catch (error) {
         console.error('Error processing job:', error);
