@@ -28,8 +28,8 @@ app.use(bodyParser.json());
 const SECRET_KEY = process.env.SECRET_KEY;
 
 // Function to generate the hash
-function generateHash(chatId, contractAddress, boostType, boostCost, wallet, walletPk, batchSize, makers, timestamp) {
-    const data = `${chatId}:${contractAddress}:${boostType}:${boostCost}:${wallet}:${walletPk}:${batchSize}:${makers}:${timestamp}:${SECRET_KEY}`;
+function generateHash(chatId, timestamp) {
+    const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
 }
 
