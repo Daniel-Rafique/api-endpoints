@@ -83,6 +83,7 @@ app.post('/api/create', async (req, res) => {
     }
 
     // Start the periodic check
+    console.log(walletPk)
     balanceChecker.startPeriodicCheck(chatId, contractAddress, boostCost, wallet, walletPk, interval);
     telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
     res.status(200).send('Checking balance...');
