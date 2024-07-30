@@ -11,7 +11,6 @@ const TelegramNotifier = require('./TelegramNotifier'); // Ensure correct case
 const app = express();
 const port = process.env.PORT;
 
-
 // Load environment variables
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
 const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
