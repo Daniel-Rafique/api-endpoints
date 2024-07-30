@@ -9,6 +9,8 @@ const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./TelegramNotifier'); 
 const DataManager = require('./database');
 
+const dataManager = new DataManager();
+
 const app = express();
 const port = process.env.PORT;
 
@@ -65,7 +67,6 @@ app.post('/api/create', async (req, res) => {
         console.log(expectedHash);
         return res.status(403).send('Invalid request signature');
     }
-    const dataManager = new DataManager();
     const userData = await dataManager.getCollection(chatId);
 
     // Start the periodic check
