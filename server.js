@@ -5,9 +5,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
-const BalanceChecker = require('./BalanceChecker'); 
-const WalletProcessor = require('./WalletProcessor');
-const TelegramNotifier = require('./TelegramNotifier'); // Ensure correct case
+const balanceChecker = require('./BalanceChecker'); 
+const telegramNotifier = require('./TelegramNotifier'); // Ensure correct case
 
 const app = express();
 const port = process.env.PORT;
@@ -35,12 +34,6 @@ const options = {
     key: fs.readFileSync(SSL_KEY_PATH),
     cert: fs.readFileSync(SSL_CERT_PATH)
 };
-
-const telegram = new TelegramNotifier();
-
-// Initialize WalletProcessor
-const WalletProcessor = new WalletProcessor();
-
 // Middleware
 app.use(bodyParser.json());
 
@@ -87,7 +80,7 @@ app.post('/api/create', async (req, res) => {
 
     // Start the periodic check
     balanceChecker.startPeriodicCheck(chatId, contractAddress, boostCost, wallet, walletPk, interval);
-    telegram.sendTelegramBalanceCheckMessage(chatId);
+    telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
     res.status(200).send('Checking balance...');
 
 });
