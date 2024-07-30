@@ -1,6 +1,5 @@
 require('dotenv').config();
-const admin = require('firebase-admin');
-admin.initializeApp();
+
 const fs = require('fs');
 const https = require('https');
 const express = require('express');
