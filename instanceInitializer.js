@@ -9,6 +9,7 @@ class InstanceInitializer {
     constructor(basePath, instancePath) {
         this.basePath = basePath;
         this.instancePath = instancePath;
+        this.dataManager = new DataManager();
     }
 
     // Function to initialize a market maker instance

@@ -15,7 +15,7 @@ const port = process.env.PORT;
 // Initialize Firebase Admin
 admin.initializeApp({
     credential: admin.credential.applicationDefault(),
-    databaseURL: process.env.DATABASE_URL
+    databaseURL: ""
 });
 
 // Load environment variables
