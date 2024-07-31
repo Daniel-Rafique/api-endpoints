@@ -44,19 +44,40 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance(publicKeyString, tokenMintAddress) {
+  async getTokenAccountAddress(walletPublicKey, tokenMintAddress) {
+    const filters = [
+      { dataSize: 165 }, // size of token account
+      {
+        memcmp: {
+          offset: 32, // offset for mint address
+          bytes: tokenMintAddress
+        }
+      },
+      {
+        memcmp: {
+          offset: 0, // offset for wallet address
+          bytes: walletPublicKey
+        }
+      }
+    ];
+    const accounts = await this.connection.getProgramAccounts(
+      new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+      { filters: filters }
+    );
+
+    return accounts.length ? accounts[0].pubkey.toString() : null;
+  }
+
+  async checkTokenBalance(walletPublicKey, tokenMintAddress) {
     try {
-      const publicKey = new PublicKey(publicKeyString);
-      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(publicKey, {
-        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-      });
+      const tokenAccountAddress = await this.getTokenAccountAddress(walletPublicKey, tokenMintAddress);
+      if (!tokenAccountAddress) {
+        return 0;
+      }
 
-      const tokenAccount = tokenAccounts.value.find(
-        account => account.account.data.parsed.info.mint === tokenMintAddress
-      );
-
-      if (tokenAccount) {
-        return tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
+      const tokenAccount = await this.connection.getParsedAccountInfo(new PublicKey(tokenAccountAddress));
+      if (tokenAccount.value) {
+        return tokenAccount.value.data.parsed.info.tokenAmount.uiAmount;
       }
       return 0;
     } catch (error) {
