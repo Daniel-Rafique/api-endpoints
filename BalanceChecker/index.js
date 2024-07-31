@@ -65,6 +65,7 @@ class BalanceChecker {
       throw error;
     }
   }
+
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
   }
@@ -80,6 +81,7 @@ class BalanceChecker {
       throw error;
     }
   }
+
   async returnSolToWalletB(walletBPublicKeyString) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
@@ -122,8 +124,6 @@ class BalanceChecker {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
 
-      console.log('Wallet B Public Key:', walletBPublicKey.toString());
-
       // Check SOL balance of Wallet A
       const solBalanceA = await this.checkSolBalance(walletAPublicKey);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
@@ -133,7 +133,6 @@ class BalanceChecker {
       // Check Token balance of Wallet B
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
       console.log(tokenMintAddress)
-      console.log(tokenBalanceB)
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
 
