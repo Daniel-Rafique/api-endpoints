@@ -1,50 +1,52 @@
 require('dotenv').config();
-const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
-const bs58 = require('bs58');
+const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
 const cron = require('node-cron');
-const WalletProcessor = require('../WalletProcessor');
+const { Queue, Worker } = require('bullmq');
+const { MESSAGES } = require('../constants');
+const TelegramNotifier = require('../telegram');
 const DataManager = require('../database');
-const tokenProgramId = process.env.TOKEN_PROGRAM_ID || 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-const interval = process.env.CRON_JOB_INTERVAL || "*/1 * * * *"; 
-// const interval = "0 0 * * *"; // Uncomment for daily check
+const { escapeMarkdown } = require('../utils');
+
+const redisOptions = {
+  host: 'localhost', // Replace with your Redis host
+  port: 6379, // Replace with your Redis port
+};
+
+const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 
 class BalanceChecker {
-  constructor(rpcEndpoints, telegramNotifier, walletASecretKey) {
+  constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
     this.rpcEndpoints = rpcEndpoints;
-    this.currentEndpointIndex = 0;
+    this.currentRpcIndex = 0;
+    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.telegramNotifier = telegramNotifier;
-    this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletASecretKey));
-    this.previousBalance = 0;
-    this.walletProcessor = new WalletProcessor();
     this.dataManager = new DataManager();
+    this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
   }
-  
-  getNextConnection() {
-    this.currentEndpointIndex = (this.currentEndpointIndex + 1) % this.rpcEndpoints.length;
-    const connection = new Connection(this.rpcEndpoints[this.currentEndpointIndex], 'confirmed');
-    console.log(`Using RPC endpoint: ${this.rpcEndpoints[this.currentEndpointIndex]}`);
-    return connection;
+
+  switchRpcEndpoint() {
+    this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
+    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
   }
 
   async checkSolBalance(publicKeyString) {
     try {
-      const connection = this.getNextConnection();
       const publicKey = new PublicKey(publicKeyString);
-      const balance = await connection.getBalance(publicKey);
+      const balance = await this.connection.getBalance(publicKey);
       const solBalance = balance / 1_000_000_000; // Convert lamports to SOL
       return solBalance;
     } catch (error) {
       console.error('Error checking SOL balance:', error);
+      this.switchRpcEndpoint();
       throw error;
     }
   }
 
   async checkTokenBalance(publicKeyString, tokenMint) {
     try {
-      const connection = this.getNextConnection();
       const publicKey = new PublicKey(publicKeyString);
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-        programId: new PublicKey(tokenProgramId)
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(publicKey, {
+        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
       });
 
       const tokenAccount = tokenAccounts.value.find(
@@ -57,116 +59,120 @@ class BalanceChecker {
       return 0;
     } catch (error) {
       console.error('Error checking token balance:', error);
+      this.switchRpcEndpoint();
       throw error;
     }
   }
 
-  async getTransactionHistory(publicKeyString) {
+  async sendTelegramMessage(chatId, text) {
+    await this.telegramNotifier.sendTelegramMessage(chatId, text);
+  }
+
+  async getTransactionHistory(walletAPublicKey) {
     try {
-      const connection = this.getNextConnection();
-      const publicKey = new PublicKey(publicKeyString);
-      const signatures = await connection.getSignaturesForAddress(publicKey, { limit: 1 });
-      const confirmedTransaction = await connection.getTransaction(signatures[0].signature);
-      console.log('Confirmed transaction:', confirmedTransaction);
+      const signatures = await this.connection.getSignaturesForAddress(new PublicKey(walletAPublicKey), { limit: 1 });
+      const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
       return confirmedTransaction;
     } catch (error) {
       console.error('Error fetching transaction history:', error);
+      this.switchRpcEndpoint();
       throw error;
     }
   }
 
-  async returnSolToWalletA(walletAPublicKeyString, amount) {
+  async returnSolToWalletB(walletBPublicKeyString) {
     try {
-      const walletAPublicKey = new PublicKey(walletAPublicKeyString);
+      const walletBPublicKey = new PublicKey(walletBPublicKeyString);
+      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
+
+      // Subtract a small amount to cover the transaction fee
+      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
-          toPubkey: walletAPublicKey,
-          lamports: amount * 1_000_000_000 // Convert SOL to lamports
+          toPubkey: walletBPublicKey,
+          lamports: lamportsToSend
         })
       );
 
-      const connection = this.getNextConnection();
-      const signature = await connection.sendTransaction(transaction, [this.walletAKeypair]);
-      await connection.confirmTransaction(signature);
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        transaction,
+        [this.walletAKeypair]
+      );
 
       console.log('Transaction signature:', signature);
 
       return signature;
     } catch (error) {
-      console.error('Error returning SOL to Wallet A:', error);
+      console.error('Error returning SOL to Wallet B:', error);
+      this.switchRpcEndpoint();
       throw error;
     }
   }
 
-  async handleWalletADeposit(chatId, walletAPublicKey, minimumSol, tokenMint) {
-    console.log('Checking wallet balances...: ', chatId, walletAPublicKey, minimumSol, tokenMint);
-    const solBalanceB = await this.checkSolBalance(walletAPublicKey);
-    if (solBalanceB >= minimumSol && solBalanceB > this.previousBalance) {
+  async runBalanceCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint) {
+    try {
       const transaction = await this.getTransactionHistory(walletAPublicKey);
-      const walletBPublicKey = transaction.transaction.message.accountKeys.find(key => key !== walletAPublicKey && key !== this.walletAKeypair.publicKey.toBase58());
+      const walletBPublicKey = transaction.transaction.message.accountKeys.find(
+        key => key.toString() !== walletAPublicKey.toString() && key.toString() !== this.walletAKeypair.publicKey.toString()
+      );
 
       if (!walletBPublicKey) {
-        console.error('No valid depositor wallet found.');
-        return;
+        throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
 
-      const solBalanceA = await this.checkSolBalance(walletBPublicKey);
-      const tokenBalanceA = await this.checkTokenBalance(walletAPublicKey, tokenMint);
+      // Check SOL balance of Wallet A
+      const solBalanceA = await this.checkSolBalance(walletAPublicKey);
+      let message = MESSAGES.BALANCE_CHECK_REPORT;
+      message += MESSAGES.SOL_BALANCE_A(solBalanceA);
+      const isSolValid = solBalanceA >= minimumSol;
 
-      console.log('Sol balance in Wallet B:', solBalanceB);
-      console.log('Token balance in Wallet A:', tokenBalanceA);
-
-      let message = `🔍 *Balance Check Report* 🔍\n\n`;
-      message += `💰 *SOL Balance of Wallet B:* ${solBalanceB.toFixed(9)} SOL\n`;
-      const isSolValid = solBalanceB >= minimumSol;
-      const isTokenValid = tokenBalanceA >= 5000;
-
-      console.log('Is SOL balance valid:', isSolValid);
-
-      message += isSolValid ? `✅ Sufficient SOL balance! (Minimum required: ${minimumSol} SOL)\n\n` : `❌ Insufficient SOL balance. (Minimum required: ${minimumSol} SOL)\n\n`;
-      message += `💸 *Token Balance of Wallet A:*\n`;
-      message += `- Token: ${tokenBalanceA} tokens\n`;
-      message += isTokenValid ? `✅ Sufficient token balance! (Minimum required: 5000 tokens)\n\n` : `❌ Insufficient token balance. (Minimum required: 5000 tokens)\n\n`;
+      // Check Token balance of Wallet B
+      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey, tokenMint);
+      message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
+      const isTokenValid = tokenBalanceB >= minimumToken;
 
       if (isSolValid && isTokenValid) {
-        const userData = await this.dataManager.getCollection(chatId);
-
-        message += `🎉 *Both balances are sufficient! Proceeding with the next steps.* 🚀\n`;
-        await this.telegramNotifier.sendTelegramMessage(chatId, message);
-        
-        this.walletProcessor.addJob({
-          chatId,
-          contractAddress: userData.contractAddress,
-          boostType: userData.boostType,
-          boostCost: userData.boostCost,
-          wallet: userData.wallet,
-          batchSize: userData.batchSize,
-          makers: userData.makers,
-          timestamp: Date.now()
-        });
+        message += MESSAGES.SUFFICIENT_BALANCE;
       } else {
-        message += `⚠️ *Action Required:* Please ensure your balances meet the minimum requirements.\n`;
-        await this.telegramNotifier.sendTelegramMessage(chatId, message);
-        const returnAmount = Math.min(solBalanceB, minimumSol);
-        const signature = await this.returnSolToWalletA(walletBPublicKey, returnAmount);
-        console.log(`Returned ${returnAmount} SOL to Wallet A. Transaction signature: ${signature}`);
+        if (!isSolValid) {
+          message += MESSAGES.INSUFFICIENT_SOL(minimumSol);
+        }
+        if (!isTokenValid) {
+          message += MESSAGES.INSUFFICIENT_TOKEN(minimumToken);
+        }
+        if (!isSolValid || !isTokenValid) {
+          console.log('Returning SOL to Wallet B:', solBalanceA);
+          await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey });
+          message += MESSAGES.RETURNED_SOL(solBalanceA, signature);
+        }
       }
 
-      this.previousBalance = solBalanceB;
+      await this.sendTelegramMessage(chatId, message);
+    } catch (error) {
+      console.error('Error during balance check:', error);
+      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message));
     }
   }
 
-  startPeriodicCheck(chatId, userData) {
-    const walletAPublicKey = userData.wallet;
-    const minimumSol = userData.boostCost; // Assuming Wallet A sends 1 SOL to Wallet B
-    const tokenMint = userData.contractAddress;
-    console.log(tokenMint, minimumSol, walletAPublicKey);
-    cron.schedule(interval, async () => {
+  startPeriodicCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint) {
+    cron.schedule('*/1 * * * *', async () => {
       console.log('Running periodic balance check...');
-      await this.handleWalletADeposit(chatId, walletAPublicKey, minimumSol, tokenMint);
+      await this.runBalanceCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint);
     });
   }
 }
+
+// Worker to process the transaction queue
+const worker = new Worker('transactionQueue', async job => {
+  const { walletBPublicKeyString } = job.data;
+  const balanceChecker = new BalanceChecker(
+    [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+    new TelegramNotifier(process.env.TELEGRAM_TOKEN),
+    process.env.WALLET_A_PRIVATE_KEY
+  );
+  await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
+}, { connection: redisOptions });
 
 module.exports = BalanceChecker;

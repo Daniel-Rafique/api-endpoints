@@ -14,7 +14,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const BalanceChecker = require('./BalanceChecker');
-const TelegramNotifier = require('./TelegramNotifier');
+const TelegramNotifier = require('./telegram');
 
 // Initialize Firebase Admin with service account
 const dataManager = new DataManager();
@@ -48,12 +48,6 @@ function generateHash(chatId, timestamp) {
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramNotifier = new TelegramNotifier(telegramToken);
 
-// Initialize BalanceChecker
-const rpcEndpoints = [
-    process.env.SOLANA_RPC_ENDPOINT_1,
-    process.env.SOLANA_RPC_ENDPOINT_2,
-];
-
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
     const { chatId, timestamp, hash } = req.body;
@@ -84,9 +78,13 @@ app.post('/api/create', async (req, res) => {
 
         // Start the periodic check
         const walletASecretKey = userData.walletPk;
-        const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
-        balanceChecker.startPeriodicCheck(chatId, userData);
-        telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
+        const balanceChecker = new BalanceChecker(
+            [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+            telegramNotifier,
+            walletASecretKey
+        );
+        balanceChecker.startPeriodicCheck(chatId, userData.wallet, userData.boostCost, 5000, process.env.TOKEN_MINT_ADDRESS);
+        telegramNotifier.sendTelegramMessage(chatId, '🔍 Starting periodic balance check...');
         res.status(200).send('Checking balance...');
     } catch (error) {
         console.error('Error processing request:', error);
