@@ -16,6 +16,7 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./TelegramNotifier'); 
+const e = require('express');
 
 // Initialize Firebase Admin with service account
 
@@ -87,6 +88,8 @@ app.post('/api/create', async (req, res) => {
         balanceChecker.startPeriodicCheck(chatId);
         telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
         res.status(200).send('Checking balance...');
+    }else{
+        return res.status(400).send('No chatId');
     }
 });
 
