@@ -131,11 +131,11 @@ class BalanceChecker {
       const isSolValid = solBalanceA >= minimumSol;
 
       // Check Token balance of Wallet B
-      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey, tokenMint);
+      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMint);
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumToken;
 
-      console.log('SOL balance:',walletAPublicKey, minimumToken, 'Token balance:', tokenBalanceB);
+      console.log('SOL balance:', solBalanceA, 'Token balance:', tokenBalanceB);
 
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
@@ -149,7 +149,7 @@ class BalanceChecker {
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
-            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
+            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
             message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
