@@ -125,7 +125,7 @@ class BalanceChecker {
 
       if (isSolValid && isTokenValid) {
         const userData = await this.dataManager.getCollection(chatId);
-        
+
         message += `🎉 *Both balances are sufficient! Proceeding with the next steps.* 🚀\n`;
         await this.telegramNotifier.sendTelegramMessage(chatId, message);
         
@@ -153,8 +153,7 @@ class BalanceChecker {
     }
   }
 
-  async startPeriodicCheck(chatId) {
-    const userData = await this.dataManager.getCollection(chatId);
+  async startPeriodicCheck(chatId, userData) {
     const walletAPublicKey = userData.wallet;
     const minimumSol = userData.boostCost;
     const tokenMintA = userData.contractAddress;

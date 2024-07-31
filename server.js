@@ -85,7 +85,7 @@ app.post('/api/create', async (req, res) => {
         // Start the periodic check
         const walletASecretKey = userData.walletPk;
         const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
-        balanceChecker.startPeriodicCheck(chatId);
+        balanceChecker.startPeriodicCheck(chatId, userData);
         telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
         res.status(200).send('Checking balance...');
     }else{

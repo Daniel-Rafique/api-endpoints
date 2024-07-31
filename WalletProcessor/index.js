@@ -5,7 +5,7 @@ const DataManager = require('../database');
 class WalletProcessor {
   constructor() {
     this.walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
-    this.instanceInitializer = new InstanceInitializer('./marketMaker', './batchSize');
+    this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
     this.dataManager = new DataManager();
 
     this.walletQueue = new Queue('walletQueue', {
