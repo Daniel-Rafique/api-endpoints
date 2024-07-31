@@ -3,7 +3,8 @@ const bs58 = require('bs58');
 const cron = require('node-cron');
 const WalletProcessor = require('../WalletProcessor'); 
 const DataManager = require('../database');
-const interval = process.env.CRON_JOB_INTERVAL || "*/1 * * * *";
+// const interval = process.env.CRON_JOB_INTERVAL || "*/1 * * * *"; 
+const interval = "0 0 * * *";
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletASecretKey) {
