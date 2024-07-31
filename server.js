@@ -37,7 +37,7 @@ app.use(bodyParser.json());
 
 // Secret key (store this securely, e.g., in environment variables)
 const SECRET_KEY = process.env.SECRET_KEY;
-let tokenMint;
+let tokenMintAddress;
 
 // Function to generate the hash
 function generateHash(chatId, timestamp) {
