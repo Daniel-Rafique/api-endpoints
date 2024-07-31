@@ -3,8 +3,8 @@ const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfi
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
-const TelegramNotifier = require('../telegram');
 const DataManager = require('../database');
+const TelegramNotifier = require('../TelegramNotifier');
 const { escapeMarkdown } = require('../utils');
 
 const redisOptions = {
