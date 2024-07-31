@@ -88,6 +88,7 @@ app.post('/api/create', async (req, res) => {
 });
 // Function to generate the hash
 function generateHash(chatId, timestamp) {
+    console.log(`Generating hash for chatId: ${chatId}, timestamp: ${timestamp}`);
     const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
 }
