@@ -1,8 +1,10 @@
+require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const WalletProcessor = require('../WalletProcessor'); 
 const DataManager = require('../database');
+const tokenProgramId = process.env.TOKEN_PROGRAM_ID;
 const interval = process.env.CRON_JOB_INTERVAL || "*/1 * * * *"; 
 // const interval = "0 0 * * *";
 
@@ -42,7 +44,7 @@ class BalanceChecker {
       const connection = this.getNextConnection();
       const publicKey = new PublicKey(publicKeyString);
       const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+        programId: new PublicKey(tokenProgramId)
       });
 
       const tokenAccount = tokenAccounts.value.find(
@@ -122,16 +124,19 @@ class BalanceChecker {
       message += isTokenValid ? `✅ Sufficient token balance! (Minimum required: ${minimumToken} tokens)\n\n` : `❌ Insufficient token balance. (Minimum required: ${minimumToken} tokens)\n\n`;
 
       if (isSolValid && isTokenValid) {
+        const userData = await this.dataManager.getCollection(chatId);
+        
         message += `🎉 *Both balances are sufficient! Proceeding with the next steps.* 🚀\n`;
         await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        
         this.walletProcessor.addJob({
           chatId,
-          contractAddress: walletAPublicKey,
-          boostType: "type",
-          boostCost: minimumSol,
-          wallet: walletBPublicKey,
-          batchSize: 1000,
-          makers: 1000,
+          contractAddress: userData.contractAddress,
+          boostType: userData.boostType,
+          boostCost: userData.boostCost,
+          wallet: userData.wallet,
+          batchSize: userData.batchSize,
+          makers: userData.makers,
           timestamp: Date.now()
         });
       } else {
@@ -154,7 +159,6 @@ class BalanceChecker {
     const minimumSol = userData.boostCost;
     const tokenMintA = userData.contractAddress;
     const tokenMintB = userData.contractAddress;
-
     const minimumToken = 500000;
     cron.schedule(interval, async () => {
       console.log('Running periodic balance check...');
