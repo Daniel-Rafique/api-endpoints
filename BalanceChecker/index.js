@@ -72,6 +72,7 @@ class BalanceChecker {
   async getTransactionHistory(walletAPublicKeyString) {
     try {
       const walletAPublicKey = new PublicKey(walletAPublicKeyString);
+      console.log('Wallet A Public Key:', walletAPublicKey.toString());
       const signatures = await this.connection.getSignaturesForAddress(walletAPublicKey, { limit: 1 });
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
       return confirmedTransaction;
@@ -116,6 +117,8 @@ class BalanceChecker {
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
       const transaction = await this.getTransactionHistory(walletAPublicKeyString);
+      console.log('Transaction:', transaction);
+
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
         key => key.toString() !== walletAPublicKeyString && key.toString() !== this.walletAKeypair.publicKey.toString()
       );
@@ -126,12 +129,15 @@ class BalanceChecker {
 
       // Check SOL balance of Wallet A
       const solBalanceA = await this.checkSolBalance(walletAPublicKeyString);
+      console.log('Wallet A SOL balance:', solBalanceA);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSolBalance;
 
       // Check Token balance of Wallet B
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
+      console.log('Wallet B Token balance:', tokenBalanceB);
+
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
 
