@@ -67,6 +67,7 @@ class BalanceChecker {
       const publicKey = new PublicKey(publicKeyString);
       const confirmedSignatures = await connection.getConfirmedSignaturesForAddress2(publicKey, { limit: 1 });
       const confirmedTransaction = await connection.getConfirmedTransaction(confirmedSignatures[0].signature);
+      console.log('Confirmed transaction:', confirmedTransaction);
       return confirmedTransaction;
     } catch (error) {
       console.error('Error fetching transaction history:', error);
@@ -88,6 +89,8 @@ class BalanceChecker {
       const connection = this.getNextConnection();
       const signature = await connection.sendTransaction(transaction, [this.walletAKeypair]);
       await connection.confirmTransaction(signature);
+
+      console.log('Transaction signature:', signature);
 
       return signature;
     } catch (error) {
@@ -112,10 +115,14 @@ class BalanceChecker {
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey, tokenMintB);
       const totalTokenBalance = tokenBalanceA + tokenBalanceB;
 
+      console.log('Token balances:', tokenBalanceA, tokenBalanceB, totalTokenBalance);
+
       let message = `🔍 *Balance Check Report* 🔍\n\n`;
       message += `💰 *SOL Balance of Wallet A:* ${solBalanceA.toFixed(9)} SOL\n`;
       const isSolValid = solBalanceA >= minimumSol;
       const isTokenValid = totalTokenBalance >= minimumToken;
+
+      console.log('Is SOL balance valid:', isSolValid);
 
       message += isSolValid ? `✅ Sufficient SOL balance! (Minimum required: ${minimumSol} SOL)\n\n` : `❌ Insufficient SOL balance. (Minimum required: ${minimumSol} SOL)\n\n`;
       message += `💸 *Token Balance of Wallet B:*\n`;
