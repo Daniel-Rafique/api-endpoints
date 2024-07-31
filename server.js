@@ -59,7 +59,7 @@ const rpcEndpoints = [
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
-    const {
+    const data = {
         chatId,
         timestamp,
         hash
@@ -68,19 +68,19 @@ app.post('/api/create', async (req, res) => {
     console.log(req.body);
 
     // Validate parameters
-    if (!chatId || !hash ) {
+    if (!data.chatId || !data.hash ) {
         return res.status(400).send('Missing required parameters');
     }
 
     // Validate the hash
-    const expectedHash = generateHash(chatId, timestamp);
-    if (hash !== expectedHash) {
+    const expectedHash = generateHash(data.chatId, data.timestamp);
+    if (data.hash !== expectedHash) {
         console.log(expectedHash);
         return res.status(403).send('Invalid request signature');
     }
     
-    if(chatId){
-        console.log(chatId)
+    if(data.chatId){
+        let chatId = data.chatId;
         const userData = await dataManager.getCollection(chatId);
         console.log(chatId)
         // Start the periodic check
