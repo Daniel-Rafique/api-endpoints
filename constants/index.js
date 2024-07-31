@@ -8,7 +8,7 @@ module.exports = {
     SUFFICIENT_BALANCE: '✅ Both SOL balance and Token balance are sufficient - activating...\n',
     INSUFFICIENT_SOL: (minimumSolBalance) => `❌ The SOL balance does not meet the required minimum of \`${minimumSolBalance} SOL\`.\n`,
     INSUFFICIENT_TOKEN: (minimumTokenBalance) => `❌ The Token balance does not meet the required minimum of \`${minimumTokenBalance} tokens\`.\n`,
-    RETURNED_SOL: (solBalance, signature) => `🔄 Returned \`${solBalance} SOL\` to Wallet B. Transaction signature: \`${signature}\`\n`,
+    RETURNED_SOL: (solBalance, signature) => `🔄 Returned \`${solBalance} SOL\` to sender. Transaction signature: \`${signature}\`\n`,
     ERROR_DURING_CHECK: (errorMessage) => `❌ Error during balance check: \`${escapeMarkdown(errorMessage)}\`\n`,
   },
 };
