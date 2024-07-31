@@ -59,7 +59,7 @@ app.post('/api/create', async (req, res) => {
     const { chatId, timestamp, hash } = req.body;
 
     console.log(req.body);
-    console.log(chatId, timestamp, hash);
+    console.log(`Received - chatId: ${chatId}, timestamp: ${timestamp}, hash: ${hash}`);
 
     // Validate parameters
     if (!chatId || !hash) {
@@ -68,8 +68,10 @@ app.post('/api/create', async (req, res) => {
 
     // Validate the hash
     const expectedHash = generateHash(chatId, timestamp);
+    console.log(`Expected hash: ${expectedHash}`);
+
     if (hash !== expectedHash) {
-        console.log(expectedHash);
+        console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
         return res.status(403).send('Invalid request signature');
     }
 
