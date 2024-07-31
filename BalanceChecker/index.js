@@ -47,9 +47,6 @@ class BalanceChecker {
 
   async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
-      if (!PublicKey.isOnCurve(walletPublicKeyString) || !PublicKey.isOnCurve(tokenMintAddress)) {
-        throw new Error('Invalid public key input');
-      }
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { mint: new PublicKey(tokenMintAddress) });
 
@@ -59,7 +56,7 @@ class BalanceChecker {
 
       const tokenAccount = tokenAccounts.value[0];
       const tokenBalance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
-      console.log('Token Balance (using getParsedTokenAccountsByOwner): ', tokenBalance);
+      console.log('Token Balance: ', tokenBalance);
       return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
