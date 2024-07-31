@@ -65,7 +65,6 @@ class BalanceChecker {
       throw error;
     }
   }
-
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
   }
@@ -81,7 +80,6 @@ class BalanceChecker {
       throw error;
     }
   }
-
   async returnSolToWalletB(walletBPublicKeyString) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
