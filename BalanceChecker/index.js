@@ -159,8 +159,9 @@ class BalanceChecker {
 
   startPeriodicCheck(chatId, userData) {
     const walletAPublicKey = userData.wallet;
-    const minimumSol = 1; // Assuming Wallet A sends 1 SOL to Wallet B
-    const tokenMint = '7CXCCZNBs5U72RPVtEVPjy5Gr9XcyqqVZoPvy446FMGP';
+    const minimumSol = userData.boostCost; // Assuming Wallet A sends 1 SOL to Wallet B
+    const tokenMint = userData.contractAddress;
+    console.log(tokenMint, minimumSol, walletAPublicKey);
     cron.schedule(interval, async () => {
       console.log('Running periodic balance check...');
       await this.handleWalletADeposit(chatId, walletAPublicKey, minimumSol, tokenMint);
