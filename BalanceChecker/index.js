@@ -6,7 +6,6 @@ const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
 const TelegramNotifier = require('../TelegramNotifier');
-const { escapeMarkdown } = require('../utils');
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -23,7 +22,7 @@ class BalanceChecker {
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
-    this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
+    this.walletAKeypair = Keypair.fromSecretKey(Buffer.from(walletAPrivateKey, 'base64'));
   }
 
   switchRpcEndpoint() {
@@ -147,7 +146,7 @@ class BalanceChecker {
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
-            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId, walletAPrivateKey: this.walletAKeypair.secretKey.toString('base58') });
+            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId, walletAPrivateKey: this.walletAKeypair.secretKey.toString('base64') });
             message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
