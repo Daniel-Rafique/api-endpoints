@@ -131,6 +131,7 @@ class BalanceChecker {
       // Check Token balance of Wallet B
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
       console.log(tokenMintAddress)
+      console.log(tokenBalanceB)
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
 
