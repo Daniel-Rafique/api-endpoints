@@ -6,7 +6,6 @@ const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
 const TelegramNotifier = require('../TelegramNotifier');
-const { escapeMarkdown } = require('../utils');
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
