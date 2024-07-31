@@ -9,7 +9,7 @@ const DataManager = require('../database');
 const TelegramNotifier = require('../TelegramNotifier');
 const { escapeMarkdown } = require('../utils');
 
-const TOKEN_PROGRAM_ID = process.env.TOKEN_PROGRAM_ID;
+const TOKEN_PROGRAM_ID = new PublicKey(process.env.TOKEN_PROGRAM_ID);
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -56,7 +56,7 @@ class BalanceChecker {
       console.log('Validated Wallet Public Key:', walletPublicKey.toString());
       console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
 
-      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKeyString, {programId: TOKEN_PROGRAM_ID})
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { programId: TOKEN_PROGRAM_ID });
 
       if (tokenAccounts.value.length === 0) {
         throw new Error('TokenAccountNotFoundError');
