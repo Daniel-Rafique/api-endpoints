@@ -118,22 +118,22 @@ class BalanceChecker {
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
         key => key.toString() !== walletAPublicKey.toString() && key.toString() !== this.walletAKeypair.publicKey.toString()
       );
-
+  
       if (!walletBPublicKey) {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
-
+  
       // Check SOL balance of Wallet A
       const solBalanceA = await this.checkSolBalance(walletAPublicKey);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSol;
-
+  
       // Check Token balance of Wallet B
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey, tokenMint);
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumToken;
-
+  
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
       } else {
@@ -145,17 +145,28 @@ class BalanceChecker {
         }
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
-          await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey });
-          message += MESSAGES.RETURNED_SOL(solBalanceA, signature);
+          if (solBalanceA > 0) {
+            const job = await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey });
+            job.on('completed', () => {
+              console.log(`Transaction job completed: ${job.id}`);
+              message += MESSAGES.RETURNED_SOL(solBalanceA, job.returnvalue);
+            });
+            job.on('failed', (err) => {
+              console.error(`Transaction job failed: ${job.id}`, err);
+            });
+          } else {
+            console.log('SOL balance is 0, not returning funds.');
+          }
         }
       }
-
+  
       await this.sendTelegramMessage(chatId, message);
     } catch (error) {
       console.error('Error during balance check:', error);
       await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message));
     }
   }
+  
 
   startPeriodicCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint) {
     cron.schedule('*/1 * * * *', async () => {
