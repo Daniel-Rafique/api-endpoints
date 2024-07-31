@@ -146,7 +146,7 @@ class BalanceChecker {
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
-            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId });
+            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId, walletAPrivateKey: this.walletAKeypair.secretKey });
             message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
@@ -171,11 +171,11 @@ class BalanceChecker {
 
 // Worker to process the transaction queue
 const worker = new Worker('transactionQueue', async job => {
-  const { walletBPublicKeyString, solBalanceA, chatId } = job.data;
+  const { walletBPublicKeyString, solBalanceA, chatId, walletAPrivateKey } = job.data;
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
-    process.env.WALLET_A_PRIVATE_KEY
+    walletAPrivateKey
   );
   const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
   return { signature, chatId, solBalanceA };
@@ -187,7 +187,7 @@ worker.on('completed', async (job, result) => {
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
-    process.env.WALLET_A_PRIVATE_KEY
+    result.walletAPrivateKey
   );
   await balanceChecker.sendTelegramMessage(result.chatId, message);
 });
