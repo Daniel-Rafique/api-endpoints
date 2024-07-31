@@ -38,12 +38,6 @@ app.use(bodyParser.json());
 // Secret key (store this securely, e.g., in environment variables)
 const SECRET_KEY = process.env.SECRET_KEY;
 
-// Function to generate the hash
-function generateHash(chatId, timestamp) {
-    const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
-    return crypto.createHash('sha256').update(data).digest('hex');
-}
-
 // Initialize TelegramNotifier
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramNotifier = new TelegramNotifier(telegramToken);
@@ -92,7 +86,11 @@ app.post('/api/create', async (req, res) => {
         res.status(500).send('Internal Server Error');
     }
 });
-
+// Function to generate the hash
+function generateHash(chatId, timestamp) {
+    const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
+    return crypto.createHash('sha256').update(data).digest('hex');
+}
 const server = https.createServer(options, app);
 server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
 server.listen(port, () => {
