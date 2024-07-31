@@ -5,7 +5,7 @@ const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
-const TelegramNotifier = require('../TelegramNotifier');
+const TelegramNotifier = require('../telegram');
 const { escapeMarkdown } = require('../utils');
 
 const redisOptions = {
@@ -118,22 +118,22 @@ class BalanceChecker {
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
         key => key.toString() !== walletAPublicKey.toString() && key.toString() !== this.walletAKeypair.publicKey.toString()
       );
-  
+
       if (!walletBPublicKey) {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
-  
+
       // Check SOL balance of Wallet A
       const solBalanceA = await this.checkSolBalance(walletAPublicKey);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSol;
-  
+
       // Check Token balance of Wallet B
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey, tokenMint);
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumToken;
-  
+
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
       } else {
@@ -146,27 +146,20 @@ class BalanceChecker {
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
-            const job = await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey });
-            job.on('completed', () => {
-              console.log(`Transaction job completed: ${job.id}`);
-              message += MESSAGES.RETURNED_SOL(solBalanceA, job.returnvalue);
-            });
-            job.on('failed', (err) => {
-              console.error(`Transaction job failed: ${job.id}`, err);
-            });
+            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA });
+            message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
         }
       }
-  
+
       await this.sendTelegramMessage(chatId, message);
     } catch (error) {
       console.error('Error during balance check:', error);
       await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message));
     }
   }
-  
 
   startPeriodicCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint) {
     cron.schedule('*/1 * * * *', async () => {
@@ -178,13 +171,30 @@ class BalanceChecker {
 
 // Worker to process the transaction queue
 const worker = new Worker('transactionQueue', async job => {
-  const { walletBPublicKeyString } = job.data;
+  const { walletBPublicKeyString, solBalanceA } = job.data;
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     process.env.WALLET_A_PRIVATE_KEY
   );
-  await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
+  const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
+  return signature;
 }, { connection: redisOptions });
+
+worker.on('completed', async (job, result) => {
+  console.log(`Transaction job completed: ${job.id}, signature: ${result}`);
+  const { chatId, solBalanceA } = job.data;
+  const message = MESSAGES.RETURNED_SOL(solBalanceA, result);
+  const balanceChecker = new BalanceChecker(
+    [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+    new TelegramNotifier(process.env.TELEGRAM_TOKEN),
+    process.env.WALLET_A_PRIVATE_KEY
+  );
+  await balanceChecker.sendTelegramMessage(chatId, message);
+});
+
+worker.on('failed', (job, err) => {
+  console.error(`Transaction job failed: ${job.id}`, err);
+});
 
 module.exports = BalanceChecker;
