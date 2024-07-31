@@ -5,7 +5,7 @@ const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
-const TelegramNotifier = require('../TelegramNotifier');
+const TelegramNotifier = require('../telegram');
 const { escapeMarkdown } = require('../utils');
 
 const redisOptions = {
@@ -17,7 +17,7 @@ const transactionQueue = new Queue('transactionQueue', { connection: redisOption
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
-    console.log(walletAPrivateKey)
+    console.log('Wallet A Private Key:', walletAPrivateKey);
     this.rpcEndpoints = rpcEndpoints;
     this.currentRpcIndex = 0;
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
@@ -147,7 +147,7 @@ class BalanceChecker {
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
-            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId, walletAPrivateKey: this.walletAKeypair.secretKey });
+            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId, walletAPrivateKey: this.walletAKeypair.secretKey.toString('base58') });
             message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
@@ -173,13 +173,14 @@ class BalanceChecker {
 // Worker to process the transaction queue
 const worker = new Worker('transactionQueue', async job => {
   const { walletBPublicKeyString, solBalanceA, chatId, walletAPrivateKey } = job.data;
+  console.log('Worker received walletAPrivateKey:', walletAPrivateKey);
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     walletAPrivateKey
   );
   const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
-  return { signature, chatId, solBalanceA };
+  return { signature, chatId, solBalanceA, walletAPrivateKey };
 }, { connection: redisOptions });
 
 worker.on('completed', async (job, result) => {
