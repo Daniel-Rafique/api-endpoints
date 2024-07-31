@@ -1,99 +1,199 @@
 require('dotenv').config();
-const admin = require('firebase-admin');
-const serviceAccount = require('./.config/firebaseServiceAccountKey.json');
+const bs58 = require('bs58');
+const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
+const cron = require('node-cron');
+const { Queue, Worker } = require('bullmq');
+const { MESSAGES } = require('../constants');
+const DataManager = require('../database');
+const TelegramNotifier = require('../TelegramNotifier');
+const { escapeMarkdown } = require('../utils');
 
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-});
-
-const DataManager = require('./database');
-
-const fs = require('fs');
-const https = require('https');
-const express = require('express');
-const bodyParser = require('body-parser');
-const crypto = require('crypto');
-const BalanceChecker = require('./BalanceChecker');
-const TelegramNotifier = require('./TelegramNotifier');
-
-// Initialize Firebase Admin with service account
-const dataManager = new DataManager();
-
-const app = express();
-const port = process.env.PORT;
-
-// Load environment variables
-const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
-const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
-
-// SSL options
-const options = {
-    key: fs.readFileSync(SSL_KEY_PATH),
-    cert: fs.readFileSync(SSL_CERT_PATH)
+const redisOptions = {
+  host: 'localhost', // Replace with your Redis host
+  port: 6379, // Replace with your Redis port
 };
 
-// Middleware
-app.use(bodyParser.json());
+const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 
-// Secret key (store this securely, e.g., in environment variables)
-const SECRET_KEY = process.env.SECRET_KEY;
+class BalanceChecker {
+  constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
+    this.rpcEndpoints = rpcEndpoints;
+    this.currentRpcIndex = 0;
+    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
+    this.telegramNotifier = telegramNotifier;
+    this.dataManager = new DataManager();
+    this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
+  }
 
-// Function to generate the hash
-function generateHash(chatId, timestamp) {
-    const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
-    return crypto.createHash('sha256').update(data).digest('hex');
+  switchRpcEndpoint() {
+    this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
+    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
+  }
+
+  async checkSolBalance(publicKeyString) {
+    try {
+      const publicKey = new PublicKey(publicKeyString);
+      const balance = await this.connection.getBalance(publicKey);
+      const solBalance = balance / 1_000_000_000; // Convert lamports to SOL
+      return solBalance;
+    } catch (error) {
+      console.error('Error checking SOL balance:', error);
+      this.switchRpcEndpoint();
+      throw error;
+    }
+  }
+
+  async checkTokenBalance(publicKeyString, tokenMint) {
+    try {
+      const publicKey = new PublicKey(publicKeyString);
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(publicKey, {
+        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+      });
+
+      const tokenAccount = tokenAccounts.value.find(
+        account => account.account.data.parsed.info.mint === tokenMint
+      );
+
+      if (tokenAccount) {
+        return tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
+      }
+      return 0;
+    } catch (error) {
+      console.error('Error checking token balance:', error);
+      this.switchRpcEndpoint();
+      throw error;
+    }
+  }
+
+  async sendTelegramMessage(chatId, text) {
+    await this.telegramNotifier.sendTelegramMessage(chatId, text);
+  }
+
+  async getTransactionHistory(walletAPublicKey) {
+    try {
+      const signatures = await this.connection.getSignaturesForAddress(new PublicKey(walletAPublicKey), { limit: 1 });
+      const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
+      return confirmedTransaction;
+    } catch (error) {
+      console.error('Error fetching transaction history:', error);
+      this.switchRpcEndpoint();
+      throw error;
+    }
+  }
+
+  async returnSolToWalletB(walletBPublicKeyString) {
+    try {
+      const walletBPublicKey = new PublicKey(walletBPublicKeyString);
+      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
+
+      // Subtract a small amount to cover the transaction fee
+      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: this.walletAKeypair.publicKey,
+          toPubkey: walletBPublicKey,
+          lamports: lamportsToSend
+        })
+      );
+
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        transaction,
+        [this.walletAKeypair]
+      );
+
+      console.log('Transaction signature:', signature);
+
+      return signature;
+    } catch (error) {
+      console.error('Error returning SOL to Wallet B:', error);
+      this.switchRpcEndpoint();
+      throw error;
+    }
+  }
+
+  async runBalanceCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint) {
+    try {
+      const transaction = await this.getTransactionHistory(walletAPublicKey);
+      const walletBPublicKey = transaction.transaction.message.accountKeys.find(
+        key => key.toString() !== walletAPublicKey.toString() && key.toString() !== this.walletAKeypair.publicKey.toString()
+      );
+
+      if (!walletBPublicKey) {
+        throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
+      }
+
+      // Check SOL balance of Wallet A
+      const solBalanceA = await this.checkSolBalance(walletAPublicKey);
+      let message = MESSAGES.BALANCE_CHECK_REPORT;
+      message += MESSAGES.SOL_BALANCE_A(solBalanceA);
+      const isSolValid = solBalanceA >= minimumSol;
+
+      // Check Token balance of Wallet B
+      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey, tokenMint);
+      message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
+      const isTokenValid = tokenBalanceB >= minimumToken;
+
+      if (isSolValid && isTokenValid) {
+        message += MESSAGES.SUFFICIENT_BALANCE;
+      } else {
+        if (!isSolValid) {
+          message += MESSAGES.INSUFFICIENT_SOL(minimumSol);
+        }
+        if (!isTokenValid) {
+          message += MESSAGES.INSUFFICIENT_TOKEN(minimumToken);
+        }
+        if (!isSolValid || !isTokenValid) {
+          console.log('Returning SOL to Wallet B:', solBalanceA);
+          if (solBalanceA > 0) {
+            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId, walletAPrivateKey: this.walletAKeypair.secretKey });
+            message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
+          } else {
+            console.log('SOL balance is 0, not returning funds.');
+          }
+        }
+      }
+
+      await this.sendTelegramMessage(chatId, message);
+    } catch (error) {
+      console.error('Error during balance check:', error);
+      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message));
+    }
+  }
+
+  startPeriodicCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint) {
+    cron.schedule('*/1 * * * *', async () => {
+      console.log('Running periodic balance check...');
+      await this.runBalanceCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint);
+    });
+  }
 }
 
-// Initialize TelegramNotifier
-const telegramToken = process.env.TELEGRAM_TOKEN;
-const telegramNotifier = new TelegramNotifier(telegramToken);
+// Worker to process the transaction queue
+const worker = new Worker('transactionQueue', async job => {
+  const { walletBPublicKeyString, solBalanceA, chatId, walletAPrivateKey } = job.data;
+  const balanceChecker = new BalanceChecker(
+    [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+    new TelegramNotifier(process.env.TELEGRAM_TOKEN),
+    walletAPrivateKey
+  );
+  const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
+  return { signature, chatId, solBalanceA };
+}, { connection: redisOptions });
 
-// Endpoint to handle incoming POST requests
-app.post('/api/create', async (req, res) => {
-    const { chatId, timestamp, hash } = req.body;
-
-    console.log(req.body);
-    console.log(`Received - chatId: ${chatId}, timestamp: ${timestamp}, hash: ${hash}`);
-    console.log(`Server SECRET_KEY: ${SECRET_KEY}`); // Log the SECRET_KEY on the server
-
-    // Validate parameters
-    if (!chatId || !hash) {
-        return res.status(400).send('Missing required parameters');
-    }
-
-    // Validate the hash
-    const expectedHash = generateHash(chatId, timestamp);
-    console.log(`Expected hash: ${expectedHash}`);
-
-    if (hash !== expectedHash) {
-        console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
-        return res.status(403).send('Invalid request signature');
-    }
-
-    try {
-        const userData = await dataManager.getCollection(chatId);
-        if (!userData) {
-            return res.status(404).send('User data not found');
-        }
-
-        // Start the periodic check
-        const walletASecretKey = userData.walletPk;
-        const balanceChecker = new BalanceChecker(
-            [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
-            telegramNotifier,
-            walletASecretKey
-        );
-        balanceChecker.startPeriodicCheck(chatId, userData.wallet, userData.boostCost, 5000, process.env.TOKEN_MINT_ADDRESS);
-        telegramNotifier.sendTelegramMessage(chatId, '🔍 Starting periodic balance check...');
-        res.status(200).send('Checking balance...');
-    } catch (error) {
-        console.error('Error processing request:', error);
-        res.status(500).send('Internal Server Error');
-    }
+worker.on('completed', async (job, result) => {
+  console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
+  const message = MESSAGES.RETURNED_SOL(result.solBalanceA, result.signature);
+  const balanceChecker = new BalanceChecker(
+    [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+    new TelegramNotifier(process.env.TELEGRAM_TOKEN),
+    result.walletAPrivateKey
+  );
+  await balanceChecker.sendTelegramMessage(result.chatId, message);
 });
 
-const server = https.createServer(options, app);
-server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
-server.listen(port, () => {
-    console.log(`HTTPS server is running on port ${port}`);
+worker.on('failed', (job, err) => {
+  console.error(`Transaction job failed: ${job.id}`, err);
 });
+
+module.exports = BalanceChecker;
