@@ -3,8 +3,7 @@ const admin = require('firebase-admin');
 const serviceAccount = require('./.config/firebaseServiceAccountKey.json');
 
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: process.env.DATABASE_URL
+    credential: admin.credential.cert(serviceAccount)
 });
 
 const DataManager = require('./database');
@@ -16,10 +15,8 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./TelegramNotifier'); 
-const e = require('express');
 
 // Initialize Firebase Admin with service account
-
 const dataManager = new DataManager();
 
 const app = express();
@@ -55,42 +52,41 @@ const telegramNotifier = new TelegramNotifier(telegramToken);
 const rpcEndpoints = [
     process.env.SOLANA_RPC_ENDPOINT_1,
     process.env.SOLANA_RPC_ENDPOINT_2,
-]
+];
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
-    const data = {
-        chatId,
-        timestamp,
-        hash
-    } = req.body;
+    const { chatId, timestamp, hash } = req.body;
 
     console.log(req.body);
 
     // Validate parameters
-    if (!data.chatId || !data.hash ) {
+    if (!chatId || !hash) {
         return res.status(400).send('Missing required parameters');
     }
 
     // Validate the hash
-    const expectedHash = generateHash(data.chatId, data.timestamp);
-    if (data.hash !== expectedHash) {
+    const expectedHash = generateHash(chatId, timestamp);
+    if (hash !== expectedHash) {
         console.log(expectedHash);
         return res.status(403).send('Invalid request signature');
     }
     
-    if(data.chatId){
-        let chatId = data.chatId;
+    try {
         const userData = await dataManager.getCollection(chatId);
-        console.log(chatId)
+        if (!userData) {
+            return res.status(404).send('User data not found');
+        }
+
         // Start the periodic check
         const walletASecretKey = userData.walletPk;
         const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
         balanceChecker.startPeriodicCheck(chatId, userData);
         telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
         res.status(200).send('Checking balance...');
-    }else{
-        return res.status(400).send('No chatId');
+    } catch (error) {
+        console.error('Error processing request:', error);
+        res.status(500).send('Internal Server Error');
     }
 });
 
