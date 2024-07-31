@@ -65,8 +65,8 @@ class BalanceChecker {
     try {
       const connection = this.getNextConnection();
       const publicKey = new PublicKey(publicKeyString);
-      const confirmedSignatures = await connection.getConfirmedSignaturesForAddress2(publicKey, { limit: 1 });
-      const confirmedTransaction = await connection.getConfirmedTransaction(confirmedSignatures[0].signature);
+      const signatures = await connection.getSignaturesForAddress(publicKey, { limit: 1 });
+      const confirmedTransaction = await connection.getTransaction(signatures[0].signature);
       console.log('Confirmed transaction:', confirmedTransaction);
       return confirmedTransaction;
     } catch (error) {
@@ -160,7 +160,7 @@ class BalanceChecker {
   startPeriodicCheck(chatId, userData) {
     const walletAPublicKey = userData.wallet;
     const minimumSol = 1; // Assuming Wallet A sends 1 SOL to Wallet B
-    const tokenMint = userData.contractAddress;
+    const tokenMint = '7CXCCZNBs5U72RPVtEVPjy5Gr9XcyqqVZoPvy446FMGP';
     cron.schedule(interval, async () => {
       console.log('Running periodic balance check...');
       await this.handleWalletADeposit(chatId, walletAPublicKey, minimumSol, tokenMint);
