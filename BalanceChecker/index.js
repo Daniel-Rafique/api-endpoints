@@ -135,6 +135,8 @@ class BalanceChecker {
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumToken;
 
+      console.log('SOL balance:',walletAPublicKey, minimumToken, 'Token balance:', tokenBalanceB);
+
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
       } else {
