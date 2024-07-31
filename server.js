@@ -53,6 +53,7 @@ app.post('/api/create', async (req, res) => {
     const { chatId, timestamp, hash } = req.body;
 
     console.log(req.body);
+    console.log(chatId, timestamp, hash);
 
     // Validate parameters
     if (!chatId || !hash) {
