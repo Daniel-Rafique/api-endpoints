@@ -80,6 +80,7 @@ app.post('/api/create', async (req, res) => {
     }
     
     if(chatId){
+        console.log(chatId)
         const userData = await dataManager.getCollection(chatId);
         console.log(chatId)
         // Start the periodic check
