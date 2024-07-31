@@ -77,19 +77,17 @@ app.post('/api/create', async (req, res) => {
         console.log(expectedHash);
         return res.status(403).send('Invalid request signature');
     }
-    const userData = await dataManager.getCollection(chatId);
-
-    console.log(chatId)
-    console.log
-
-    // Start the periodic check
-    const walletASecretKey = userData.walletPk;
-
-    const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
     
-    balanceChecker.startPeriodicCheck(chatId);
-    telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
-    res.status(200).send('Checking balance...');
+    if(chatId){
+        const userData = await dataManager.getCollection(chatId);
+        console.log(chatId)
+        // Start the periodic check
+        const walletASecretKey = userData.walletPk;
+        const balanceChecker = new BalanceChecker(rpcEndpoints, telegramNotifier, walletASecretKey);
+        balanceChecker.startPeriodicCheck(chatId);
+        telegramNotifier.sendTelegramBalanceCheckMessage(chatId);
+        res.status(200).send('Checking balance...');
+    }
 });
 
 const server = https.createServer(options, app);
