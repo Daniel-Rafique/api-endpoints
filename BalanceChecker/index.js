@@ -45,8 +45,9 @@ class BalanceChecker {
     }
   }
 
-  async getTokenBalanceSpl(tokenAccount) {
+  async getTokenBalanceSpl(tokenAccountString) {
     try {
+      const tokenAccount = new PublicKey(tokenAccountString);
       const info = await getAccount(this.connection, tokenAccount);
       const amount = Number(info.amount);
       const mint = await getMint(this.connection, info.mint);
@@ -64,9 +65,10 @@ class BalanceChecker {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
   }
 
-  async getTransactionHistory(walletAPublicKey) {
+  async getTransactionHistory(walletAPublicKeyString) {
     try {
-      const signatures = await this.connection.getSignaturesForAddress(new PublicKey(walletAPublicKey), { limit: 1 });
+      const walletAPublicKey = new PublicKey(walletAPublicKeyString);
+      const signatures = await this.connection.getSignaturesForAddress(walletAPublicKey, { limit: 1 });
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
       return confirmedTransaction;
     } catch (error) {
@@ -107,11 +109,11 @@ class BalanceChecker {
     }
   }
 
-  async runBalanceCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
+  async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
-      const transaction = await this.getTransactionHistory(walletAPublicKey);
+      const transaction = await this.getTransactionHistory(walletAPublicKeyString);
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
-        key => key.toString() !== walletAPublicKey.toString() && key.toString() !== this.walletAKeypair.publicKey.toString()
+        key => key.toString() !== walletAPublicKeyString && key.toString() !== this.walletAKeypair.publicKey.toString()
       );
 
       if (!walletBPublicKey) {
@@ -119,7 +121,7 @@ class BalanceChecker {
       }
 
       // Check SOL balance of Wallet A
-      const solBalanceA = await this.checkSolBalance(walletAPublicKey);
+      const solBalanceA = await this.checkSolBalance(walletAPublicKeyString);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSolBalance;
@@ -158,10 +160,10 @@ class BalanceChecker {
     }
   }
 
-  startPeriodicCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
+  startPeriodicCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     cron.schedule('*/1 * * * *', async () => {
       console.log('Running periodic balance check...');
-      await this.runBalanceCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+      await this.runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
     });
   }
 }
