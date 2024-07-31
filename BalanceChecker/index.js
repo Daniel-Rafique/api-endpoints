@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
+const { getAccount, getMint } = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -44,42 +45,14 @@ class BalanceChecker {
     }
   }
 
-  async getTokenAccountAddress(walletPublicKey, tokenMintAddress) {
-    const filters = [
-      { dataSize: 165 }, // size of token account
-      {
-        memcmp: {
-          offset: 32, // offset for mint address
-          bytes: tokenMintAddress
-        }
-      },
-      {
-        memcmp: {
-          offset: 0, // offset for wallet address
-          bytes: walletPublicKey
-        }
-      }
-    ];
-    const accounts = await this.connection.getProgramAccounts(
-      new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-      { filters: filters }
-    );
-
-    return accounts.length ? accounts[0].pubkey.toString() : null;
-  }
-
-  async checkTokenBalance(walletPublicKey, tokenMintAddress) {
+  async getTokenBalanceSpl(tokenAccount) {
     try {
-      const tokenAccountAddress = await this.getTokenAccountAddress(walletPublicKey, tokenMintAddress);
-      if (!tokenAccountAddress) {
-        return 0;
-      }
-
-      const tokenAccount = await this.connection.getParsedAccountInfo(new PublicKey(tokenAccountAddress));
-      if (tokenAccount.value) {
-        return tokenAccount.value.data.parsed.info.tokenAmount.uiAmount;
-      }
-      return 0;
+      const info = await getAccount(this.connection, tokenAccount);
+      const amount = Number(info.amount);
+      const mint = await getMint(this.connection, info.mint);
+      const balance = amount / (10 ** mint.decimals);
+      console.log('Balance (using Solana-Web3.js): ', balance);
+      return balance;
     } catch (error) {
       console.error('Error checking token balance:', error);
       this.switchRpcEndpoint();
@@ -152,8 +125,7 @@ class BalanceChecker {
       const isSolValid = solBalanceA >= minimumSolBalance;
 
       // Check Token balance of Wallet B
-      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
-      console.log(tokenMintAddress)
+      const tokenBalanceB = await this.getTokenBalanceSpl(walletBPublicKey.toString());
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
 
