@@ -1,6 +1,5 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const { getAccount, getMint } = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -45,7 +44,7 @@ class BalanceChecker {
     }
   }
 
-  async getTokenBalanceSpl(walletPublicKeyString, tokenMintAddress) {
+  async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { mint: new PublicKey(tokenMintAddress) });
@@ -54,13 +53,10 @@ class BalanceChecker {
         throw new Error('TokenAccountNotFoundError');
       }
 
-      const tokenAccount = tokenAccounts.value[0].pubkey;
-      const info = await getAccount(this.connection, tokenAccount);
-      const amount = Number(info.amount);
-      const mint = await getMint(this.connection, info.mint);
-      const balance = amount / (10 ** mint.decimals);
-      console.log('Balance (using Solana-Web3.js): ', balance);
-      return balance;
+      const tokenAccount = tokenAccounts.value[0];
+      const tokenBalance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
+      console.log('Token Balance (using getParsedTokenAccountsByOwner): ', tokenBalance);
+      return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
       this.switchRpcEndpoint();
@@ -134,7 +130,7 @@ class BalanceChecker {
       const isSolValid = solBalanceA >= minimumSolBalance;
 
       // Check Token balance of Wallet B
-      const tokenBalanceB = await this.getTokenBalanceSpl(walletBPublicKey.toString(), tokenMintAddress);
+      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
 
