@@ -17,6 +17,7 @@ const transactionQueue = new Queue('transactionQueue', { connection: redisOption
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
+    console.log(walletAPrivateKey)
     this.rpcEndpoints = rpcEndpoints;
     this.currentRpcIndex = 0;
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
