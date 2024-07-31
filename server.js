@@ -14,7 +14,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const BalanceChecker = require('./BalanceChecker');
-const TelegramNotifier = require('./TelegramNotifier'); 
+const TelegramNotifier = require('./TelegramNotifier');
 
 // Initialize Firebase Admin with service account
 const dataManager = new DataManager();
@@ -37,12 +37,6 @@ app.use(bodyParser.json());
 
 // Secret key (store this securely, e.g., in environment variables)
 const SECRET_KEY = process.env.SECRET_KEY;
-
-// Function to generate the hash
-function generateHash(chatId, timestamp) {
-    const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
-    return crypto.createHash('sha256').update(data).digest('hex');
-}
 
 // Initialize TelegramNotifier
 const telegramToken = process.env.TELEGRAM_TOKEN;
@@ -67,11 +61,18 @@ app.post('/api/create', async (req, res) => {
 
     // Validate the hash
     const expectedHash = generateHash(chatId, timestamp);
+
+    // Function to generate the hash
+    function generateHash(chatId, timestamp) {
+        const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
+        return crypto.createHash('sha256').update(data).digest('hex');
+    }
+
     if (hash !== expectedHash) {
         console.log(expectedHash);
         return res.status(403).send('Invalid request signature');
     }
-    
+
     try {
         const userData = await dataManager.getCollection(chatId);
         if (!userData) {
