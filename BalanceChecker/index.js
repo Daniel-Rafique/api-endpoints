@@ -122,6 +122,8 @@ class BalanceChecker {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
 
+      console.log('Wallet B Public Key:', walletBPublicKey.toString());
+
       // Check SOL balance of Wallet A
       const solBalanceA = await this.checkSolBalance(walletAPublicKey);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
