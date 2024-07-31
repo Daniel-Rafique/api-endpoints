@@ -5,7 +5,8 @@ const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
-const TelegramNotifier = require('../TelegramNotifier');
+const TelegramNotifier = require('../telegram');
+const { escapeMarkdown } = require('../utils');
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -145,7 +146,7 @@ class BalanceChecker {
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
-            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA });
+            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId });
             message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
@@ -170,26 +171,25 @@ class BalanceChecker {
 
 // Worker to process the transaction queue
 const worker = new Worker('transactionQueue', async job => {
-  const { walletBPublicKeyString, solBalanceA } = job.data;
+  const { walletBPublicKeyString, solBalanceA, chatId } = job.data;
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     process.env.WALLET_A_PRIVATE_KEY
   );
   const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
-  return signature;
+  return { signature, chatId, solBalanceA };
 }, { connection: redisOptions });
 
 worker.on('completed', async (job, result) => {
-  console.log(`Transaction job completed: ${job.id}, signature: ${result}`);
-  const { chatId, solBalanceA } = job.data;
-  const message = MESSAGES.RETURNED_SOL(solBalanceA, result);
+  console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
+  const message = MESSAGES.RETURNED_SOL(result.solBalanceA, result.signature);
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     process.env.WALLET_A_PRIVATE_KEY
   );
-  await balanceChecker.sendTelegramMessage(chatId, message);
+  await balanceChecker.sendTelegramMessage(result.chatId, message);
 });
 
 worker.on('failed', (job, err) => {
