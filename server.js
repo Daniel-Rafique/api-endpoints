@@ -92,6 +92,7 @@ function generateHash(chatId, timestamp) {
     const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
 }
+
 const server = https.createServer(options, app);
 server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
 server.listen(port, () => {
