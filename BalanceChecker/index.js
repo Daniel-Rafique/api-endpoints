@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const { programs } = require('@metaplex/js');
+const { getAccountInfo } = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -9,7 +9,7 @@ const DataManager = require('../database');
 const TelegramNotifier = require('../TelegramNotifier');
 const { escapeMarkdown } = require('../utils');
 
-const { TokenAccount } = programs;
+const TOKEN_PROGRAM_ID = process.env.TOKEN_PROGRAM_ID;
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -56,14 +56,16 @@ class BalanceChecker {
       console.log('Validated Wallet Public Key:', walletPublicKey.toString());
       console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
 
-      const tokenAccounts = await TokenAccount.getTokenAccountsByOwner(this.connection, walletPublicKey, tokenMintPublicKey);
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKeyString, {programId: TOKEN_PROGRAM_ID})
 
-      if (!tokenAccounts || tokenAccounts.length === 0) {
+      if (tokenAccounts.value.length === 0) {
         throw new Error('TokenAccountNotFoundError');
       }
 
-      const tokenAccount = tokenAccounts[0];
-      const tokenBalance = tokenAccount.amount / Math.pow(10, tokenAccount.decimals);
+      const tokenAccountAddress = tokenAccounts.value[0].pubkey;
+      const tokenAccountInfo = await getAccountInfo(this.connection, tokenAccountAddress);
+
+      const tokenBalance = tokenAccountInfo.amount / Math.pow(10, tokenAccountInfo.decimals);
       console.log('Token Balance: ', tokenBalance);
       return tokenBalance;
     } catch (error) {
