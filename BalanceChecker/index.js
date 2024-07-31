@@ -45,9 +45,16 @@ class BalanceChecker {
     }
   }
 
-  async getTokenBalanceSpl(tokenAccountString) {
+  async getTokenBalanceSpl(walletPublicKeyString, tokenMintAddress) {
     try {
-      const tokenAccount = new PublicKey(tokenAccountString);
+      const walletPublicKey = new PublicKey(walletPublicKeyString);
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { mint: new PublicKey(tokenMintAddress) });
+
+      if (tokenAccounts.value.length === 0) {
+        throw new Error('TokenAccountNotFoundError');
+      }
+
+      const tokenAccount = tokenAccounts.value[0].pubkey;
       const info = await getAccount(this.connection, tokenAccount);
       const amount = Number(info.amount);
       const mint = await getMint(this.connection, info.mint);
@@ -127,8 +134,7 @@ class BalanceChecker {
       const isSolValid = solBalanceA >= minimumSolBalance;
 
       // Check Token balance of Wallet B
-      const tokenBalanceB = await this.getTokenBalanceSpl(walletBPublicKey.toString());
-      console.log('Token balance:', tokenBalanceB);
+      const tokenBalanceB = await this.getTokenBalanceSpl(walletBPublicKey.toString(), tokenMintAddress);
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
 
