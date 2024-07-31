@@ -97,6 +97,7 @@ class BalanceChecker {
   }
 
   async handleWalletADeposit(chatId, walletAPublicKey, minimumSol, tokenMintA, tokenMintB, minimumToken) {
+    console.log('Checking wallet balances...: ', chatId, walletAPublicKey, minimumSol, tokenMintA, tokenMintB, minimumToken);
     const solBalanceA = await this.checkSolBalance(walletAPublicKey);
     if (solBalanceA >= minimumSol && solBalanceA > this.previousBalance) {
       const transaction = await this.getTransactionHistory(walletAPublicKey);
