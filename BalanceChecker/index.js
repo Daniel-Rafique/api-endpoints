@@ -6,6 +6,7 @@ const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
 const TelegramNotifier = require('../TelegramNotifier');
+const { escapeMarkdown } = require('../utils');
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -22,7 +23,13 @@ class BalanceChecker {
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
-    this.walletAKeypair = Keypair.fromSecretKey(Buffer.from(walletAPrivateKey, 'base64'));
+
+    // Ensure that the secret key is a Uint8Array of length 64
+    const secretKey = Uint8Array.from(Buffer.from(walletAPrivateKey, 'base64'));
+    if (secretKey.length !== 64) {
+      throw new Error('Invalid secret key size');
+    }
+    this.walletAKeypair = Keypair.fromSecretKey(secretKey);
   }
 
   switchRpcEndpoint() {
@@ -173,11 +180,19 @@ class BalanceChecker {
 const worker = new Worker('transactionQueue', async job => {
   const { walletBPublicKeyString, solBalanceA, chatId, walletAPrivateKey } = job.data;
   console.log('Worker received walletAPrivateKey:', walletAPrivateKey);
+
+  // Ensure that the secret key is a Uint8Array of length 64
+  const secretKey = Uint8Array.from(Buffer.from(walletAPrivateKey, 'base64'));
+  if (secretKey.length !== 64) {
+    throw new Error('Invalid secret key size');
+  }
+
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     walletAPrivateKey
   );
+
   const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
   return { signature, chatId, solBalanceA, walletAPrivateKey };
 }, { connection: redisOptions });
