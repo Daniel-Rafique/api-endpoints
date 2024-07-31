@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const { getAccount, getMint, getParsedTokenAccountsByOwner } = require('@solana/spl-token');
+const { getParsedTokenAccountsByOwner } = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -47,6 +47,7 @@ class BalanceChecker {
 
   async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
+      console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { mint: new PublicKey(tokenMintAddress) });
 
