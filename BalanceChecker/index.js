@@ -23,13 +23,8 @@ class BalanceChecker {
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
+    this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
 
-    // Ensure that the secret key is a Uint8Array of length 64
-    const secretKey = Uint8Array.from(Buffer.from(walletAPrivateKey, 'base64'));
-    if (secretKey.length !== 64) {
-      throw new Error('Invalid secret key size');
-    }
-    this.walletAKeypair = Keypair.fromSecretKey(secretKey);
   }
 
   switchRpcEndpoint() {
