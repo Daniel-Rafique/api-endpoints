@@ -49,7 +49,12 @@ class BalanceChecker {
     try {
       console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
-      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { mint: new PublicKey(tokenMintAddress) });
+      const tokenMintPublicKey = new PublicKey(tokenMintAddress);
+
+      console.log('Validated Wallet Public Key:', walletPublicKey.toString());
+      console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
+
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { mint: tokenMintPublicKey });
 
       if (tokenAccounts.value.length === 0) {
         throw new Error('TokenAccountNotFoundError');
