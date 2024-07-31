@@ -1,4 +1,5 @@
 require('dotenv').config();
+const bs58 = require('bs58');
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
