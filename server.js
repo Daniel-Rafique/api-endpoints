@@ -52,10 +52,6 @@ const telegramNotifier = new TelegramNotifier(telegramToken);
 app.post('/api/create', async (req, res) => {
     const { chatId, timestamp, hash } = req.body;
 
-    console.log(req.body);
-    console.log(`Received - chatId: ${chatId}, timestamp: ${timestamp}, hash: ${hash}`);
-    console.log(`Server SECRET_KEY: ${SECRET_KEY}`); // Log the SECRET_KEY on the server
-
     // Validate parameters
     if (!chatId || !hash) {
         return res.status(400).send('Missing required parameters');

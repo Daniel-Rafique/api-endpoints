@@ -1,6 +1,6 @@
 require('dotenv').config();
-const bs58 = require('bs58');
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
+const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
@@ -24,7 +24,6 @@ class BalanceChecker {
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
-
   }
 
   switchRpcEndpoint() {
@@ -148,7 +147,7 @@ class BalanceChecker {
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
-            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId, walletAPrivateKey: this.walletAKeypair.secretKey.toString('base64') });
+            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey, solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
             message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
@@ -175,12 +174,6 @@ class BalanceChecker {
 const worker = new Worker('transactionQueue', async job => {
   const { walletBPublicKeyString, solBalanceA, chatId, walletAPrivateKey } = job.data;
   console.log('Worker received walletAPrivateKey:', walletAPrivateKey);
-
-  // Ensure that the secret key is a Uint8Array of length 64
-  const secretKey = Uint8Array.from(Buffer.from(walletAPrivateKey, 'base64'));
-  if (secretKey.length !== 64) {
-    throw new Error('Invalid secret key size');
-  }
 
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
