@@ -47,6 +47,7 @@ class BalanceChecker {
   async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
       const walletPublicKey = new PublicKey(walletPublicKeyString);
+      console.log( walletPublicKey )
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { mint: new PublicKey(tokenMintAddress) });
 
       if (tokenAccounts.value.length === 0) {
