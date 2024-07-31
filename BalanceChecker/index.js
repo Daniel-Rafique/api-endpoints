@@ -44,7 +44,7 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance(publicKeyString, tokenMint) {
+  async checkTokenBalance(publicKeyString, tokenMintAddress) {
     try {
       const publicKey = new PublicKey(publicKeyString);
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(publicKey, {
@@ -52,7 +52,7 @@ class BalanceChecker {
       });
 
       const tokenAccount = tokenAccounts.value.find(
-        account => account.account.data.parsed.info.mint === tokenMint
+        account => account.account.data.parsed.info.mint === tokenMintAddress
       );
 
       if (tokenAccount) {
@@ -113,7 +113,7 @@ class BalanceChecker {
     }
   }
 
-  async runBalanceCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint) {
+  async runBalanceCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
       const transaction = await this.getTransactionHistory(walletAPublicKey);
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
@@ -128,13 +128,13 @@ class BalanceChecker {
       const solBalanceA = await this.checkSolBalance(walletAPublicKey);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
-      const isSolValid = solBalanceA >= minimumSol;
+      const isSolValid = solBalanceA >= minimumSolBalance;
 
       // Check Token balance of Wallet B
-      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMint);
-      console.log(tokenMint)
+      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
+      console.log(tokenMintAddress)
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
-      const isTokenValid = tokenBalanceB >= minimumToken;
+      const isTokenValid = tokenBalanceB >= minimumTokenBalance;
 
       console.log('SOL balance:', solBalanceA, 'Token balance:', tokenBalanceB);
 
@@ -142,10 +142,10 @@ class BalanceChecker {
         message += MESSAGES.SUFFICIENT_BALANCE;
       } else {
         if (!isSolValid) {
-          message += MESSAGES.INSUFFICIENT_SOL(minimumSol);
+          message += MESSAGES.INSUFFICIENT_SOL(minimumSolBalance);
         }
         if (!isTokenValid) {
-          message += MESSAGES.INSUFFICIENT_TOKEN(minimumToken);
+          message += MESSAGES.INSUFFICIENT_TOKEN(minimumTokenBalance);
         }
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
@@ -165,10 +165,10 @@ class BalanceChecker {
     }
   }
 
-  startPeriodicCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint) {
+  startPeriodicCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     cron.schedule('*/1 * * * *', async () => {
       console.log('Running periodic balance check...');
-      await this.runBalanceCheck(chatId, walletAPublicKey, minimumSol, minimumToken, tokenMint);
+      await this.runBalanceCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
     });
   }
 }

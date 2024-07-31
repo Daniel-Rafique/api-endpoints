@@ -37,6 +37,7 @@ app.use(bodyParser.json());
 
 // Secret key (store this securely, e.g., in environment variables)
 const SECRET_KEY = process.env.SECRET_KEY;
+let tokenMint;
 
 // Function to generate the hash
 function generateHash(chatId, timestamp) {
@@ -71,6 +72,16 @@ app.post('/api/create', async (req, res) => {
             return res.status(404).send('User data not found');
         }
 
+        const minimumSolBalance = userData.boostCost; 
+        const walletAPublicKey = userData.wallet;
+        const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
+
+        if(userData.boostType === 'ultra_boost') {
+            tokenMintAddress = userData.contractAddress;
+        }else{
+            tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
+        }
+
         // Start the periodic check
         const walletASecretKey = userData.walletPk;
         const balanceChecker = new BalanceChecker(
@@ -78,7 +89,7 @@ app.post('/api/create', async (req, res) => {
             telegramNotifier,
             walletASecretKey
         );
-        balanceChecker.startPeriodicCheck(chatId, userData.wallet, userData.boostCost, 5000, process.env.TOKEN_MINT_ADDRESS);
+        balanceChecker.startPeriodicCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
         telegramNotifier.sendTelegramMessage(chatId, '🔍 Starting periodic balance check...');
         res.status(200).send('Checking balance...');
     } catch (error) {
