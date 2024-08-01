@@ -153,7 +153,7 @@ class BalanceChecker {
       const isSolValid = solBalanceA >= minimumSolBalance;
 
       // Check Token balance of Wallet B
-      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
+      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), minimumTokenBalance, tokenMintAddress);
       console.log('Wallet B Token balance:', tokenBalanceB);
 
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
@@ -168,7 +168,7 @@ class BalanceChecker {
           message += MESSAGES.INSUFFICIENT_SOL(minimumSolBalance);
         }
         if (!isTokenValid) {
-          message += MESSAGES.INSUFFICIENT_TOKEN(minimumTokenBalance);
+          message += MESSAGES.INSUFFICIENT_TOKEN(minimumTokenBalance, tokenSymbol);
         }
         if (!isSolValid || !isTokenValid) {
           console.log('Returning SOL to Wallet B:', solBalanceA);
@@ -201,7 +201,7 @@ class BalanceChecker {
   startPeriodicCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     cron.schedule('*/1 * * * *', async () => {
       console.log('Running periodic balance check...');
-      await this.runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+      await this.runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress, tokenSymbol);
     });
   }
 }
