@@ -1,6 +1,6 @@
 require('dotenv').config();
-const { Connection, PublicKey, Keypair, Transaction } = require('@solana/web3.js');
-const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } = require('@solana/spl-token');
+const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
+const splToken = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -34,6 +34,7 @@ class BalanceChecker {
     this.currentRpcIndex = 0;
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.telegramNotifier = telegramNotifier;
+    this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
   }
 
@@ -60,22 +61,22 @@ class BalanceChecker {
       console.log('Checking token balance...');
       console.log('Wallet Public Key:', walletPublicKeyString);
       console.log('Token Mint Address:', tokenMintAddress);
-
+  
       if (!isValidPublicKey(walletPublicKeyString)) {
         throw new Error(`Invalid public key input: ${walletPublicKeyString}`);
       }
-
+  
       if (!isValidPublicKey(tokenMintAddress)) {
         throw new Error(`Invalid token mint address input: ${tokenMintAddress}`);
       }
-
+  
       // Use the connection from the class instance
       const { connection } = this;
-
+  
       // Convert the public key string to a PublicKey object
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       console.log('Public Key object created:', walletPublicKey.toString());
-
+  
       // Get the associated token address for the SPL token
       const associatedTokenAddress = await getAssociatedTokenAddress(
         ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -83,12 +84,12 @@ class BalanceChecker {
         new PublicKey(tokenMintAddress),
         walletPublicKey
       );
-
+  
       console.log('Associated Token Address:', associatedTokenAddress.toString());
-
+  
       // Fetch the token account balance
       const tokenAccountInfo = await connection.getParsedAccountInfo(associatedTokenAddress);
-
+  
       // Check if the account exists and get the balance
       let tokenBalance = 0;
       if (tokenAccountInfo.value) {
@@ -98,7 +99,7 @@ class BalanceChecker {
       } else {
         console.log('Token account does not exist or no data found.');
       }
-
+  
       console.log('Token Balance: ', tokenBalance);
       return tokenBalance;
     } catch (error) {
@@ -107,6 +108,7 @@ class BalanceChecker {
       throw error;
     }
   }
+  
 
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
@@ -121,6 +123,37 @@ class BalanceChecker {
       return confirmedTransaction;
     } catch (error) {
       console.error('Error fetching transaction history:', error);
+      this.switchRpcEndpoint();
+      throw error;
+    }
+  }
+
+  async returnSolToWalletB(walletBPublicKeyString) {
+    try {
+      const walletBPublicKey = new PublicKey(walletBPublicKeyString);
+      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
+
+      // Subtract a small amount to cover the transaction fee
+      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: this.walletAKeypair.publicKey,
+          toPubkey: walletBPublicKey,
+          lamports: lamportsToSend
+        })
+      );
+
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        transaction,
+        [this.walletAKeypair]
+      );
+
+      console.log('Transaction signature:', signature);
+
+      return signature;
+    } catch (error) {
+      console.error('Error returning SOL to Wallet B:', error);
       this.switchRpcEndpoint();
       throw error;
     }
