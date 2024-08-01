@@ -149,31 +149,31 @@ class BalanceChecker {
     try {
       const transaction = await this.getTransactionHistory(walletAPublicKeyString);
       console.log('Transaction:', transaction);
-
+  
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
         key => key.toString() !== walletAPublicKeyString && key.toString() !== this.walletAKeypair.publicKey.toString()
       );
-
+  
       if (!walletBPublicKey) {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
-
+  
       // Check SOL balance of Wallet A
       const solBalanceA = await this.checkSolBalance(walletAPublicKeyString);
       console.log('Wallet A SOL balance:', solBalanceA);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSolBalance;
-
+  
       // Check Token balance of Wallet B
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
       console.log('Wallet B Token balance:', tokenBalanceB);
-
+  
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
-
+  
       console.log('SOL balance:', solBalanceA, 'Token balance:', tokenBalanceB);
-
+  
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
         await this.walletProcessor.addJob({ chatId });
@@ -188,19 +188,20 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL(solBalanceA, 'Pending`\\.\\.\\.', { parse_mode: 'MarkdownV2' } );
+            message += MESSAGES.RETURNED_SOL(solBalanceA, 'Pending...');
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
         }
       }
-
+  
       await this.sendTelegramMessage(chatId, message, { parse_mode: 'MarkdownV2' });
     } catch (error) {
       console.error('Error during balance check:', error);
-      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message), { parse_mode: 'MarkdownV2' } );
+      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message), { parse_mode: 'MarkdownV2' });
     }
   }
+  
 
   async sendTelegramMessage(chatId, text) {
     const escapedText = escapeMarkdown(text); // Ensure text is escaped
@@ -211,9 +212,9 @@ class BalanceChecker {
     } else {
       console.log('Duplicate message detected, skipping send.');
     }
-  }
+  }  
 
-  startPeriodicCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
+  startPeriodicCheck(chatId, walletAPublicKeyString, minimumSolBalance, tokenMintAddress) {
     cron.schedule('*/1 * * * *', async () => {
       console.log('Running periodic balance check...');
       await this.runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
