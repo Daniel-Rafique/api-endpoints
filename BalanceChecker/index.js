@@ -10,8 +10,6 @@ const DataManager = require('../database');
 const TelegramNotifier = require('../TelegramNotifier');
 const { escapeMarkdown } = require('../utils');
 
-const TOKEN_PROGRAM_ID = new PublicKey(process.env.TOKEN_PROGRAM_ID);
-
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
   port: 6379, // Replace with your Redis port
