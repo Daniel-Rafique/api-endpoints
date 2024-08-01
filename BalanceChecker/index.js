@@ -57,14 +57,14 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
+  async checkTokenBalance(walletBPublicKey, tokenMintAddress) {
     try {
       console.log('Checking token balance...');
-      console.log('Wallet Public Key:', walletPublicKeyString);
+      console.log('Wallet Public Key:', walletBPublicKey);
       console.log('Token Mint Address:', tokenMintAddress);
   
-      if (!isValidPublicKey(walletPublicKeyString)) {
-        throw new Error(`Invalid public key input: ${walletPublicKeyString}`);
+      if (!isValidPublicKey(walletBPublicKey)) {
+        throw new Error(`Invalid public key input: ${walletBPublicKey}`);
       }
   
       if (!isValidPublicKey(tokenMintAddress)) {
@@ -75,7 +75,7 @@ class BalanceChecker {
       const { connection } = this;
   
       // Convert the public key string to a PublicKey object
-      const walletPublicKey = new PublicKey(walletPublicKeyString);
+      const walletPublicKey = new PublicKey(walletBPublicKey);
       console.log('Public Key object created:', walletPublicKey.toString());
   
       // Get the associated token address for the SPL token
@@ -89,36 +89,22 @@ class BalanceChecker {
       console.log('Associated Token Address:', associatedTokenAddress.toString());
   
       // Fetch the token account balance
-      let tokenAccountInfo = await connection.getParsedAccountInfo(associatedTokenAddress);
+      const tokenAccountInfo = await connection.getAccountInfo(associatedTokenAddress);
       console.log('Token Account Info:', tokenAccountInfo);
-  
-      // If the token account does not exist, create it
-      if (!tokenAccountInfo.value) {
-        console.log('Token account does not exist. Creating token account...');
-        const transaction = new Transaction().add(
-          splToken.createAssociatedTokenAccountInstruction(
-            this.walletAKeypair.publicKey,
-            associatedTokenAddress,
-            walletPublicKey,
-            new PublicKey(tokenMintAddress)
-          )
-        );
-  
-        const signature = await connection.sendTransaction(transaction, [this.walletAKeypair]);
-        await connection.confirmTransaction(signature, 'confirmed');
-        console.log('Token account created with signature:', signature);
-  
-        // Fetch the token account balance again after creating the account
-        tokenAccountInfo = await connection.getParsedAccountInfo(associatedTokenAddress);
-        console.log('Token Account Info after creation:', tokenAccountInfo);
-      }
   
       // Check if the account exists and get the balance
       let tokenBalance = 0;
-      if (tokenAccountInfo.value) {
-        const tokenAmount = tokenAccountInfo.value.data.parsed.info.tokenAmount;
-        tokenBalance = tokenAmount.uiAmount;
-        console.log('Token Amount:', tokenAmount);
+      if (tokenAccountInfo) {
+        const accountData = tokenAccountInfo.data;
+        const dataLayout = BufferLayout.struct([
+          BufferLayout.u8('accountType'),
+          BufferLayout.blob(32, 'mint'),
+          BufferLayout.blob(32, 'owner'),
+          BufferLayout.nu64('amount'),
+        ]);
+        const decodedData = dataLayout.decode(accountData);
+        tokenBalance = decodedData.amount / Math.pow(10, 6); // Adjust for the token's decimal places
+        console.log('Decoded Data:', decodedData);
       } else {
         console.log('Token account does not exist or no data found.');
       }
@@ -130,6 +116,7 @@ class BalanceChecker {
       throw error;
     }
   }
+  
 
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
