@@ -177,7 +177,7 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL(solBalanceA);
+            message += MESSAGES.RETURNED_SOL(solBalanceA, 'Pending`\\.\\.\\.', { parse_mode: 'MarkdownV2' } );
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
@@ -187,7 +187,7 @@ class BalanceChecker {
       await this.sendTelegramMessage(chatId, message, { parse_mode: 'MarkdownV2' });
     } catch (error) {
       console.error('Error during balance check:', error);
-      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message), { parse_mode: 'MarkdownV2' } );
+      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message, { parse_mode: 'MarkdownV2' } ));
     }
   }
 
