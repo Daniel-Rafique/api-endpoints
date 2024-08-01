@@ -1,11 +1,7 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const {
-  createApproveInstruction,
-  getOrCreateAssociatedTokenAccount,
-  createTransferInstruction,
-  TOKEN_PROGRAM_ID,
-} = require('@solana/spl-token');
+const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } = require('@solana/spl-token');
+
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -66,41 +62,42 @@ class BalanceChecker {
       console.log('Checking token balance...');
       console.log('Wallet Public Key:', walletBPublicKeyString);
       console.log('Token Mint Address:', tokenMintAddressString);
-  
+
       if (!isValidPublicKey(walletBPublicKeyString)) {
         throw new Error(`Invalid public key input: ${walletBPublicKeyString}`);
       }
-  
+
       if (!isValidPublicKey(tokenMintAddressString)) {
         throw new Error(`Invalid token mint address input: ${tokenMintAddressString}`);
       }
-  
+
       // Convert the public key strings to PublicKey objects
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
       const tokenMintAddress = new PublicKey(tokenMintAddressString);
-  
+
       console.log('Converted Wallet Public Key:', walletBPublicKey.toBase58());
       console.log('Converted Token Mint Address:', tokenMintAddress.toBase58());
-  
+
       // Use the connection from the class instance
       const { connection } = this;
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-        walletBPublicKey,
-        { mint: tokenMintAddress }
+
+      // Get the associated token address for the SPL token
+      const associatedTokenAddress = await getAssociatedTokenAddress(
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+        TOKEN_PROGRAM_ID,
+        tokenMintAddress,
+        walletBPublicKey
       );
-  
-      let tokenBalance = 0;
-  
-      if (tokenAccounts.value.length === 0) {
-        console.log(tokenAccounts);
-        console.error('No token accounts found for the provided mint.');
-        return tokenBalance; // Return 0 if no token accounts are found
-      }
-  
-      const tokenAccount = tokenAccounts.value[0];
-      tokenBalance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
+
+      console.log('Associated Token Address:', associatedTokenAddress.toBase58());
+
+      // Fetch the token account balance
+      const tokenAccountBalance = await connection.getTokenAccountBalance(associatedTokenAddress);
+      console.log('Token Account Balance:', tokenAccountBalance);
+
+      const tokenBalance = tokenAccountBalance.value.uiAmount;
       console.log('Token Balance:', tokenBalance);
-  
+
       return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
