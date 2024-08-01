@@ -127,6 +127,7 @@ class BalanceChecker {
       return signature;
     } catch (error) {
       console.error('Error returning SOL to Wallet B:', error);
+      console.log(getLogs())
       this.switchRpcEndpoint();
       throw error;
     }
