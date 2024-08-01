@@ -7,7 +7,7 @@ const MESSAGES = {
   INSUFFICIENT_SOL: (minimumSolBalance) => `\n❌ The SOL balance does not meet the required minimum of ${escapeMarkdown(minimumSolBalance.toString())} SOL\\.`,
   INSUFFICIENT_TOKEN: (minimumTokenBalance) => `\n❌ The Token balance does not meet the required minimum of ${escapeMarkdown(minimumTokenBalance.toString())} tokens\\.`,
   SUFFICIENT_BALANCE: `\n✅ Both balances meet the required minimums\\.`,
-  RETURNED_SOL: (solBalance, transactionSignature) => `\n🔄 Returned ${escapeMarkdown(solBalance.toFixed(2))} SOL to sender\\. Transaction signature: [${escapeMarkdown(transactionSignature)}](https://solscan.io/tx/${escapeMarkdown(transactionSignature)})\\.`,
+  RETURNED_SOL: (solBalance, transactionSignature) => `\n🔄 Returned ${escapeMarkdown(solBalance.toFixed(2))} SOL to sender\\. Transaction signature: ${escapeMarkdown(transactionSignature)}\\.`,
   ERROR_DURING_CHECK: (errorMessage) => `\n❌ Error during balance check: ${escapeMarkdown(errorMessage)}\\.`,
 };
 
