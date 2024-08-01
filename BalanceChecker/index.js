@@ -1,6 +1,6 @@
 require('dotenv').config();
-const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const { getAccountInfo } = require('@solana/spl-token');
+const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, solanaWeb3 } = require('@solana/web3.js');
+const splToken = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -49,23 +49,28 @@ class BalanceChecker {
 
   async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
-      console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
-      const walletPublicKey = new PublicKey(walletPublicKeyString);
-      const tokenMintPublicKey = new PublicKey(tokenMintAddress);
+      // Create a connection to the Solana cluster
+      const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'), 'confirmed');
 
-      console.log('Validated Wallet Public Key:', walletPublicKey.toString());
-      console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
+      // Convert the public key string to a PublicKey object
+      const publicKey = new solanaWeb3.PublicKey(walletPublicKeyString);
 
-      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { programId: TOKEN_PROGRAM_ID });
+      // Get the associated token address for the SPL token
+      const associatedTokenAddress = await splToken.getAssociatedTokenAddress(
+        splToken.ASSOCIATED_TOKEN_PROGRAM_ID,
+        splToken.TOKEN_PROGRAM_ID,
+        new solanaWeb3.PublicKey(tokenMintAddress),
+        publicKey
+      );
+      // Fetch the token account balance
+      const tokenAccountInfo = await connection.getParsedAccountInfo(associatedTokenAddress);
 
-      if (tokenAccounts.value.length === 0) {
-        throw new Error('TokenAccountNotFoundError');
+      // Check if the account exists and get the balance
+      let tokenBalance = 0;
+      if (tokenAccountInfo.value) {
+        tokenBalance = tokenAccountInfo.value.data.parsed.info.tokenAmount.uiAmount;
       }
 
-      const tokenAccountAddress = tokenAccounts.value[0].pubkey;
-      const tokenAccountInfo = await getAccountInfo(this.connection, tokenAccountAddress);
-
-      const tokenBalance = tokenAccountInfo.amount / Math.pow(10, tokenAccountInfo.decimals);
       console.log('Token Balance: ', tokenBalance);
       return tokenBalance;
     } catch (error) {
