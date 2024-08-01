@@ -114,36 +114,66 @@ class BalanceChecker {
     }
   }
 
-  async returnSolToWalletB(walletBPublicKeyString) {
+  async returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
-      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
-
-      // Subtract a small amount to cover the transaction fee
-      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: lamportsToSend
+          lamports: solBalanceA,
         })
       );
 
-      const signature = await sendAndConfirmTransaction(
-        this.connection,
-        transaction,
-        [this.walletAKeypair]
-      );
-
+      const signature = await this.connection.sendTransaction(transaction, [this.walletAKeypair]);
       console.log('Transaction signature:', signature);
 
-      return signature;
+      await this.connection.confirmTransaction(signature);
+      console.log('Transaction confirmed:', signature);
+
+      // Notify user about the successful return
+      await this.sendTelegramMessage(chatId, `🔄 Returned ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender. Transaction signature: ${signature}`);
     } catch (error) {
-      console.error('Error returning SOL to Wallet B:', error);
-      this.switchRpcEndpoint();
-      throw error;
+      if (error instanceof TransactionExpiredBlockheightExceededError) {
+        console.error('Error returning SOL to Wallet B:', error.message);
+
+        // Implement retry logic
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            retries--;
+            const walletBPublicKey = new PublicKey(walletBPublicKeyString);
+            const transaction = new Transaction().add(
+              SystemProgram.transfer({
+                fromPubkey: this.walletAKeypair.publicKey,
+                toPubkey: walletBPublicKey,
+                lamports: solBalanceA,
+              })
+            );
+
+            const signature = await this.connection.sendTransaction(transaction, [this.walletAKeypair]);
+            console.log('Retrying transaction, signature:', signature);
+
+            await this.connection.confirmTransaction(signature);
+            console.log('Retry successful, transaction confirmed:', signature);
+
+            // Notify user about the successful return
+            await this.sendTelegramMessage(chatId, `🔄 Returned ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender. Transaction signature: ${signature}`);
+            return;
+          } catch (retryError) {
+            console.error('Retry failed:', retryError.message);
+          }
+        }
+
+        // Notify user about the failure after retries
+        await this.sendTelegramMessage(chatId, `❌ Failed to return ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender after multiple attempts. Please try again later.`);
+      } else {
+        console.error('Unexpected error returning SOL to Wallet B:', error);
+        await this.sendTelegramMessage(chatId, `❌ Unexpected error during balance check: ${error.message}`);
+      }
     }
   }
+
 
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
