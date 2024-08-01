@@ -1,5 +1,3 @@
-const { escapeMarkdown } = require('../utils');
-
 const MESSAGES = {
   BALANCE_CHECK_REPORT: '🔍 Balance Check Report:\n',
   SOL_BALANCE_A: (balance) => `💰 SOL Balance is: \`${balance.toFixed(9)} SOL\`\n`,
