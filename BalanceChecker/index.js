@@ -1,7 +1,5 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const { TOKEN_PROGRAM_ID } = require('@solana/spl-token');
-
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -9,6 +7,8 @@ const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
 const TelegramNotifier = require('../TelegramNotifier');
 const { escapeMarkdown } = require('../utils');
+
+const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -51,10 +51,10 @@ class BalanceChecker {
       console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenMintPublicKey = new PublicKey(tokenMintAddress);
-  
+
       console.log('Validated Wallet Public Key:', walletPublicKey.toString());
       console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
-  
+
       const accounts = await this.connection.getParsedProgramAccounts(
         TOKEN_PROGRAM_ID,
         {
@@ -71,30 +71,27 @@ class BalanceChecker {
           ],
         }
       );
-  
+
       console.log('Fetched Token Accounts:', accounts);
-  
+
       if (accounts.length === 0) {
         throw new Error('TokenAccountNotFoundError');
       }
-  
+
       const tokenAccount = accounts.find(account => account.account.data.parsed.info.owner === walletPublicKey.toBase58());
-  
+
       if (!tokenAccount) {
         throw new Error('TokenAccountNotFoundError');
       }
-  
-      const tokenBalance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
+
+      const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
       console.log('Token Balance: ', tokenBalance);
-  
-      // Filter accounts to show only those with the required minimum balance
-      const filteredAccounts = accounts.filter(account => parseFloat(account.account.data.parsed.info.tokenAmount.uiAmount) >= minimumTokenBalance);
-      console.log('Filtered Token Accounts:', filteredAccounts);
-  
-      if (filteredAccounts.length === 0) {
-        throw new Error(`Token balance is less than the required minimum of ${minimumTokenBalance}`);
+
+      // Check if the token balance meets the minimum requirement
+      if (tokenBalance < minimumTokenBalance) {
+        throw new Error(`Token balance (${tokenBalance}) is less than the required minimum of ${minimumTokenBalance}`);
       }
-  
+
       return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
@@ -102,7 +99,7 @@ class BalanceChecker {
       throw error;
     }
   }
-  
+
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
   }
