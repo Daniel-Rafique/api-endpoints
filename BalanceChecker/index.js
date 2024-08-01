@@ -1,7 +1,11 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const { getOrCreateAssociatedTokenAccount, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } = require('@solana/spl-token');
-
+const {
+  createApproveInstruction,
+  getOrCreateAssociatedTokenAccount,
+  createTransferInstruction,
+  TOKEN_PROGRAM_ID,
+} = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -57,19 +61,23 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance(walletBPublicKey, tokenMintAddress) {
+  async checkTokenBalance(walletBPublicKeyString, tokenMintAddressString) {
     try {
       console.log('Checking token balance...');
-      console.log('Wallet Public Key:', walletBPublicKey);
-      console.log('Token Mint Address:', tokenMintAddress);
+      console.log('Wallet Public Key:', walletBPublicKeyString);
+      console.log('Token Mint Address:', tokenMintAddressString);
   
-      if (!isValidPublicKey(walletBPublicKey)) {
-        throw new Error(`Invalid public key input: ${walletBPublicKey}`);
+      if (!isValidPublicKey(walletBPublicKeyString)) {
+        throw new Error(`Invalid public key input: ${walletBPublicKeyString}`);
       }
   
-      if (!isValidPublicKey(tokenMintAddress)) {
-        throw new Error(`Invalid token mint address input: ${tokenMintAddress}`);
+      if (!isValidPublicKey(tokenMintAddressString)) {
+        throw new Error(`Invalid token mint address input: ${tokenMintAddressString}`);
       }
+  
+      // Convert the public key strings to PublicKey objects
+      const walletBPublicKey = new PublicKey(walletBPublicKeyString);
+      const tokenMintAddress = new PublicKey(tokenMintAddressString);
   
       // Use the connection from the class instance
       const { connection } = this;
@@ -79,24 +87,24 @@ class BalanceChecker {
       );
   
       let tokenBalance = 0;
-
+  
       if (tokenAccounts.value.length === 0) {
-        console.log(tokenAccounts)
+        console.log(tokenAccounts);
         console.error('No token accounts found for the provided mint.');
-        return;
+        return tokenBalance; // Return 0 if no token accounts are found
       }
   
       const tokenAccount = tokenAccounts.value[0];
       tokenBalance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
+      console.log('Token Balance:', tokenBalance);
+  
       return tokenBalance;
-
     } catch (error) {
       console.error('Error checking token balance:', error);
       throw error;
     }
   }
   
-
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
   }
