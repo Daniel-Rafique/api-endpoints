@@ -1,5 +1,5 @@
 const axios = require('axios');
-const balanceText = require('../Constants');
+const balanceText = require('../constants');
 class Telegram {
   constructor(telegramToken) {
     this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
