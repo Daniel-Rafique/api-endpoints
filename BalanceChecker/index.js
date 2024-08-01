@@ -1,7 +1,5 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } = require('@solana/spl-token');
-
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -57,78 +55,37 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance(walletBPublicKeyString, tokenMintAddressString) {
+  async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
-      console.log('Checking token balance...');
-      console.log('Wallet Public Key:', walletBPublicKeyString);
-      console.log('Token Mint Address:', tokenMintAddressString);
+      console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
+      const walletPublicKey = new PublicKey(walletPublicKeyString);
+      const tokenMintPublicKey = new PublicKey(tokenMintAddress);
 
-      if (!isValidPublicKey(walletBPublicKeyString)) {
-        throw new Error(`Invalid public key input: ${walletBPublicKeyString}`);
+      console.log('Validated Wallet Public Key:', walletPublicKey.toString());
+      console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
+
+      // Get all token accounts owned by the wallet
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
+        mint: tokenMintPublicKey,
+      });
+
+      if (tokenAccounts.value.length === 0) {
+        throw new Error('TokenAccountNotFoundError');
       }
 
-      if (!isValidPublicKey(tokenMintAddressString)) {
-        throw new Error(`Invalid token mint address input: ${tokenMintAddressString}`);
-      }
+      const tokenAccountAddress = tokenAccounts.value[0].pubkey;
+      const tokenAmount = await this.connection.getTokenAccountBalance(tokenAccountAddress);
 
-      // Convert the public key strings to PublicKey objects
-      const walletBPublicKey = new PublicKey(walletBPublicKeyString);
-      const tokenMintAddress = new PublicKey(tokenMintAddressString);
-
-      console.log('Converted Wallet Public Key:', walletBPublicKey.toBase58());
-      console.log('Converted Token Mint Address:', tokenMintAddress.toBase58());
-
-      // Use the connection from the class instance
-      const { connection } = this;
-
-      // Get the associated token address for the SPL token
-      const associatedTokenAddress = await getAssociatedTokenAddress(
-        ASSOCIATED_TOKEN_PROGRAM_ID,
-        TOKEN_PROGRAM_ID,
-        tokenMintAddress,
-        walletBPublicKey
-      );
-
-      console.log('Associated Token Address:', associatedTokenAddress.toBase58());
-
-      // Fetch the token account balance
-      let tokenAccountBalance;
-      try {
-        tokenAccountBalance = await connection.getTokenAccountBalance(associatedTokenAddress);
-        console.log('Token Account Balance:', tokenAccountBalance);
-      } catch (error) {
-        if (error.message.includes('could not find account')) {
-          console.log('Token account does not exist. Creating token account...');
-          const transaction = new Transaction().add(
-            createAssociatedTokenAccountInstruction(
-              this.walletAKeypair.publicKey,
-              associatedTokenAddress,
-              walletBPublicKey,
-              tokenMintAddress
-            )
-          );
-
-          const signature = await connection.sendTransaction(transaction, [this.walletAKeypair]);
-          await connection.confirmTransaction(signature, 'confirmed');
-          console.log('Token account created with signature:', signature);
-
-          // Fetch the token account balance again after creating the account
-          tokenAccountBalance = await connection.getTokenAccountBalance(associatedTokenAddress);
-          console.log('Token Account Balance after creation:', tokenAccountBalance);
-        } else {
-          throw error;
-        }
-      }
-
-      const tokenBalance = tokenAccountBalance.value.uiAmount;
-      console.log('Token Balance:', tokenBalance);
-
+      const tokenBalance = tokenAmount.value.amount / Math.pow(10, tokenAmount.value.decimals);
+      console.log('Token Balance: ', tokenBalance);
       return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
+      this.switchRpcEndpoint();
       throw error;
     }
   }
+
 
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
