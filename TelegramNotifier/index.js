@@ -11,6 +11,7 @@ class TelegramNotifier {
       await axios.post(url, {
         chat_id: chatId,
         text: text,
+        ...options
       });
     } catch (error) {
       console.error('Error sending message:', error);
@@ -22,7 +23,8 @@ class TelegramNotifier {
     try {
       await axios.post(url, {
         chat_id: chatId,
-        text: balanceText.MESSAGES.BALANCE_CHECK
+        text: balanceText.MESSAGES.BALANCE_CHECK,
+        ...options
       });
     } catch (error) {
       console.error('Error sending message:', error);
