@@ -7,6 +7,7 @@ const { MESSAGES } = require('../Constants');
 const DataManager = require('../Database');
 const TelegramNotifier = require('../TelegramNotifier');
 const WalletProcessor = require('../WalletProcessor'); // Import WalletProcessor
+const { escapeMarkdown } = require('../utils');
 
 
 const redisOptions = {
