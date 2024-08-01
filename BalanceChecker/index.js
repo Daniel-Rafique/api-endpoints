@@ -89,7 +89,7 @@ class BalanceChecker {
 
       // Check if the account exists and get the balance
       let tokenBalance = 0;
-      console.log(tokenAccountInfo)
+      console.log(tokenAccountInfo.value.data.parsed.info.tokenAmount.uiAmount)
       if (tokenAccountInfo.value) {
         tokenBalance = tokenAccountInfo.value.data.parsed.info.tokenAmount.uiAmount;
       }
