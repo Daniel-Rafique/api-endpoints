@@ -1,6 +1,6 @@
 // BalanceChecker.js
 const { PublicKey } = require('@solana/web3.js');
-const { TOKEN_PROGRAM_ID } = require('./constants');
+const { TOKEN_PROGRAM_ID } = require('../Constants');
 const { getParsedTokenAccountsByOwner } = require('@solana/spl-token');
 
 class BalanceChecker {
