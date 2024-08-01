@@ -1,5 +1,7 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
+const { TOKEN_PROGRAM_ID } = require('@solana/spl-token');
+
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -12,8 +14,6 @@ const redisOptions = {
   host: 'localhost', // Replace with your Redis host
   port: 6379, // Replace with your Redis port
 };
-
-const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 
@@ -46,7 +46,7 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
+  async checkTokenBalance(walletPublicKeyString, minimumTokenBalance, tokenMintAddress) {
     try {
       console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
@@ -55,20 +55,30 @@ class BalanceChecker {
       console.log('Validated Wallet Public Key:', walletPublicKey.toString());
       console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
   
-      // Get all token accounts owned by the wallet
-      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
-        programId: TOKEN_PROGRAM_ID,
-      });
+      const accounts = await this.connection.getParsedProgramAccounts(
+        TOKEN_PROGRAM_ID,
+        {
+          filters: [
+            {
+              dataSize: 165, // size of a token account
+            },
+            {
+              memcmp: {
+                offset: 0, // location of mint address in token account data
+                bytes: tokenMintPublicKey.toBase58(),
+              },
+            },
+          ],
+        }
+      );
   
-      console.log('Fetched Token Accounts:', tokenAccounts);
+      console.log('Fetched Token Accounts:', accounts);
   
-      if (tokenAccounts.value.length === 0) {
+      if (accounts.length === 0) {
         throw new Error('TokenAccountNotFoundError');
       }
   
-      const tokenAccount = tokenAccounts.value.find(
-        account => account.account.data.parsed.info.mint === tokenMintPublicKey.toString()
-      );
+      const tokenAccount = accounts.find(account => account.account.data.parsed.info.owner === walletPublicKey.toBase58());
   
       if (!tokenAccount) {
         throw new Error('TokenAccountNotFoundError');
@@ -76,6 +86,15 @@ class BalanceChecker {
   
       const tokenBalance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
       console.log('Token Balance: ', tokenBalance);
+  
+      // Filter accounts to show only those with the required minimum balance
+      const filteredAccounts = accounts.filter(account => parseFloat(account.account.data.parsed.info.tokenAmount.uiAmount) >= minimumTokenBalance);
+      console.log('Filtered Token Accounts:', filteredAccounts);
+  
+      if (filteredAccounts.length === 0) {
+        throw new Error(`Token balance is less than the required minimum of ${minimumTokenBalance}`);
+      }
+  
       return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
@@ -83,7 +102,6 @@ class BalanceChecker {
       throw error;
     }
   }
-  
   
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
@@ -155,7 +173,7 @@ class BalanceChecker {
       const isSolValid = solBalanceA >= minimumSolBalance;
 
       // Check Token balance of Wallet B
-      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
+      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), minimumTokenBalance, tokenMintAddress);
       console.log('Wallet B Token balance:', tokenBalanceB);
 
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
