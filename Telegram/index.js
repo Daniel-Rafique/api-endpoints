@@ -1,6 +1,6 @@
 const axios = require('axios');
 const balanceText = require('../Constants');
-class TelegramNotifier {
+class Telegram {
   constructor(telegramToken) {
     this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
   }
@@ -32,4 +32,4 @@ class TelegramNotifier {
   }
 }
 
-module.exports = TelegramNotifier;
+module.exports = Telegram;
