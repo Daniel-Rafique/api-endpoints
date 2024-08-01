@@ -2,12 +2,12 @@ require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const cron = require('node-cron');
-const { Queue, Worker, QueueScheduler } = require('bullmq');
+const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../Constants');
 const DataManager = require('../Database');
 const TelegramNotifier = require('../TelegramNotifier');
 const WalletProcessor = require('../WalletProcessor'); // Import WalletProcessor
-const { escapeMarkdown } = require('../utils');
+
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -16,16 +16,6 @@ const redisOptions = {
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
-const retryQueue = new Queue('retryQueue', { connection: redisOptions });
-
-new QueueScheduler('transactionQueue', { connection: redisOptions });
-new QueueScheduler('retryQueue', { connection: redisOptions });
-
-new Worker('retryQueue', async job => {
-  const { walletBPublicKeyString, solBalanceA, chatId } = job.data;
-  console.log('Retrying to return SOL to Wallet B:', walletBPublicKeyString);
-  await returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId);
-}, { connection: redisOptions });
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
@@ -112,34 +102,34 @@ class BalanceChecker {
     }
   }
 
-  async returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId) {
+  async returnSolToWalletB(walletBPublicKeyString) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
+      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
+
+      // Subtract a small amount to cover the transaction fee
+      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: solBalanceA,
+          lamports: lamportsToSend
         })
       );
 
-      const signature = await this.connection.sendTransaction(transaction, [this.walletAKeypair]);
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        transaction,
+        [this.walletAKeypair]
+      );
+
       console.log('Transaction signature:', signature);
 
-      await this.connection.confirmTransaction(signature);
-      console.log('Transaction confirmed:', signature);
-
-      // Notify user about the successful return
-      await this.telegramNotifier.sendMessage(chatId, `🔄 Returned ${(solBalanceA / LAMPORTS_PER_SOL).toFixed(9)} SOL to sender. Transaction signature: \`${signature}\``);
+      return signature;
     } catch (error) {
-      if (error.message.includes('TransactionExpiredBlockheightExceededError')) {
-        console.error('Error returning SOL to Wallet B:', error.message);
-        console.log(`Scheduling retry in 10 minutes...`);
-        await retryQueue.add('retryReturnSol', { walletBPublicKeyString, solBalanceA, chatId }, { delay: 10 * 60 * 1000 });
-      } else {
-        console.error('Unexpected error returning SOL to Wallet B:', error);
-        await this.telegramNotifier.sendMessage(chatId, `❌ Unexpected error during balance check: ${error.message}`);
-      }
+      console.error('Error returning SOL to Wallet B:', error);
+      this.switchRpcEndpoint();
+      throw error;
     }
   }
 
@@ -186,7 +176,7 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL(solBalanceA, 'pending');
+            message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
@@ -201,11 +191,10 @@ class BalanceChecker {
   }
 
   async sendTelegramMessage(chatId, text) {
-    const escapedText = escapeMarkdown(text); // Ensure text is escaped
     const cacheKey = `${chatId}`;
-    if (this.messageCache[cacheKey] !== escapedText) {
-      await this.telegramNotifier.sendTelegramMessage(chatId, escapedText, { parse_mode: 'MarkdownV2' });
-      this.messageCache[cacheKey] = escapedText;
+    if (this.messageCache[cacheKey] !== text) {
+      await this.telegramNotifier.sendTelegramMessage(chatId, text, { parse_mode: 'MarkdownV2' });
+      this.messageCache[cacheKey] = text;
     } else {
       console.log('Duplicate message detected, skipping send.');
     }
@@ -230,7 +219,7 @@ const worker = new Worker('transactionQueue', async job => {
     walletAPrivateKey
   );
 
-  const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId);
+  const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
   return { signature, chatId, solBalanceA, walletAPrivateKey };
 }, { connection: redisOptions });
 
@@ -242,7 +231,7 @@ worker.on('completed', async (job, result) => {
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     result.walletAPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(result.chatId, message, { parse_mode: 'MarkdownV2' });
+  await balanceChecker.sendTelegramMessage(result.chatId, message);
 });
 
 worker.on('failed', (job, err) => {
