@@ -101,86 +101,36 @@ class BalanceChecker {
     }
   }
 
-  async returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId) {
+  async returnSolToWalletB(walletBPublicKeyString) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
-      const lamportsToSend = solBalanceA * 1_000_000_000 - 10000; // Subtract a small amount to cover the transaction fee and rent
-  
-      // Ensure wallet B has enough funds for rent-exempt balance
-      const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
-      const walletBBalance = await this.connection.getBalance(walletBPublicKey);
-  
-      if (walletBBalance < minBalanceForRentExemption) {
-        console.error('Insufficient funds for rent-exemption in Wallet B');
-        return;
-      }
-  
+      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
+
+      // Subtract a small amount to cover the transaction fee
+      const lamportsToSend = (balanceA * 1_000_000_000) - 25000; // Leave some lamports for fees
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: lamportsToSend,
+          lamports: lamportsToSend
         })
       );
-  
-      const latestBlockhash = await this.connection.getLatestBlockhash();
-      transaction.recentBlockhash = latestBlockhash.blockhash;
-      transaction.feePayer = this.walletAKeypair.publicKey;
-  
-      let retries = 5;
-      const retryDelay = [2000, 4000, 8000, 16000, 32000]; // Exponential backoff delays
-  
-      while (retries > 0) {
-        try {
-          const signature = await sendAndConfirmTransaction(
-            this.connection,
-            transaction,
-            [this.walletAKeypair],
-            { commitment: 'confirmed' }
-          );
-  
-          console.log('Transaction signature:', signature);
-  
-          // Notify user about the successful return
-          await this.telegramNotifier.sendMessage(
-            chatId,
-            `🔄 Returned ${(solBalanceA / 1_000_000_000).toFixed(9)} SOL to sender. Transaction signature: \`${signature}\``
-          );
-  
-          return signature;
-        } catch (error) {
-          if (error.message.includes('BlockheightExceeded') || error.message.includes('TransactionExpired')) {
-            console.error('Transaction expired, retrying...', error);
-            retries -= 1;
-            await new Promise(resolve => setTimeout(resolve, retryDelay[5 - retries])); // Wait before retrying
-          } else if (error.message.includes('insufficient funds')) {
-            console.error('Insufficient funds error, cannot proceed:', error);
-            await this.telegramNotifier.sendMessage(
-              chatId,
-              `❌ Transaction failed due to insufficient funds.`
-            );
-            return;
-          } else {
-            throw error;
-          }
-        }
-      }
-  
-      // If retries are exhausted, add job to retryQueue
-      await retryQueue.add(
-        'retryReturnSol',
-        { walletBPublicKeyString, solBalanceA, chatId },
-        { delay: 10 * 60 * 1000 } // Retry after 10 minutes
+
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        transaction,
+        [this.walletAKeypair]
       );
-  
+
+      console.log('Transaction signature:', signature);
+
+      return signature;
     } catch (error) {
       console.error('Error returning SOL to Wallet B:', error);
-      await this.telegramNotifier.sendMessage(
-        chatId,
-        `❌ Unexpected error during balance check: ${error.message}`
-      );
+      this.switchRpcEndpoint();
+      throw error;
     }
-  }  
+  }
 
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
@@ -224,7 +174,7 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
+            message += MESSAGES.RETURNED_SOL(solBalanceA, 'pending...');
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
