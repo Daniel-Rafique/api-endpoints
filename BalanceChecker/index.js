@@ -59,7 +59,7 @@ class BalanceChecker {
         programId: TOKEN_PROGRAM_ID,
       });
   
-      console.log('Fetched Token Accounts:', tokenAccounts);
+      console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
   
       if (tokenAccounts.value.length === 0) {
         throw new Error('TokenAccountNotFoundError');
@@ -89,7 +89,6 @@ class BalanceChecker {
     }
   }
   
-
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
   }
