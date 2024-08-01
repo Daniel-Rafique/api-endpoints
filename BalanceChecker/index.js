@@ -206,17 +206,17 @@ class BalanceChecker {
     }
   }
 
+  async processRetryJob(job) {
+    const { walletBPublicKeyString, solBalanceA, chatId } = job.data;
+    console.log('Retrying to return SOL to Wallet B:', walletBPublicKeyString);
+    await this.returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId);
+  }
+
   startPeriodicCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     cron.schedule('*/1 * * * *', async () => {
       console.log('Running periodic balance check...');
       await this.runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
     });
-  }
-
-  async processRetryJob(job) {
-    const { walletBPublicKeyString, solBalanceA, chatId } = job.data;
-    console.log('Retrying to return SOL to Wallet B:', walletBPublicKeyString);
-    await this.returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId);
   }
 }
 
