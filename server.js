@@ -75,7 +75,6 @@ app.post('/api/create', async (req, res) => {
         const minimumSolBalance = userData.boostCost; 
         const walletAPublicKey = userData.wallet;
         const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
-        const tokenSymbol = userData.tokenDetails.symbol;
 
         if(userData.boostType === 'ultra_boost') {
             tokenMintAddress = userData.contractAddress;
@@ -90,7 +89,7 @@ app.post('/api/create', async (req, res) => {
             telegramNotifier,
             walletASecretKey
         );
-        balanceChecker.startPeriodicCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress, tokenSymbol);
+        balanceChecker.startPeriodicCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
         telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
         res.status(200).send('Checking balance...');
     } catch (error) {
