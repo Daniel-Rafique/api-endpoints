@@ -1,27 +1,25 @@
 require('dotenv').config();
 const admin = require('firebase-admin');
 const serviceAccount = require('./.config/firebaseServiceAccountKey.json');
-
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-});
-
-const DataManager = require('./Database');
 const fs = require('fs');
 const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
+const DataManager = require('./Database');
 const BalanceChecker = require('./Balance');
 const TelegramNotifier = require('./Telegram');
 
 // Initialize Firebase Admin with service account
-const dataManager = new DataManager();
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
 
+const dataManager = new DataManager();
 const app = express();
 const port = process.env.PORT;
 
-// Load environment variables
+// Load environment variables for SSL
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
 const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
 
@@ -77,7 +75,7 @@ app.post('/api/create', async (req, res) => {
 
         if(userData.boostType === 'ultra_boost') {
             tokenMintAddress = userData.contractAddress;
-        }else{
+        } else {
             tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
         }
 
@@ -97,6 +95,7 @@ app.post('/api/create', async (req, res) => {
     }
 });
 
+// Create HTTPS server
 const server = https.createServer(options, app);
 server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
 server.listen(port, () => {
