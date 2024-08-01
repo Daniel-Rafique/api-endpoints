@@ -108,7 +108,7 @@ class BalanceChecker {
       const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
 
       // Subtract a small amount to cover the transaction fee
-      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
+      const lamportsToSend = (balanceA * 1_000_000_000) - 25000; // Leave some lamports for fees
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
