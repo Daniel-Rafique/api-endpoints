@@ -158,7 +158,7 @@ class BalanceChecker {
             console.log('Retry successful, transaction confirmed:', signature);
 
             // Notify user about the successful return
-            await this.sendTelegramMessage(chatId, `🔄 Returned ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender. Transaction signature: ${signature}`);
+            await this.sendTelegramMessage(chatId, `🔄 Returned ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender. Transaction signature: ${escapeMarkdown(signature)}`);
             return;
           } catch (retryError) {
             console.error('Retry failed:', retryError.message);
@@ -166,10 +166,10 @@ class BalanceChecker {
         }
 
         // Notify user about the failure after retries
-        await this.sendTelegramMessage(chatId, `❌ Failed to return ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender after multiple attempts. Please try again later.`);
+        // await this.sendTelegramMessage(chatId, `❌ Failed to return ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender after multiple attempts. Please try again later.`);
       } else {
         console.error('Unexpected error returning SOL to Wallet B:', error);
-        await this.sendTelegramMessage(chatId, `❌ Unexpected error during balance check: ${error.message}`);
+        // await this.sendTelegramMessage(chatId, `❌ Unexpected error during balance check: ${error.message}`);
       }
     }
   }
