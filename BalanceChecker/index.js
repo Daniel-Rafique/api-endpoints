@@ -61,7 +61,7 @@ class BalanceChecker {
   
       console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
   
-      if (tokenAccounts.value.length === 0) {
+      if (!tokenAccounts) {
         console.warn('No token accounts found.');
         return 0; // Return 0 to indicate no tokens found
       }
