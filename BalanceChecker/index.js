@@ -79,6 +79,9 @@ class BalanceChecker {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
       const tokenMintAddress = new PublicKey(tokenMintAddressString);
   
+      console.log('Converted Wallet Public Key:', walletBPublicKey.toBase58());
+      console.log('Converted Token Mint Address:', tokenMintAddress.toBase58());
+  
       // Use the connection from the class instance
       const { connection } = this;
       const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
@@ -104,7 +107,6 @@ class BalanceChecker {
       throw error;
     }
   }
-  
   
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
