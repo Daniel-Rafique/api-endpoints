@@ -15,6 +15,7 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./TelegramNotifier');
+const DataManager = require('./Database');
 
 // Initialize Firebase Admin with service account
 const dataManager = new DataManager();
