@@ -13,7 +13,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const DataManager = require('./Database');
-const BalanceChecker = require('./Balance');
+const BalanceChecker = require('./BalanceProcessor');
 const TelegramNotifier = require('./Telegram');
 
 const dataManager = new DataManager();
