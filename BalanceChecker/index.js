@@ -18,6 +18,15 @@ const redisOptions = {
 
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 
+const isValidPublicKey = (publicKeyString) => {
+  try {
+    new solanaWeb3.PublicKey(publicKeyString);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
     console.log('Wallet A Private Key:', walletAPrivateKey);
@@ -47,8 +56,13 @@ class BalanceChecker {
     }
   }
 
+
+
   async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
+      if (!isValidPublicKey(walletPublicKeyString) || !isValidPublicKey(tokenMintAddress)) {
+        throw new Error('Invalid public key input');
+      }
       // Use the connection from the class instance
       const { connection } = this;
 
@@ -62,7 +76,7 @@ class BalanceChecker {
         new PublicKey(tokenMintAddress),
         publicKey
       );
-      
+
       // Fetch the token account balance
       const tokenAccountInfo = await connection.getParsedAccountInfo(associatedTokenAddress);
 
