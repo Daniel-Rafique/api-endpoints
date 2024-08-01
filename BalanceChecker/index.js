@@ -100,36 +100,90 @@ class BalanceChecker {
     }
   }
 
-  async returnSolToWalletB(walletBPublicKeyString) {
+  async returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
-      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
-
-      // Subtract a small amount to cover the transaction fee
-      const lamportsToSend = (balanceA * 1_000_000_000) - 10000; // Leave some lamports for fees
+      const lamportsToSend = solBalanceA * 1_000_000_000 - 10000; // Subtract a small amount to cover the transaction fee and rent
+  
+      // Ensure wallet B has enough funds for rent-exempt balance
+      const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+      const walletBBalance = await this.connection.getBalance(walletBPublicKey);
+  
+      if (walletBBalance < minBalanceForRentExemption) {
+        console.error('Insufficient funds for rent-exemption in Wallet B');
+        await this.telegramNotifier.sendMessage(
+          chatId,
+          `❌ Wallet B does not have enough funds to be rent-exempt. Minimum required: ${(minBalanceForRentExemption / 1_000_000_000).toFixed(9)} SOL.`
+        );
+        return;
+      }
+  
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: lamportsToSend
+          lamports: lamportsToSend,
         })
       );
-
-      const signature = await sendAndConfirmTransaction(
-        this.connection,
-        transaction,
-        [this.walletAKeypair]
+  
+      const latestBlockhash = await this.connection.getLatestBlockhash();
+      transaction.recentBlockhash = latestBlockhash.blockhash;
+      transaction.feePayer = this.walletAKeypair.publicKey;
+  
+      let retries = 5;
+      const retryDelay = [2000, 4000, 8000, 16000, 32000]; // Exponential backoff delays
+  
+      while (retries > 0) {
+        try {
+          const signature = await sendAndConfirmTransaction(
+            this.connection,
+            transaction,
+            [this.walletAKeypair],
+            { commitment: 'confirmed' }
+          );
+  
+          console.log('Transaction signature:', signature);
+  
+          // Notify user about the successful return
+          await this.telegramNotifier.sendMessage(
+            chatId,
+            `🔄 Returned ${(solBalanceA / 1_000_000_000).toFixed(9)} SOL to sender. Transaction signature: \`${signature}\``
+          );
+  
+          return signature;
+        } catch (error) {
+          if (error.message.includes('BlockheightExceeded') || error.message.includes('TransactionExpired')) {
+            console.error('Transaction expired, retrying...', error);
+            retries -= 1;
+            await new Promise(resolve => setTimeout(resolve, retryDelay[5 - retries])); // Wait before retrying
+          } else if (error.message.includes('insufficient funds')) {
+            console.error('Insufficient funds error, cannot proceed:', error);
+            await this.telegramNotifier.sendMessage(
+              chatId,
+              `❌ Transaction failed due to insufficient funds.`
+            );
+            return;
+          } else {
+            throw error;
+          }
+        }
+      }
+  
+      // If retries are exhausted, add job to retryQueue
+      await retryQueue.add(
+        'retryReturnSol',
+        { walletBPublicKeyString, solBalanceA, chatId },
+        { delay: 10 * 60 * 1000 } // Retry after 10 minutes
       );
-
-      console.log('Transaction signature:', signature);
-
-      return signature;
+  
     } catch (error) {
       console.error('Error returning SOL to Wallet B:', error);
-      this.switchRpcEndpoint();
-      throw error;
+      await this.telegramNotifier.sendMessage(
+        chatId,
+        `❌ Unexpected error during balance check: ${error.message}`
+      );
     }
-  }
+  }  
 
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
