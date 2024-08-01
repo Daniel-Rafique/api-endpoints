@@ -18,10 +18,10 @@ const redisOptions = {
 
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 
-const isValidPublicKey = (publicKeyString) => {
+const isValidPublicKey = (key) => {
   try {
-    new solanaWeb3.PublicKey(publicKeyString);
-    return true;
+    const decoded = bs58.decode(key);
+    return decoded.length === 32;
   } catch (error) {
     return false;
   }
@@ -56,13 +56,20 @@ class BalanceChecker {
     }
   }
 
-
-
   async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
-      if (!isValidPublicKey(walletPublicKeyString) || !isValidPublicKey(tokenMintAddress)) {
-        throw new Error('Invalid public key input');
+      console.log('Checking token balance...');
+      console.log('Wallet Public Key:', walletPublicKeyString);
+      console.log('Token Mint Address:', tokenMintAddress);
+
+      if (!isValidPublicKey(walletPublicKeyString)) {
+        throw new Error(`Invalid public key input: ${walletPublicKeyString}`);
       }
+
+      if (!isValidPublicKey(tokenMintAddress)) {
+        throw new Error(`Invalid token mint address input: ${tokenMintAddress}`);
+      }
+
       // Use the connection from the class instance
       const { connection } = this;
 
