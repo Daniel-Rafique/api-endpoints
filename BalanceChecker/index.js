@@ -85,12 +85,6 @@ class BalanceChecker {
       throw error;
     }
   }
-  
-  
-  
-  async sendTelegramMessage(chatId, text) {
-    await this.telegramNotifier.sendTelegramMessage(chatId, text);
-  }
 
   async getTransactionHistory(walletAPublicKeyString) {
     try {
@@ -158,7 +152,7 @@ class BalanceChecker {
       const isSolValid = solBalanceA >= minimumSolBalance;
 
       // Check Token balance of Wallet B
-      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
+      const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), minimumTokenBalance, tokenMintAddress);
       console.log('Wallet B Token balance:', tokenBalanceB);
 
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
@@ -190,6 +184,16 @@ class BalanceChecker {
     } catch (error) {
       console.error('Error during balance check:', error);
       await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message));
+    }
+  }
+
+  async sendTelegramMessage(chatId, text) {
+    const cacheKey = `${chatId}`;
+    if (this.messageCache[cacheKey] !== text) {
+      await this.telegramNotifier.sendTelegramMessage(chatId, text);
+      this.messageCache[cacheKey] = text;
+    } else {
+      console.log('Duplicate message detected, skipping send.');
     }
   }
 
