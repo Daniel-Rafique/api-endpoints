@@ -111,10 +111,6 @@ class BalanceChecker {
   
       if (walletBBalance < minBalanceForRentExemption) {
         console.error('Insufficient funds for rent-exemption in Wallet B');
-        await this.telegramNotifier.sendMessage(
-          chatId,
-          `❌ Wallet B does not have enough funds to be rent-exempt. Minimum required: ${(minBalanceForRentExemption / 1_000_000_000).toFixed(9)} SOL.`
-        );
         return;
       }
   
