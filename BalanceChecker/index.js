@@ -9,6 +9,10 @@ const TelegramNotifier = require('../TelegramNotifier');
 const WalletProcessor = require('../WalletProcessor'); // Import WalletProcessor
 const { escapeMarkdown } = require('../utils');
 
+this.retryQueue = new Queue('retryQueue');
+new QueueScheduler('retryQueue');
+new Worker('retryQueue', this.processRetryJob.bind(this));
+
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -54,33 +58,33 @@ class BalanceChecker {
       console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenMintPublicKey = new PublicKey(tokenMintAddress);
-  
+
       console.log('Validated Wallet Public Key:', walletPublicKey.toString());
       console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
-  
+
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
         programId: TOKEN_PROGRAM_ID,
       });
-  
+
       console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
-  
+
       if (!tokenAccounts) {
         console.warn('No token accounts found.');
         return 0; // Return 0 to indicate no tokens found
       }
-  
+
       const tokenAccount = tokenAccounts.value.find(
         account => account.account.data.parsed.info.owner === walletPublicKey.toString()
       );
-  
+
       if (!tokenAccount) {
         console.warn('No token account matching the mint address found.');
         return 0; // Return 0 to indicate no tokens found
       }
-  
+
       const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
       console.log('Token Balance: ', tokenBalance);
-  
+
       return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
@@ -103,34 +107,34 @@ class BalanceChecker {
     }
   }
 
-  async returnSolToWalletB(walletBPublicKeyString) {
+  async returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
-      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
-
-      // Subtract a small amount to cover the transaction fee
-      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: lamportsToSend
+          lamports: solBalanceA,
         })
       );
 
-      const signature = await sendAndConfirmTransaction(
-        this.connection,
-        transaction,
-        [this.walletAKeypair]
-      );
-
+      const signature = await this.connection.sendTransaction(transaction, [this.walletAKeypair]);
       console.log('Transaction signature:', signature);
 
-      return signature;
+      await this.connection.confirmTransaction(signature);
+      console.log('Transaction confirmed:', signature);
+
+      // Notify user about the successful return
+      await this.telegramNotifier.sendMessage(chatId, `🔄 Returned ${(solBalanceA / LAMPORTS_PER_SOL).toFixed(9)} SOL to sender. Transaction signature: \`${signature}\``);
     } catch (error) {
-      console.error('Error returning SOL to Wallet B:', error);
-      this.switchRpcEndpoint();
-      throw error;
+      if (error instanceof TransactionExpiredBlockheightExceededError) {
+        console.error('Error returning SOL to Wallet B:', error.message);
+        console.log(`Scheduling retry in 10 minutes...`);
+        await this.retryQueue.add('retryReturnSol', { walletBPublicKeyString, solBalanceA, chatId }, { delay: 10 * 60 * 1000 });
+      } else {
+        console.error('Unexpected error returning SOL to Wallet B:', error);
+        await this.telegramNotifier.sendMessage(chatId, `❌ Unexpected error during balance check: ${error.message}`);
+      }
     }
   }
 
@@ -187,7 +191,7 @@ class BalanceChecker {
       await this.sendTelegramMessage(chatId, message, { parse_mode: 'MarkdownV2' });
     } catch (error) {
       console.error('Error during balance check:', error);
-      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message), { parse_mode: 'MarkdownV2' } );
+      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message), { parse_mode: 'MarkdownV2' });
     }
   }
 
@@ -207,6 +211,12 @@ class BalanceChecker {
       console.log('Running periodic balance check...');
       await this.runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
     });
+  }
+
+  async processRetryJob(job) {
+    const { walletBPublicKeyString, solBalanceA, chatId } = job.data;
+    console.log('Retrying to return SOL to Wallet B:', walletBPublicKeyString);
+    await this.returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId);
   }
 }
 
