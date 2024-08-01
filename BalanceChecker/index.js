@@ -61,35 +61,35 @@ class BalanceChecker {
       console.log('Checking token balance...');
       console.log('Wallet Public Key:', walletPublicKeyString);
       console.log('Token Mint Address:', tokenMintAddress);
-
+  
       if (!isValidPublicKey(walletPublicKeyString)) {
         throw new Error(`Invalid public key input: ${walletPublicKeyString}`);
       }
-
+  
       if (!isValidPublicKey(tokenMintAddress)) {
         throw new Error(`Invalid token mint address input: ${tokenMintAddress}`);
       }
-
+  
       // Use the connection from the class instance
       const { connection } = this;
-
+  
       // Convert the public key string to a PublicKey object
-      const publicKey = new PublicKey(walletPublicKeyString);
-      console.log('Public Key object created:', publicKey.toString());
-
+      const walletPublicKey = new PublicKey(walletPublicKeyString);
+      console.log('Public Key object created:', walletPublicKey.toString());
+  
       // Get the associated token address for the SPL token
-      const associatedTokenAddress = await splToken.getAssociatedTokenAddress(
-        splToken.ASSOCIATED_TOKEN_PROGRAM_ID,
-        splToken.TOKEN_PROGRAM_ID,
+      const associatedTokenAddress = await getAssociatedTokenAddress(
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+        TOKEN_PROGRAM_ID,
         new PublicKey(tokenMintAddress),
-        publicKey
+        walletPublicKey
       );
-
+  
       console.log('Associated Token Address:', associatedTokenAddress.toString());
-
+  
       // Fetch the token account balance
       const tokenAccountInfo = await connection.getParsedAccountInfo(associatedTokenAddress);
-
+  
       // Check if the account exists and get the balance
       let tokenBalance = 0;
       if (tokenAccountInfo.value) {
@@ -99,7 +99,7 @@ class BalanceChecker {
       } else {
         console.log('Token account does not exist or no data found.');
       }
-
+  
       console.log('Token Balance: ', tokenBalance);
       return tokenBalance;
     } catch (error) {
@@ -108,6 +108,7 @@ class BalanceChecker {
       throw error;
     }
   }
+  
 
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
