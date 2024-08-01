@@ -13,16 +13,7 @@ const redisOptions = {
   port: 6379, // Replace with your Redis port
 };
 
-const isValidPublicKey = (key) => {
-  try {
-    const decoded = bs58.decode(key);
-    console.log('Decoded length:', decoded.length); // Should be 32
-    return decoded.length === 32;
-  } catch (error) {
-    console.error('Error decoding key:', error);
-    return false;
-  }
-};
+const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 
