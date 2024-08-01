@@ -89,6 +89,7 @@ class BalanceChecker {
     }
   }
   
+  
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
   }
