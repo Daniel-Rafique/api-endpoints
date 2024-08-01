@@ -92,8 +92,33 @@ class BalanceChecker {
       console.log('Associated Token Address:', associatedTokenAddress.toBase58());
 
       // Fetch the token account balance
-      const tokenAccountBalance = await connection.getTokenAccountBalance(associatedTokenAddress);
-      console.log('Token Account Balance:', tokenAccountBalance);
+      let tokenAccountBalance;
+      try {
+        tokenAccountBalance = await connection.getTokenAccountBalance(associatedTokenAddress);
+        console.log('Token Account Balance:', tokenAccountBalance);
+      } catch (error) {
+        if (error.message.includes('could not find account')) {
+          console.log('Token account does not exist. Creating token account...');
+          const transaction = new Transaction().add(
+            createAssociatedTokenAccountInstruction(
+              this.walletAKeypair.publicKey,
+              associatedTokenAddress,
+              walletBPublicKey,
+              tokenMintAddress
+            )
+          );
+
+          const signature = await connection.sendTransaction(transaction, [this.walletAKeypair]);
+          await connection.confirmTransaction(signature, 'confirmed');
+          console.log('Token account created with signature:', signature);
+
+          // Fetch the token account balance again after creating the account
+          tokenAccountBalance = await connection.getTokenAccountBalance(associatedTokenAddress);
+          console.log('Token Account Balance after creation:', tokenAccountBalance);
+        } else {
+          throw error;
+        }
+      }
 
       const tokenBalance = tokenAccountBalance.value.uiAmount;
       console.log('Token Balance:', tokenBalance);
@@ -104,7 +129,7 @@ class BalanceChecker {
       throw error;
     }
   }
-  
+
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
   }
