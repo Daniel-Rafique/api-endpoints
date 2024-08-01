@@ -132,7 +132,7 @@ class BalanceChecker {
       // Notify user about the successful return
       await this.telegramNotifier.sendMessage(chatId, `🔄 Returned ${(solBalanceA / LAMPORTS_PER_SOL).toFixed(9)} SOL to sender. Transaction signature: \`${signature}\``);
     } catch (error) {
-      if (error instanceof TransactionExpiredBlockheightExceededError) {
+      if (error.message.includes('TransactionExpiredBlockheightExceededError')) {
         console.error('Error returning SOL to Wallet B:', error.message);
         console.log(`Scheduling retry in 10 minutes...`);
         await retryQueue.add('retryReturnSol', { walletBPublicKeyString, solBalanceA, chatId }, { delay: 10 * 60 * 1000 });
@@ -211,12 +211,6 @@ class BalanceChecker {
     }
   }
 
-  async processRetryJob(job) {
-    const { walletBPublicKeyString, solBalanceA, chatId } = job.data;
-    console.log('Retrying to return SOL to Wallet B:', walletBPublicKeyString);
-    await this.returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId);
-  }
-
   startPeriodicCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     cron.schedule('*/1 * * * *', async () => {
       console.log('Running periodic balance check...');
@@ -236,7 +230,7 @@ const worker = new Worker('transactionQueue', async job => {
     walletAPrivateKey
   );
 
-  const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
+  const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId);
   return { signature, chatId, solBalanceA, walletAPrivateKey };
 }, { connection: redisOptions });
 
