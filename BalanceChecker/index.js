@@ -2,17 +2,12 @@ require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const cron = require('node-cron');
-const { Queue, Worker } = require('bullmq');
+const { Queue, Worker, QueueScheduler } = require('bullmq');
 const { MESSAGES } = require('../Constants');
 const DataManager = require('../Database');
 const TelegramNotifier = require('../TelegramNotifier');
 const WalletProcessor = require('../WalletProcessor'); // Import WalletProcessor
 const { escapeMarkdown } = require('../utils');
-
-this.retryQueue = new Queue('retryQueue');
-new QueueScheduler('retryQueue');
-new Worker('retryQueue', this.processRetryJob.bind(this));
-
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -21,6 +16,13 @@ const redisOptions = {
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
+const retryQueue = new Queue('retryQueue', { connection: redisOptions });
+new QueueScheduler('retryQueue');
+new Worker('retryQueue', async job => {
+  const { walletBPublicKeyString, solBalanceA, chatId } = job.data;
+  console.log('Retrying to return SOL to Wallet B:', walletBPublicKeyString);
+  await returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId);
+}, { connection: redisOptions });
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
@@ -130,7 +132,7 @@ class BalanceChecker {
       if (error instanceof TransactionExpiredBlockheightExceededError) {
         console.error('Error returning SOL to Wallet B:', error.message);
         console.log(`Scheduling retry in 10 minutes...`);
-        await this.retryQueue.add('retryReturnSol', { walletBPublicKeyString, solBalanceA, chatId }, { delay: 10 * 60 * 1000 });
+        await retryQueue.add('retryReturnSol', { walletBPublicKeyString, solBalanceA, chatId }, { delay: 10 * 60 * 1000 });
       } else {
         console.error('Unexpected error returning SOL to Wallet B:', error);
         await this.telegramNotifier.sendMessage(chatId, `❌ Unexpected error during balance check: ${error.message}`);
