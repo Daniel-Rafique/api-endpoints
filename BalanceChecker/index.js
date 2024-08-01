@@ -17,7 +17,10 @@ const redisOptions = {
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 const retryQueue = new Queue('retryQueue', { connection: redisOptions });
-new QueueScheduler('retryQueue');
+
+new QueueScheduler('transactionQueue', { connection: redisOptions });
+new QueueScheduler('retryQueue', { connection: redisOptions });
+
 new Worker('retryQueue', async job => {
   const { walletBPublicKeyString, solBalanceA, chatId } = job.data;
   console.log('Retrying to return SOL to Wallet B:', walletBPublicKeyString);
