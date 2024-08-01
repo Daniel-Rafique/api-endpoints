@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const splToken = require('@solana/spl-token');
+const { getAccountInfo } = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
@@ -9,23 +9,14 @@ const DataManager = require('../database');
 const TelegramNotifier = require('../TelegramNotifier');
 const { escapeMarkdown } = require('../utils');
 
+const TOKEN_PROGRAM_ID = new PublicKey(process.env.TOKEN_PROGRAM_ID);
+
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
   port: 6379, // Replace with your Redis port
 };
 
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
-
-const isValidPublicKey = (key) => {
-  try {
-    const decoded = bs58.decode(key);
-    console.log('Decoded length:', decoded.length); // Should be 32
-    return decoded.length === 32;
-  } catch (error) {
-    console.error('Error decoding key:', error);
-    return false;
-  }
-};
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
@@ -58,48 +49,23 @@ class BalanceChecker {
 
   async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
-      console.log('Checking token balance...');
-      console.log('Wallet Public Key:', walletPublicKeyString);
-      console.log('Token Mint Address:', tokenMintAddress);
-  
-      if (!isValidPublicKey(walletPublicKeyString)) {
-        throw new Error(`Invalid public key input: ${walletPublicKeyString}`);
-      }
-  
-      if (!isValidPublicKey(tokenMintAddress)) {
-        throw new Error(`Invalid token mint address input: ${tokenMintAddress}`);
-      }
-  
-      // Use the connection from the class instance
-      const { connection } = this;
-  
-      // Convert the public key string to a PublicKey object
+      console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
-      console.log('Public Key object created:', walletPublicKey.toString());
-  
-      // Get the associated token address for the SPL token
-      const associatedTokenAddress = await getAssociatedTokenAddress(
-        ASSOCIATED_TOKEN_PROGRAM_ID,
-        TOKEN_PROGRAM_ID,
-        new PublicKey(tokenMintAddress),
-        walletPublicKey
-      );
-  
-      console.log('Associated Token Address:', associatedTokenAddress.toString());
-  
-      // Fetch the token account balance
-      const tokenAccountInfo = await connection.getParsedAccountInfo(associatedTokenAddress);
-  
-      // Check if the account exists and get the balance
-      let tokenBalance = 0;
-      if (tokenAccountInfo.value) {
-        const tokenAmount = tokenAccountInfo.value.data.parsed.info.tokenAmount;
-        tokenBalance = tokenAmount.uiAmount;
-        console.log('Token Amount:', tokenAmount);
-      } else {
-        console.log('Token account does not exist or no data found.');
+      const tokenMintPublicKey = new PublicKey(tokenMintAddress);
+
+      console.log('Validated Wallet Public Key:', walletPublicKey.toString());
+      console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
+
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, { programId: TOKEN_PROGRAM_ID });
+
+      if (tokenAccounts.value.length === 0) {
+        throw new Error('TokenAccountNotFoundError');
       }
-  
+
+      const tokenAccountAddress = tokenAccounts.value[0].pubkey;
+      const tokenAccountInfo = await getAccountInfo(this.connection, tokenAccountAddress);
+
+      const tokenBalance = tokenAccountInfo.amount / Math.pow(10, tokenAccountInfo.decimals);
       console.log('Token Balance: ', tokenBalance);
       return tokenBalance;
     } catch (error) {
@@ -108,7 +74,6 @@ class BalanceChecker {
       throw error;
     }
   }
-  
 
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
