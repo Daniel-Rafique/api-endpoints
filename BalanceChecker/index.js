@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
-const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } = require('@solana/spl-token');
+const { getOrCreateAssociatedTokenAccount, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } = require('@solana/spl-token');
 
 const bs58 = require('bs58');
 const cron = require('node-cron');
@@ -73,44 +73,23 @@ class BalanceChecker {
   
       // Use the connection from the class instance
       const { connection } = this;
-  
-      // Convert the public key string to a PublicKey object
-      const walletPublicKey = new PublicKey(walletBPublicKey);
-      console.log('Public Key object created:', walletPublicKey.toString());
-  
-      // Get the associated token address for the SPL token
-      const associatedTokenAddress = await getAssociatedTokenAddress(
-        ASSOCIATED_TOKEN_PROGRAM_ID,
-        TOKEN_PROGRAM_ID,
-        new PublicKey(tokenMintAddress),
-        walletPublicKey
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+        walletBPublicKey,
+        { mint: tokenMintAddress }
       );
   
-      console.log('Associated Token Address:', associatedTokenAddress.toString());
-  
-      // Fetch the token account balance
-      const tokenAccountInfo = await connection.getAccountInfo(associatedTokenAddress);
-      console.log('Token Account Info:', tokenAccountInfo);
-  
-      // Check if the account exists and get the balance
       let tokenBalance = 0;
-      if (tokenAccountInfo) {
-        const accountData = tokenAccountInfo.data;
-        const dataLayout = BufferLayout.struct([
-          BufferLayout.u8('accountType'),
-          BufferLayout.blob(32, 'mint'),
-          BufferLayout.blob(32, 'owner'),
-          BufferLayout.nu64('amount'),
-        ]);
-        const decodedData = dataLayout.decode(accountData);
-        tokenBalance = decodedData.amount / Math.pow(10, 6); // Adjust for the token's decimal places
-        console.log('Decoded Data:', decodedData);
-      } else {
-        console.log('Token account does not exist or no data found.');
+
+      if (tokenAccounts.value.length === 0) {
+        console.log(tokenAccounts)
+        console.error('No token accounts found for the provided mint.');
+        return;
       }
   
-      console.log('Token Balance: ', tokenBalance);
+      const tokenAccount = tokenAccounts.value[0];
+      tokenBalance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
       return tokenBalance;
+
     } catch (error) {
       console.error('Error checking token balance:', error);
       throw error;
