@@ -1,14 +1,16 @@
 const { escapeMarkdown } = require('../utils');
 
+const MESSAGES = {
+  BALANCE_CHECK_REPORT: '🔍 Balance Check Report:\n',
+  SOL_BALANCE_A: (balance) => `💰 SOL Balance is: \`${balance.toFixed(9)} SOL\`\n`,
+  TOKEN_BALANCE_B: (balance) => `🪙 Token Balance of sender: \`${balance} tokens\`\n`,
+  SUFFICIENT_BALANCE: '✅ Both SOL and Token balances are sufficient.\n',
+  INSUFFICIENT_SOL: (minBalance) => `❌ The SOL balance does not meet the required minimum of \`${minBalance} SOL\`.\n`,
+  INSUFFICIENT_TOKEN: (minBalance) => `❌ The Token balance does not meet the required minimum of \`${minBalance} tokens\`.\n`,
+  RETURNED_SOL: (amount, signature) => `🔄 Returned \`${amount.toFixed(9)} SOL\` to sender. Transaction signature: \`${escapeMarkdown(signature)}\`\n`,
+  ERROR_DURING_CHECK: (error) => `❌ Error during balance check: \`${escapeMarkdown(error)}\`.\n`
+};
+
 module.exports = {
-  MESSAGES: {
-    BALANCE_CHECK_REPORT: '🔍 *Balance Update* 🔍\n\n',
-    SOL_BALANCE_A: (solBalance) => `💰 Your Balance is: ${solBalance.toFixed(9)} SOL\n`,
-    TOKEN_BALANCE_B: (tokenBalance) => `🪙 Token Balance of sender: ${tokenBalance} tokens\n`,
-    SUFFICIENT_BALANCE: '✅ Both SOL balance and Token balance are sufficient - activating...\n',
-    INSUFFICIENT_SOL: (minimumSolBalance) => `❌ Your SOL balance does not meet the required minimum of ${minimumSolBalance} SOL.\n`,
-    INSUFFICIENT_TOKEN: (minimumTokenBalance) => `❌ Sender Token balance does not meet the required minimum of ${minimumTokenBalance} tokens.\n`,
-    RETURNED_SOL: (solBalance, signature) => `🔄 Returned ${solBalance} SOL to sender. Transaction signature: ${escapeMarkdown(signature)}\n`,
-    ERROR_DURING_CHECK: (errorMessage) => `❌ Error during balance check: ${escapeMarkdown(errorMessage)}\n`,
-  },
+  MESSAGES,
 };
