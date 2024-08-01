@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, solanaWeb3 } = require('@solana/web3.js');
+const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
 const splToken = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
@@ -49,19 +49,20 @@ class BalanceChecker {
 
   async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
     try {
-      // Create a connection to the Solana cluster
-      const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'), 'confirmed');
+      // Use the connection from the class instance
+      const { connection } = this;
 
       // Convert the public key string to a PublicKey object
-      const publicKey = new solanaWeb3.PublicKey(walletPublicKeyString);
+      const publicKey = new PublicKey(walletPublicKeyString);
 
       // Get the associated token address for the SPL token
       const associatedTokenAddress = await splToken.getAssociatedTokenAddress(
         splToken.ASSOCIATED_TOKEN_PROGRAM_ID,
         splToken.TOKEN_PROGRAM_ID,
-        new solanaWeb3.PublicKey(tokenMintAddress),
+        new PublicKey(tokenMintAddress),
         publicKey
       );
+      
       // Fetch the token account balance
       const tokenAccountInfo = await connection.getParsedAccountInfo(associatedTokenAddress);
 
