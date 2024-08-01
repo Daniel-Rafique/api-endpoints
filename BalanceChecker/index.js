@@ -60,23 +60,28 @@ class BalanceChecker {
       console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenMintPublicKey = new PublicKey(tokenMintAddress);
-
+  
       console.log('Validated Wallet Public Key:', walletPublicKey.toString());
       console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
-
+  
       // Get all token accounts owned by the wallet
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
-        mint: tokenMintPublicKey,
+        programId: TOKEN_PROGRAM_ID,
       });
-
+  
       if (tokenAccounts.value.length === 0) {
         throw new Error('TokenAccountNotFoundError');
       }
-
-      const tokenAccountAddress = tokenAccounts.value[0].pubkey;
-      const tokenAmount = await this.connection.getTokenAccountBalance(tokenAccountAddress);
-
-      const tokenBalance = tokenAmount.value.amount / Math.pow(10, tokenAmount.value.decimals);
+  
+      const tokenAccount = tokenAccounts.value.find(
+        account => account.account.data.parsed.info.mint === tokenMintPublicKey.toString()
+      );
+  
+      if (!tokenAccount) {
+        throw new Error('TokenAccountNotFoundError');
+      }
+  
+      const tokenBalance = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
       console.log('Token Balance: ', tokenBalance);
       return tokenBalance;
     } catch (error) {
@@ -85,8 +90,7 @@ class BalanceChecker {
       throw error;
     }
   }
-
-
+  
   async sendTelegramMessage(chatId, text) {
     await this.telegramNotifier.sendTelegramMessage(chatId, text);
   }
