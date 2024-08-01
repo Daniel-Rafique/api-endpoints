@@ -9,25 +9,14 @@ const TelegramNotifier = require('../TelegramNotifier');
 const WalletProcessor = require('../WalletProcessor'); // Import WalletProcessor
 const { escapeMarkdown } = require('../utils');
 
+
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
   port: 6379, // Replace with your Redis port
 };
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-const transactionQueue = new Queue('transactionQueue', { 
-  connection: redisOptions,
-  defaultJobOptions: {
-    attempts: 5,
-    backoff: {
-      type: 'exponential',
-      delay: 10000, // 10 seconds delay between retries
-    },
-    timeout: 30000, // 30 seconds timeout for each job
-    removeOnComplete: true,
-    removeOnFail: true,
-  }
-});
+const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
@@ -114,96 +103,66 @@ class BalanceChecker {
     }
   }
 
-  async returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId) {
+  async returnSolToWalletB(walletBPublicKeyString) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
+      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
+
+      // Subtract a small amount to cover the transaction fee
+      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: solBalanceA,
+          lamports: lamportsToSend
         })
       );
 
-      const signature = await this.connection.sendTransaction(transaction, [this.walletAKeypair]);
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        transaction,
+        [this.walletAKeypair]
+      );
+
       console.log('Transaction signature:', signature);
 
-      await this.connection.confirmTransaction(signature);
-      console.log('Transaction confirmed:', signature);
-
-      // Notify user about the successful return
-      await this.sendTelegramMessage(chatId, `🔄 Returned ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender. Transaction signature: ${signature}`);
+      return signature;
     } catch (error) {
-      if (error instanceof TransactionExpiredBlockheightExceededError) {
-        console.error('Error returning SOL to Wallet B:', error.message);
-
-        // Implement retry logic
-        let retries = 3;
-        while (retries > 0) {
-          try {
-            retries--;
-            const walletBPublicKey = new PublicKey(walletBPublicKeyString);
-            const transaction = new Transaction().add(
-              SystemProgram.transfer({
-                fromPubkey: this.walletAKeypair.publicKey,
-                toPubkey: walletBPublicKey,
-                lamports: solBalanceA,
-              })
-            );
-
-            const signature = await this.connection.sendTransaction(transaction, [this.walletAKeypair]);
-            console.log('Retrying transaction, signature:', signature);
-
-            await this.connection.confirmTransaction(signature);
-            console.log('Retry successful, transaction confirmed:', signature);
-
-            // Notify user about the successful return
-            await this.sendTelegramMessage(chatId, `🔄 Returned ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender. Transaction signature: ${escapeMarkdown(signature)}`);
-            return;
-          } catch (retryError) {
-            console.error('Retry failed:', retryError.message);
-          }
-        }
-
-        // Notify user about the failure after retries
-        // await this.sendTelegramMessage(chatId, `❌ Failed to return ${solBalanceA / LAMPORTS_PER_SOL} SOL to sender after multiple attempts. Please try again later.`);
-      } else {
-        console.error('Unexpected error returning SOL to Wallet B:', error);
-        // await this.sendTelegramMessage(chatId, `❌ Unexpected error during balance check: ${error.message}`);
-      }
+      console.error('Error returning SOL to Wallet B:', error);
+      this.switchRpcEndpoint();
+      throw error;
     }
   }
-
 
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
       const transaction = await this.getTransactionHistory(walletAPublicKeyString);
       console.log('Transaction:', transaction);
-  
+
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
         key => key.toString() !== walletAPublicKeyString && key.toString() !== this.walletAKeypair.publicKey.toString()
       );
-  
+
       if (!walletBPublicKey) {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
-  
+
       // Check SOL balance of Wallet A
       const solBalanceA = await this.checkSolBalance(walletAPublicKeyString);
       console.log('Wallet A SOL balance:', solBalanceA);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSolBalance;
-  
+
       // Check Token balance of Wallet B
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
       console.log('Wallet B Token balance:', tokenBalanceB);
-  
+
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
-  
+
       console.log('SOL balance:', solBalanceA, 'Token balance:', tokenBalanceB);
-  
+
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
         await this.walletProcessor.addJob({ chatId });
@@ -218,20 +177,19 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL(solBalanceA, 'Pending...');
+            message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
         }
       }
-  
+
       await this.sendTelegramMessage(chatId, message, { parse_mode: 'MarkdownV2' });
     } catch (error) {
       console.error('Error during balance check:', error);
-      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message), { parse_mode: 'MarkdownV2' });
+      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message), { parse_mode: 'MarkdownV2' } );
     }
   }
-  
 
   async sendTelegramMessage(chatId, text) {
     const escapedText = escapeMarkdown(text); // Ensure text is escaped
@@ -242,9 +200,9 @@ class BalanceChecker {
     } else {
       console.log('Duplicate message detected, skipping send.');
     }
-  }  
+  }
 
-  startPeriodicCheck(chatId, walletAPublicKeyString, minimumSolBalance, tokenMintAddress) {
+  startPeriodicCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     cron.schedule('*/1 * * * *', async () => {
       console.log('Running periodic balance check...');
       await this.runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
