@@ -5,7 +5,7 @@ class TelegramNotifier {
     this.telegramApiUrl = `https://api.telegram.org/bot${telegramToken}`;
   }
 
-  async sendTelegramMessage(chatId, text) {
+  async sendTelegramMessage(chatId, text, options = {}) {
     const url = `${this.telegramApiUrl}/sendMessage`;
     try {
       await axios.post(url, {
@@ -18,7 +18,7 @@ class TelegramNotifier {
     }
   }
 
-  async sendTelegramBalanceCheckMessage(chatId) {
+  async sendTelegramBalanceCheckMessage(chatId, options = {}) {
     const url = `${this.telegramApiUrl}/sendMessage`;
     try {
       await axios.post(url, {
