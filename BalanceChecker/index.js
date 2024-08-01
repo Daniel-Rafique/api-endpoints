@@ -6,8 +6,7 @@ const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../Database');
 const TelegramNotifier = require('../Telegram');
-const { escapeMarkdown } = require('../utils');
-
+const { escapeMarkdown, sleep } = require('../utils');
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -16,6 +15,7 @@ const redisOptions = {
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
+const retryQueue = new Queue('retryQueue', { connection: redisOptions });
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
@@ -101,33 +101,88 @@ class BalanceChecker {
     }
   }
 
-  async returnSolToWalletB(walletBPublicKeyString) {
+  async returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
-      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
+      const lamportsToSend = solBalanceA * 1_000_000_000 - 10000; // Subtract a small amount to cover the transaction fee
 
-      // Subtract a small amount to cover the transaction fee
-      const lamportsToSend = (balanceA * 1_000_000_000) - 25000; // Leave some lamports for fees
+      // Ensure wallet B has enough funds for rent-exempt balance
+      const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+      const walletBBalance = await this.connection.getBalance(walletBPublicKey);
+
+      if (walletBBalance < minBalanceForRentExemption) {
+        console.error('Insufficient funds for rent-exemption in Wallet B');
+        await this.telegramNotifier.sendMessage(
+          chatId,
+          MESSAGES.INSUFFICIENT_FUNDS_FOR_RENT(minBalanceForRentExemption)
+        );
+        return;
+      }
+
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: lamportsToSend
+          lamports: lamportsToSend,
         })
       );
 
-      const signature = await sendAndConfirmTransaction(
-        this.connection,
-        transaction,
-        [this.walletAKeypair]
+      const latestBlockhash = await this.connection.getLatestBlockhash();
+      transaction.recentBlockhash = latestBlockhash.blockhash;
+      transaction.feePayer = this.walletAKeypair.publicKey;
+
+      let retries = 5;
+      const retryDelay = [2000, 4000, 8000, 16000, 32000]; // Exponential backoff delays
+
+      while (retries > 0) {
+        try {
+          const signature = await sendAndConfirmTransaction(
+            this.connection,
+            transaction,
+            [this.walletAKeypair],
+            { commitment: 'confirmed' }
+          );
+
+          console.log('Transaction signature:', signature);
+
+          // Notify user about the successful return
+          await this.telegramNotifier.sendMessage(
+            chatId,
+            MESSAGES.RETURNED_SOL_SUCCESS(solBalanceA, signature)
+          );
+
+          return { signature, chatId, solBalanceA, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) };
+        } catch (error) {
+          if (error.message.includes('BlockheightExceeded') || error.message.includes('TransactionExpired')) {
+            console.error('Transaction expired, retrying...', error);
+            retries -= 1;
+            await sleep(retryDelay[5 - retries]); // Wait before retrying
+          } else if (error.message.includes('insufficient funds')) {
+            console.error('Insufficient funds error, cannot proceed:', error);
+            await this.telegramNotifier.sendMessage(
+              chatId,
+              MESSAGES.INSUFFICIENT_FUNDS
+            );
+            return;
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      // If retries are exhausted, add job to retryQueue
+      await retryQueue.add(
+        'retryReturnSol',
+        { walletBPublicKeyString, solBalanceA, chatId },
+        { delay: 10 * 60 * 1000 } // Retry after 10 minutes
       );
 
-      console.log('Transaction signature:', signature);
-
-      return signature;
     } catch (error) {
       console.error('Error returning SOL to Wallet B:', error);
-      this.switchRpcEndpoint();
+      await this.telegramNotifier.sendMessage(
+        chatId,
+        MESSAGES.UNEXPECTED_ERROR(error.message)
+      );
     }
   }
 
@@ -173,7 +228,7 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL(solBalanceA, escapeMarkdown('pending..'), {parse_mode: 'Markdown'});
+            message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA);
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
@@ -216,8 +271,8 @@ const worker = new Worker('transactionQueue', async job => {
     walletAPrivateKey
   );
 
-  const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
-  return { signature, chatId, solBalanceA, walletAPrivateKey };
+  const result = await balanceChecker.returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId);
+  return result;
 }, { connection: redisOptions });
 
 worker.on('completed', async (job, result) => {
