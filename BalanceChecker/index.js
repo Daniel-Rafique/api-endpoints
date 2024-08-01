@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
+const { Connection, PublicKey, Keypair } = require('@solana/web3.js');
 const splToken = require('@solana/spl-token');
 const bs58 = require('bs58');
 const cron = require('node-cron');
@@ -8,8 +8,6 @@ const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
 const TelegramNotifier = require('../TelegramNotifier');
 const { escapeMarkdown } = require('../utils');
-
-const TOKEN_PROGRAM_ID = new PublicKey(process.env.TOKEN_PROGRAM_ID);
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -21,8 +19,10 @@ const transactionQueue = new Queue('transactionQueue', { connection: redisOption
 const isValidPublicKey = (key) => {
   try {
     const decoded = bs58.decode(key);
+    console.log('Decoded length:', decoded.length); // Should be 32
     return decoded.length === 32;
   } catch (error) {
+    console.error('Error decoding key:', error);
     return false;
   }
 };
@@ -34,7 +34,6 @@ class BalanceChecker {
     this.currentRpcIndex = 0;
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.telegramNotifier = telegramNotifier;
-    this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
   }
 
@@ -75,6 +74,7 @@ class BalanceChecker {
 
       // Convert the public key string to a PublicKey object
       const publicKey = new PublicKey(walletPublicKeyString);
+      console.log('Public Key object created:', publicKey.toString());
 
       // Get the associated token address for the SPL token
       const associatedTokenAddress = await splToken.getAssociatedTokenAddress(
@@ -84,14 +84,19 @@ class BalanceChecker {
         publicKey
       );
 
+      console.log('Associated Token Address:', associatedTokenAddress.toString());
+
       // Fetch the token account balance
       const tokenAccountInfo = await connection.getParsedAccountInfo(associatedTokenAddress);
 
       // Check if the account exists and get the balance
       let tokenBalance = 0;
-      console.log(tokenAccountInfo.value.data.parsed.info.tokenAmount.uiAmount)
       if (tokenAccountInfo.value) {
-        tokenBalance = tokenAccountInfo.value.data.parsed.info.tokenAmount.uiAmount;
+        const tokenAmount = tokenAccountInfo.value.data.parsed.info.tokenAmount;
+        tokenBalance = tokenAmount.uiAmount;
+        console.log('Token Amount:', tokenAmount);
+      } else {
+        console.log('Token account does not exist or no data found.');
       }
 
       console.log('Token Balance: ', tokenBalance);
