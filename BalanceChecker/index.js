@@ -6,8 +6,7 @@ const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../Database');
 const TelegramNotifier = require('../Telegram');
-const WalletProcessor = require('../WalletProcessor'); 
-const {escapeMarkdown} = require('../utils');
+const { escapeMarkdown } = require('../utils');
 
 
 const redisOptions = {
@@ -27,8 +26,6 @@ class BalanceChecker {
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
-    this.walletProcessor = new WalletProcessor(); // Instantiate WalletProcessor
-    this.messageCache = {}; // Simple in-memory cache
   }
 
   switchRpcEndpoint() {
@@ -103,58 +100,36 @@ class BalanceChecker {
     }
   }
 
-  async returnSolToWalletB(walletBPublicKeyString, solBalanceA, chatId) {
+  async returnSolToWalletB(walletBPublicKeyString) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
-      const lamportsToSend = solBalanceA * 1_000_000_000 - 5000; // Subtract a small amount to cover the transaction fee
-  
+      const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
+
+      // Subtract a small amount to cover the transaction fee
+      const lamportsToSend = (balanceA * 1_000_000_000) - 10000; // Leave some lamports for fees
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: lamportsToSend,
+          lamports: lamportsToSend
         })
       );
-  
-      const latestBlockhash = await this.connection.getLatestBlockhash();
-      transaction.recentBlockhash = latestBlockhash.blockhash;
-      transaction.feePayer = this.walletAKeypair.publicKey;
-  
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          const signature = await sendAndConfirmTransaction(
-            this.connection,
-            transaction,
-            [this.walletAKeypair],
-            { commitment: 'confirmed' }
-          );
-  
-          console.log('Transaction signature:', signature);
-          return signature;
-        } catch (error) {
-          if (error.message.includes('BlockheightExceeded')) {
-            console.error('Transaction expired, retrying...', error);
-            retries -= 1;
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait before retrying
-          } else {
-            throw error;
-          }
-        }
-      }
-  
-      // If retries are exhausted, add job to retryQueue
-      await retryQueue.add(
-        'retryReturnSol',
-        { walletBPublicKeyString, solBalanceA, chatId },
-        { delay: 10 * 60 * 1000 } // Retry after 10 minutes
+
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        transaction,
+        [this.walletAKeypair]
       );
-  
+
+      console.log('Transaction signature:', signature);
+
+      return signature;
     } catch (error) {
       console.error('Error returning SOL to Wallet B:', error);
+      this.switchRpcEndpoint();
+      throw error;
     }
   }
-  
 
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
@@ -187,7 +162,6 @@ class BalanceChecker {
 
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
-        await this.walletProcessor.addJob({ chatId });
       } else {
         if (!isSolValid) {
           message += MESSAGES.INSUFFICIENT_SOL(minimumSolBalance);
@@ -199,17 +173,27 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL(solBalanceA, '\\(pending\\)');
+            message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
         }
       }
 
-      await this.sendTelegramMessage(chatId, message, { parse_mode: 'MarkdownV2' });
+      await this.sendTelegramMessage(chatId, message);
     } catch (error) {
       console.error('Error during balance check:', error);
-      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message), { parse_mode: 'MarkdownV2' } );
+      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message));
+    }
+  }
+
+  async sendTelegramMessage(chatId, text) {
+    const cacheKey = `${chatId}`;
+    if (this.messageCache[cacheKey] !== text) {
+      await this.telegramNotifier.sendTelegramMessage(chatId, text);
+      this.messageCache[cacheKey] = text;
+    } else {
+      console.log('Duplicate message detected, skipping send.');
     }
   }
 
