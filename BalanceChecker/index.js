@@ -9,14 +9,25 @@ const TelegramNotifier = require('../TelegramNotifier');
 const WalletProcessor = require('../WalletProcessor'); // Import WalletProcessor
 const { escapeMarkdown } = require('../utils');
 
-
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
   port: 6379, // Replace with your Redis port
 };
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
+const transactionQueue = new Queue('transactionQueue', { 
+  connection: redisOptions,
+  defaultJobOptions: {
+    attempts: 5,
+    backoff: {
+      type: 'exponential',
+      delay: 10000, // 10 seconds delay between retries
+    },
+    timeout: 30000, // 30 seconds timeout for each job
+    removeOnComplete: true,
+    removeOnFail: true,
+  }
+});
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
@@ -187,7 +198,7 @@ class BalanceChecker {
       await this.sendTelegramMessage(chatId, message, { parse_mode: 'MarkdownV2' });
     } catch (error) {
       console.error('Error during balance check:', error);
-      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message, { parse_mode: 'MarkdownV2' } ));
+      await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message), { parse_mode: 'MarkdownV2' } );
     }
   }
 
