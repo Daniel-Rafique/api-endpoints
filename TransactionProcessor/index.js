@@ -1,7 +1,7 @@
 // TransactionProcessor.js
 const { PublicKey, Transaction, SystemProgram, sendAndConfirmTransaction } = require('@solana/web3.js');
 
-class Transaction {
+class TransactionProcessor {
   constructor(connection, walletAKeypair) {
     this.connection = connection;
     this.walletAKeypair = walletAKeypair;
@@ -45,4 +45,4 @@ class Transaction {
   }
 }
 
-module.exports = Transaction;
+module.exports = TransactionProcessor;

@@ -1,7 +1,7 @@
 // QueueProcessor.js
 const { Queue, Worker, QueueScheduler } = require('bullmq');
 
-class Queue {
+class QueueProcessor {
   constructor(redisOptions, telegramNotifier, walletAKeypair) {
     this.transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
     new QueueScheduler('transactionQueue', { connection: redisOptions });
@@ -29,4 +29,4 @@ class Queue {
   }
 }
 
-module.exports = Queue;
+module.exports = QueueProcessor;
