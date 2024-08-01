@@ -62,7 +62,8 @@ class BalanceChecker {
       console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
   
       if (tokenAccounts.value.length === 0) {
-        throw new Error('TokenAccountNotFoundError');
+        console.warn('No token accounts found.');
+        return 0; // Return 0 to indicate no tokens found
       }
   
       const tokenAccount = tokenAccounts.value.find(
@@ -70,16 +71,12 @@ class BalanceChecker {
       );
   
       if (!tokenAccount) {
-        throw new Error('TokenAccountNotFoundError');
+        console.warn('No token account matching the mint address found.');
+        return 0; // Return 0 to indicate no tokens found
       }
   
       const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
       console.log('Token Balance: ', tokenBalance);
-  
-      // Check if the token balance meets the minimum requirement
-      if (tokenBalance < minimumTokenBalance) {
-        throw new Error(`Token balance (${tokenBalance}) is less than the required minimum of ${minimumTokenBalance}`);
-      }
   
       return tokenBalance;
     } catch (error) {
@@ -88,6 +85,7 @@ class BalanceChecker {
       throw error;
     }
   }
+  
   
   
   async sendTelegramMessage(chatId, text) {
