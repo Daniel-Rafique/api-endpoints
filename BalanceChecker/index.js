@@ -26,6 +26,7 @@ class BalanceChecker {
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
+    this.messageCache = {}; // Simple in-memory cache
   }
 
   switchRpcEndpoint() {
