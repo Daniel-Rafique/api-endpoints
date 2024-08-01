@@ -90,7 +90,7 @@ app.post('/api/create', async (req, res) => {
             walletASecretKey
         );
         balanceChecker.startPeriodicCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
-        telegramNotifier.sendTelegramMessage(chatId, '🔍 Starting periodic balance check...');
+        telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} to be confirmed...`);
         res.status(200).send('Checking balance...');
     } catch (error) {
         console.error('Error processing request:', error);
