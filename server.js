@@ -6,7 +6,7 @@ admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 });
 
-const DataManager = require('./database');
+const DataManager = require('./Database');
 
 const fs = require('fs');
 const https = require('https');

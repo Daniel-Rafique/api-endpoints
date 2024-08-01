@@ -3,8 +3,8 @@ const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfi
 const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
-const { MESSAGES } = require('../constants');
-const DataManager = require('../database');
+const { MESSAGES } = require('../Constants');
+const DataManager = require('../Database');
 const TelegramNotifier = require('../TelegramNotifier');
 const WalletProcessor = require('../WalletProcessor'); // Import WalletProcessor
 

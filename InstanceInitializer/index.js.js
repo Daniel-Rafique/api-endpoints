@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const admin = require('firebase-admin');
-const DataManager = require('../database');
+const DataManager = require('../Database');
 
 class InstanceInitializer {
     constructor(basePath, instancePath) {

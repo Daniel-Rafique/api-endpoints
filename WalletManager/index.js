@@ -3,7 +3,7 @@ const bs58 = require('bs58');
 const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
 
-const DATABASE = process.env.DATABASE;
+const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 
 class WalletManager {
     constructor(projectId, keyFilename) {
