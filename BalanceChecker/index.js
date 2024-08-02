@@ -129,7 +129,7 @@ class BalanceChecker {
       const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
   
       // Calculate lamports to send, leaving enough for rent exemption and fees
-      const lamportsToSend = Math.max((balanceA * 1_000_000_000) - minBalanceForRentExemption - 10000, 0);
+      const lamportsToSend = Math.max((balanceA * 1_000_000_000) - minBalanceForRentExemption - 50000, 0);
   
       if (lamportsToSend <= 0) {
         console.log('Not enough balance to cover rent exemption and fees');
@@ -145,7 +145,7 @@ class BalanceChecker {
       );
   
       // Get the latest blockhash
-      const { blockhash } = await this.connection.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.walletAKeypair.publicKey;
   
@@ -153,14 +153,20 @@ class BalanceChecker {
         this.connection,
         transaction,
         [this.walletAKeypair],
-        { maxRetries: 5 }
+        {
+          maxRetries: 5,
+          commitment: 'confirmed',
+        }
       );
   
       console.log('Transaction signature:', signature);
       return signature;
     } catch (error) {
-      console.error('Error returning SOL to Wallet B:', error);
-      if (retryCount < 3) {
+      if (error.message.includes('block height exceeded')) {
+        console.error('Block height exceeded error. Retrying with new blockhash...');
+        return this.returnSolToWalletB(walletBPublicKeyString, retryCount);
+      } else if (retryCount < 3) {
+        console.error('Error returning SOL to Wallet B:', error);
         console.log(`Retrying (${retryCount + 1}/3)...`);
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
         return this.returnSolToWalletB(walletBPublicKeyString, retryCount + 1);
@@ -171,6 +177,7 @@ class BalanceChecker {
       }
     }
   }
+  
 
   async addToFailedTransactionsQueue(walletBPublicKeyString) {
     const failedTransaction = {
