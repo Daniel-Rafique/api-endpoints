@@ -5,7 +5,7 @@ const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../Database');
-const TelegramNotifier = require('../TelegramNotifier');
+const TelegramNotifier = require('../Telegram');
 const { escapeMarkdown } = require('../utils');
 
 
