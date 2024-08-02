@@ -6,11 +6,14 @@ const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../Database');
 const TelegramNotifier = require('../Telegram');
-const { escapeMarkdown } = require('../utils');
+const WalletProcessor = require('../WalletProcessor');
+const { RateLimiter } = require('limiter');
+const fs = require('fs').promises;
+const path = require('path');
 
 const redisOptions = {
-  host: 'localhost', // Replace with your Redis host
-  port: 6379, // Replace with your Redis port
+  host: 'localhost',
+  port: 6379,
 };
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
@@ -25,14 +28,11 @@ class BalanceChecker {
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
-    this.messageCache = {}; // Simple in-memory cache
-    this.clearCache();
-  }
-
-  // Method to clear the cache
-  clearCache() {
+    this.walletProcessor = new WalletProcessor();
     this.messageCache = {};
-    console.log('Message cache cleared on instantiation');
+    this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
+    this.failedTransactionsQueue = path.join(__dirname, 'failedTransactions.json');
+    this.processingFailedTransactions = false;
   }
 
   switchRpcEndpoint() {
@@ -40,21 +40,30 @@ class BalanceChecker {
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
   }
 
-  async checkSolBalance(publicKeyString) {
-    try {
-      const publicKey = new PublicKey(publicKeyString);
-      const balance = await this.connection.getBalance(publicKey);
-      const solBalance = balance / 1_000_000_000; // Convert lamports to SOL
-      return solBalance;
-    } catch (error) {
-      console.error('Error checking SOL balance:', error);
-      this.switchRpcEndpoint();
-      throw error;
+  async retryOperation(operation, maxRetries = 3) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await this.limiter.removeTokens(1);
+        return await operation();
+      } catch (error) {
+        if (attempt === maxRetries - 1) throw error;
+        console.log(`Attempt ${attempt + 1} failed, retrying...`);
+        this.switchRpcEndpoint();
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
     }
   }
 
+  async checkSolBalance(publicKeyString) {
+    return this.retryOperation(async () => {
+      const publicKey = new PublicKey(publicKeyString);
+      const balance = await this.connection.getBalance(publicKey);
+      return balance / 1_000_000_000;
+    });
+  }
+
   async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
-    try {
+    return this.retryOperation(async () => {
       console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenMintPublicKey = new PublicKey(tokenMintAddress);
@@ -70,7 +79,7 @@ class BalanceChecker {
 
       if (!tokenAccounts) {
         console.warn('No token accounts found.');
-        return 0; // Return 0 to indicate no tokens found
+        return 0;
       }
 
       const tokenAccount = tokenAccounts.value.find(
@@ -79,50 +88,43 @@ class BalanceChecker {
 
       if (!tokenAccount) {
         console.warn('No token account matching the mint address found.');
-        return 0; // Return 0 to indicate no tokens found
+        return 0;
       }
 
       const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
       console.log('Token Balance: ', tokenBalance);
 
       return tokenBalance;
-    } catch (error) {
-      console.error('Error checking token balance:', error);
-      this.switchRpcEndpoint();
-      throw error;
-    }
+    });
   }
 
   async getTransactionHistory(walletAPublicKeyString) {
-    try {
+    return this.retryOperation(async () => {
       const walletAPublicKey = new PublicKey(walletAPublicKeyString);
       console.log('Wallet A Public Key:', walletAPublicKey.toString());
       const signatures = await this.connection.getSignaturesForAddress(walletAPublicKey, { limit: 1 });
-      if (signatures.length === 0) {
-        console.warn('No transaction signatures found.');
-        return null;
-      }
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
       return confirmedTransaction;
-    } catch (error) {
-      console.error('Error fetching transaction history:', error);
-      this.switchRpcEndpoint();
-      throw error;
-    }
+    });
   }
 
-  async returnSolToWalletB(walletBPublicKeyString) {
+  async returnSolToWalletB(walletBPublicKeyString, retryCount = 0) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
       const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
 
       if (balanceA <= 0) {
-        console.warn('No balance to return.');
-        return;
+        console.log('Insufficient balance to return SOL');
+        return null;
       }
 
-      // Subtract a small amount to cover the transaction fee
-      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
+      const lamportsToSend = Math.max((balanceA * 1_000_000_000) - 10000, 0);
+
+      if (lamportsToSend <= 0) {
+        console.log('Not enough balance to cover fees');
+        return null;
+      }
+
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
@@ -134,25 +136,107 @@ class BalanceChecker {
       const signature = await sendAndConfirmTransaction(
         this.connection,
         transaction,
-        [this.walletAKeypair]
+        [this.walletAKeypair],
+        { maxRetries: 5 }
       );
 
       console.log('Transaction signature:', signature);
-
       return signature;
     } catch (error) {
       console.error('Error returning SOL to Wallet B:', error);
-      this.switchRpcEndpoint();
-      throw error;
+      if (retryCount < 3) {
+        console.log(`Retrying (${retryCount + 1}/3)...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        return this.returnSolToWalletB(walletBPublicKeyString, retryCount + 1);
+      } else {
+        console.error('Max retries reached. Adding to failed transactions queue.');
+        await this.addToFailedTransactionsQueue(walletBPublicKeyString);
+        throw error;
+      }
     }
+  }
+
+  async addToFailedTransactionsQueue(walletBPublicKeyString) {
+    const failedTransaction = {
+      walletBPublicKeyString,
+      timestamp: Date.now(),
+      attempts: 0
+    };
+
+    try {
+      let queue = [];
+      try {
+        const data = await fs.readFile(this.failedTransactionsQueue, 'utf8');
+        queue = JSON.parse(data);
+      } catch (err) {
+        // File doesn't exist or is empty, start with an empty queue
+      }
+
+      queue.push(failedTransaction);
+      await fs.writeFile(this.failedTransactionsQueue, JSON.stringify(queue, null, 2));
+      
+      // Trigger processing of failed transactions
+      this.processFailedTransactions();
+    } catch (err) {
+      console.error('Error adding to failed transactions queue:', err);
+    }
+  }
+
+  async processFailedTransactions() {
+    if (this.processingFailedTransactions) return;
+    this.processingFailedTransactions = true;
+
+    try {
+      let queue = [];
+      try {
+        const data = await fs.readFile(this.failedTransactionsQueue, 'utf8');
+        queue = JSON.parse(data);
+      } catch (err) {
+        // File doesn't exist or is empty
+        this.processingFailedTransactions = false;
+        return;
+      }
+
+      for (let i = 0; i < queue.length; i++) {
+        const transaction = queue[i];
+        try {
+          await this.returnSolToWalletB(transaction.walletBPublicKeyString);
+          // If successful, remove from queue
+          queue.splice(i, 1);
+          i--;
+        } catch (error) {
+          console.error('Error processing failed transaction:', error);
+          transaction.attempts++;
+          if (transaction.attempts >= 5) {
+            // After 5 attempts, flag for manual intervention
+            transaction.requiresManualIntervention = true;
+            await this.notifyAdminForManualIntervention(transaction);
+          }
+        }
+      }
+
+      // Update the queue file
+      await fs.writeFile(this.failedTransactionsQueue, JSON.stringify(queue, null, 2));
+    } catch (err) {
+      console.error('Error processing failed transactions:', err);
+    } finally {
+      this.processingFailedTransactions = false;
+    }
+  }
+
+  async notifyAdminForManualIntervention(transaction) {
+    const message = `URGENT: Manual intervention required for failed transaction.\n` +
+                    `Wallet B: ${transaction.walletBPublicKeyString}\n` +
+                    `Attempts: ${transaction.attempts}\n` +
+                    `First attempt: ${new Date(transaction.timestamp).toISOString()}`;
+    
+    // Send notification to admin (e.g., via Telegram or email)
+    await this.telegramNotifier.sendTelegramMessage(process.env.ADMIN_CHAT_ID, message);
   }
 
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
       const transaction = await this.getTransactionHistory(walletAPublicKeyString);
-      if (!transaction) {
-        throw new Error('No transaction found for Wallet A.');
-      }
       console.log('Transaction:', transaction);
 
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
@@ -163,14 +247,12 @@ class BalanceChecker {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
 
-      // Check SOL balance of Wallet A
       const solBalanceA = await this.checkSolBalance(walletAPublicKeyString);
       console.log('Wallet A SOL balance:', solBalanceA);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSolBalance;
 
-      // Check Token balance of Wallet B
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
       console.log('Wallet B Token balance:', tokenBalanceB);
 
@@ -181,6 +263,7 @@ class BalanceChecker {
 
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
+        await this.walletProcessor.addJob({ chatId });
       } else {
         if (!isSolValid) {
           message += MESSAGES.INSUFFICIENT_SOL(minimumSolBalance);
@@ -188,14 +271,17 @@ class BalanceChecker {
         if (!isTokenValid) {
           message += MESSAGES.INSUFFICIENT_TOKEN(minimumTokenBalance);
         }
-        if (!isSolValid || !isTokenValid) {
-          console.log('Returning SOL to Wallet B:', solBalanceA);
-          if (solBalanceA > 0) {
-            await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA, { parse_mode: 'MarkdownV2' });
-          } else {
-            console.log('SOL balance is 0, not returning funds.');
-          }
+        if (solBalanceA > 0) {
+          const job = await transactionQueue.add('returnSol', {
+            walletBPublicKeyString: walletBPublicKey.toString(),
+            solBalanceA,
+            chatId,
+            walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey)
+          }, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
+          message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA);
+          console.log(`Job added to queue: ${job.id}`);
+        } else {
+          console.log('SOL balance is 0, not returning funds.');
         }
       }
 
@@ -221,10 +307,15 @@ class BalanceChecker {
       console.log('Running periodic balance check...');
       await this.runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
     });
+
+    // Add a separate cron job to process failed transactions
+    cron.schedule('*/5 * * * *', async () => {
+      console.log('Processing failed transactions...');
+      await this.processFailedTransactions();
+    });
   }
 }
 
-// Worker to process the transaction queue
 const worker = new Worker('transactionQueue', async job => {
   const { walletBPublicKeyString, solBalanceA, chatId, walletAPrivateKey } = job.data;
   console.log('Worker received walletAPrivateKey:', walletAPrivateKey);
@@ -241,17 +332,20 @@ const worker = new Worker('transactionQueue', async job => {
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, escapeMarkdown(result.signature), { parse_mode: 'MarkdownV2' });
+  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, {package: 'Markdown'});
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     result.walletAPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(result.chatId, escapeMarkdown(message), { parse_mode: 'MarkdownV2' });
+  await balanceChecker.sendTelegramMessage(result.chatId, message);
 });
 
-worker.on('failed', (job, err) => {
+worker.on('failed', async (job, err) => {
   console.error(`Transaction job failed: ${job.id}`, err);
-});
-
-module.exports = BalanceChecker;
+  const balanceChecker = new BalanceChecker(
+    [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+    new TelegramNotifier(process.env.TELEGRAM_TOKEN),
+    job.data.walletAPrivateKey
+  );
+  await balanceChecker.sendTelegramMessage(job.data
