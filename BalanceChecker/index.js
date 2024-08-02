@@ -6,8 +6,7 @@ const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../Database');
 const TelegramNotifier = require('../Telegram');
-const { escapeMarkdown } = require('../utils');
-
+const WalletProcessor = require('../WalletProcessor'); // Import WalletProcessor
 
 const redisOptions = {
   host: 'localhost', // Replace with your Redis host
@@ -26,6 +25,7 @@ class BalanceChecker {
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
+    this.walletProcessor = new WalletProcessor(); // Instantiate WalletProcessor
     this.messageCache = {}; // Simple in-memory cache
   }
 
@@ -163,6 +163,7 @@ class BalanceChecker {
 
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
+        await this.walletProcessor.addJob({ chatId });
       } else {
         if (!isSolValid) {
           message += MESSAGES.INSUFFICIENT_SOL(minimumSolBalance);
