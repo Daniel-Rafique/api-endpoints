@@ -1,24 +1,26 @@
 require('dotenv').config();
+// Initialize Firebase Admin with service account
+const admin = require('firebase-admin');
+const serviceAccount = require('./.config/firebaseServiceAccountKey.json');
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+
 const fs = require('fs');
 const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
-const admin = require('firebase-admin');
-const { Queue, Worker } = require('bullmq');
-const WalletManager = require('./walletManager');
-const InstanceInitializer = require('./instanceInitializer');
+const DataManager = require('./Database');
+const BalanceChecker = require('./BalanceChecker');
+const TelegramNotifier = require('./Telegram');
 
+const dataManager = new DataManager();
 const app = express();
-const port = process.env.PORT
+const port = process.env.PORT;
 
-// Initialize Firebase Admin
-admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    databaseURL: ""
-});
-
-// Load environment variables
+// Load environment variables for SSL
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
 const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
 
@@ -28,72 +30,73 @@ const options = {
     cert: fs.readFileSync(SSL_CERT_PATH)
 };
 
-// Initialize WalletManager
-const walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
-
-// Initialize InstanceInitializer
-const instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
-
 // Middleware
 app.use(bodyParser.json());
 
 // Secret key (store this securely, e.g., in environment variables)
 const SECRET_KEY = process.env.SECRET_KEY;
+let tokenMintAddress;
 
 // Function to generate the hash
-function generateHash(chatId, boostType, timestamp) {
-    const data = `${chatId}:${boostType}:${timestamp}:${SECRET_KEY}`;
+function generateHash(chatId, timestamp) {
+    const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
     return crypto.createHash('sha256').update(data).digest('hex');
 }
 
-// BullMQ queue
-const walletQueue = new Queue('walletQueue', {
-    connection: {
-        host: 'localhost',
-        port: 6379
-    }
-});
+// Initialize TelegramNotifier
+const telegramToken = process.env.TELEGRAM_TOKEN;
+const telegramNotifier = new TelegramNotifier(telegramToken);
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
-    const { chatId, boostType, count, timestamp, hash } = req.body;
+    const { chatId, timestamp, hash } = req.body;
 
     // Validate parameters
-    if (!chatId || !boostType || !count || !timestamp || !hash || count > 1000) {
-        return res.status(400).send('Missing required parameters or invalid walletCount');
+    if (!chatId || !hash) {
+        return res.status(400).send('Missing required parameters');
     }
 
     // Validate the hash
-    const expectedHash = generateHash(chatId, boostType, timestamp);
+    const expectedHash = generateHash(chatId, timestamp);
+
     if (hash !== expectedHash) {
+        console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
         return res.status(403).send('Invalid request signature');
     }
 
-    // Add job to queue
-    await walletQueue.add('createWallets', { chatId, boostType, count });
-
-    res.status(200).send('Request received, processing in background');
-});
-
-// Worker to process wallet creation
-const walletWorker = new Worker('walletQueue', async job => {
-    const { chatId, boostType, count, contractAddress } = job.data;
-
     try {
-        const wallets = walletManager.createSolanaWallets(count);
-        await walletManager.saveWallets(chatId, boostType, wallets);
-        await instanceInitializer.initializeMarketMakerInstance(chatId, boostType, count, contractAddress);
-        console.log(`Processed job for chatId: ${chatId}`);
+        const userData = await dataManager.getCollection(chatId);
+        if (!userData) {
+            return res.status(404).send('User data not found');
+        }
+
+        const minimumSolBalance = userData.boostCost; 
+        const walletAPublicKey = userData.wallet;
+        const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
+
+        if(userData.boostType === 'ultra_boost') {
+            tokenMintAddress = userData.contractAddress;
+        } else {
+            tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
+        }
+
+        // Start the periodic check
+        const walletASecretKey = userData.walletPk;
+        const balanceChecker = new BalanceChecker(
+            [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+            telegramNotifier,
+            walletASecretKey
+        );
+        balanceChecker.startPeriodicCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+        telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
+        res.status(200).send('Checking balance...');
     } catch (error) {
-        console.error('Error processing job:', error);
-    }
-}, {
-    connection: {
-        host: 'localhost',
-        port: 6379
+        console.error('Error processing request:', error);
+        res.status(500).send('Internal Server Error');
     }
 });
 
+// Create HTTPS server
 const server = https.createServer(options, app);
 server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
 server.listen(port, () => {

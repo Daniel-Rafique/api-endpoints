@@ -3,7 +3,7 @@ const bs58 = require('bs58');
 const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
 
-const DATABASE = process.env.DATABASE;
+const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 
 class WalletManager {
     constructor(projectId, keyFilename) {
@@ -13,10 +13,10 @@ class WalletManager {
         });
     }
 
-    createSolanaWallets(count) {
+    createSolanaWallets(makers) {
         console.log("Creating wallets");
         const wallets = [];
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < makers; i++) {
             const keypair = Keypair.generate();
             const privateKey = bs58.encode(Buffer.from(keypair.secretKey)); // Ensure Buffer.from is used
             const publicKey = keypair.publicKey.toString();
@@ -25,19 +25,18 @@ class WalletManager {
         return wallets;
     }
 
-    async saveWallets(chatId, boostType, newWallets) {
+    async saveWallets(chatId, newWallets) {
         try {
             console.log("Saving wallets");
             if (!chatId) {
                 throw new Error('Invalid chatId');
             }
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
-            const docRef = this.firestore.collection(`${DATABASE}`).doc(chatIdStr);
+            const docRef = this.firestore.collection(`${FIRESTORE_COLLECTION}`).doc(chatIdStr);
             
             // Add new wallets to the existing array
             await docRef.update({
                 wallets: Firestore.FieldValue.arrayUnion(...newWallets),
-                boostType: boostType,
                 instancesCreated: true
             });
 

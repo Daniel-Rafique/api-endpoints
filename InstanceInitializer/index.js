@@ -3,28 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const admin = require('firebase-admin');
-const DATABASE = process.env.DATABASE;
-const ENV = process.env.ENV;
+const DataManager = require('../Database');
 
 class InstanceInitializer {
     constructor(basePath, instancePath) {
         this.basePath = basePath;
         this.instancePath = instancePath;
-    }
-
-    // Function to get the private key from Firestore
-    async getPrivateKey(chatId) {
-        const doc = await admin.firestore().collection(`${DATABASE}`).doc(chatId.toString()).get();
-        if (!doc.exists) {
-            throw new Error('No such document!');
-        }
-        const data = doc.data();
-        return data.privateKey; // Ensure your Firestore document has the 'privateKey' field
+        this.dataManager = new DataManager();
     }
 
     // Function to initialize a market maker instance
-    async initializeMarketMakerInstance(chatId, contractAddress) {
-        // Create a unique directory for the user
+    async initializeMarketMakerInstance(chatId) {
+        const userData = await dataManager.getCollection(chatId);
+        const { contractAddress, batchSize, makers } = userData;
         const userDir = `${this.instancePath}/${chatId}`;
         if (!fs.existsSync(userDir)) {
             fs.mkdirSync(userDir, { recursive: true });
@@ -35,7 +26,7 @@ class InstanceInitializer {
 
         // Append the CHAT_ID and CONTRACT_ADDRESS variables to the .env file without overwriting existing content
         const envFilePath = `${userDir}/.env`;
-        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}`;
+        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
         if (fs.existsSync(envFilePath)) {
             fs.appendFileSync(envFilePath, envContent);
         } else {
