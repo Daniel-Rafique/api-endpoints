@@ -9,7 +9,7 @@ const MESSAGES = {
   INSUFFICIENT_SOL: (minBalance) => `\n❌ Insufficient SOL balance. Minimum required: ${minBalance.toFixed(2)} SOL\\.`,
   INSUFFICIENT_TOKEN: (minBalance) => `\n❌ Insufficient ${escapeMarkdown(TOKEN)} balance. Minimum required: ${minBalance}`,
   RETURNED_SOL_PENDING: (balance) => `\n⏳ Returning ${balance.toFixed(2)} SOL (pending...)`,
-  RETURNED_SOL_SUCCESS: (balance, signature) => `\n🔄 Returned ${balance.toFixed(2)} SOL successfully here is your transaction ID: \n: ${signature}`,
+  RETURNED_SOL_SUCCESS: (balance, signature) => `\n🔄 Returned ${balance.toFixed(2)} SOL successfully here is your transaction ID: \n ${signature}`,
   INSUFFICIENT_FUNDS_FOR_RENT: (minBalance) => `\n❌ Sender does not have enough funds to be rent-exempt. Minimum required: ${(minBalance / 1_000_000_000).toFixed(9)} SOL\\.`,
   INSUFFICIENT_FUNDS: '\n❌ Transaction failed due to insufficient funds\\.',
   UNEXPECTED_ERROR: (message) => `\n⚠️ Unexpected error during balance check: ${message}`,
