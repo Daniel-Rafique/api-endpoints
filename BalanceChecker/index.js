@@ -50,7 +50,7 @@ class BalanceChecker {
             else resolve(remainingRequests);
           });
         });
-        
+
         return await operation();
       } catch (error) {
         if (attempt === maxRetries - 1) throw error;
@@ -119,23 +119,23 @@ class BalanceChecker {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
       const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
-  
+
       if (balanceA <= 0) {
         console.log('Insufficient balance to return SOL');
         return null;
       }
-  
+
       // Get the minimum balance for rent exemption
       const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
-  
+
       // Calculate lamports to send, leaving enough for rent exemption and fees
       const lamportsToSend = Math.max((balanceA * 1_000_000_000) - minBalanceForRentExemption - 100000, 0);
-  
+
       if (lamportsToSend <= 0) {
         console.log('Not enough balance to cover rent exemption and fees');
         return null;
       }
-  
+
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
@@ -143,12 +143,12 @@ class BalanceChecker {
           lamports: lamportsToSend
         })
       );
-  
+
       // Get the latest blockhash
       const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.walletAKeypair.publicKey;
-  
+
       const signature = await sendAndConfirmTransaction(
         this.connection,
         transaction,
@@ -158,7 +158,7 @@ class BalanceChecker {
           commitment: 'confirmed',
         }
       );
-  
+
       console.log('Transaction signature:', signature);
       return signature;
     } catch (error) {
@@ -177,7 +177,7 @@ class BalanceChecker {
       }
     }
   }
-  
+
 
   async addToFailedTransactionsQueue(walletBPublicKeyString) {
     const failedTransaction = {
@@ -197,7 +197,7 @@ class BalanceChecker {
 
       queue.push(failedTransaction);
       await fs.writeFile(this.failedTransactionsQueue, JSON.stringify(queue, null, 2));
-      
+
       // Trigger processing of failed transactions
       this.processFailedTransactions();
     } catch (err) {
@@ -249,10 +249,10 @@ class BalanceChecker {
 
   async notifyAdminForManualIntervention(transaction) {
     const message = `URGENT: Manual intervention required for failed transaction.\n` +
-                    `Wallet B: ${transaction.walletBPublicKeyString}\n` +
-                    `Attempts: ${transaction.attempts}\n` +
-                    `First attempt: ${new Date(transaction.timestamp).toISOString()}`;
-    
+      `Wallet B: ${transaction.walletBPublicKeyString}\n` +
+      `Attempts: ${transaction.attempts}\n` +
+      `First attempt: ${new Date(transaction.timestamp).toISOString()}`;
+
     // Send notification to admin (e.g., via Telegram or email)
     await this.telegramNotifier.sendTelegramMessage(process.env.ADMIN_CHAT_ID, message);
   }
@@ -355,13 +355,15 @@ const worker = new Worker('transactionQueue', async job => {
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, {package: 'Markdown'});
+  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, { package: 'Markdown' });
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     result.walletAPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(result.chatId, message);
+  if (signature) {
+    await balanceChecker.sendTelegramMessage(result.chatId, message);
+  }
 });
 
 worker.on('failed', async (job, err) => {
@@ -371,6 +373,7 @@ worker.on('failed', async (job, err) => {
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     job.data.walletAPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(job.data.chatId)});
+  await balanceChecker.sendTelegramMessage(job.data.chatId)
+});
 
-  module.exports = BalanceChecker;
+module.exports = BalanceChecker;
