@@ -115,7 +115,7 @@ class BalanceChecker {
           lamports: lamportsToSend
         })
       );
-      
+
       const signature = await sendAndConfirmTransaction(
         this.connection,
         transaction,
@@ -163,7 +163,7 @@ class BalanceChecker {
 
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
-        await this.walletProcessor.addJob({ chatId, walletAKeypair });
+        await this.walletProcessor.addJob({ chatId });
       } else {
         if (!isSolValid) {
           message += MESSAGES.INSUFFICIENT_SOL(minimumSolBalance);
@@ -224,7 +224,7 @@ const worker = new Worker('transactionQueue', async job => {
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature);
+  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, {package: 'Markdown'});
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
