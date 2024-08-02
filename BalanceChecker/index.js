@@ -43,7 +43,14 @@ class BalanceChecker {
   async retryOperation(operation, maxRetries = 3) {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        await this.limiter.removeTokens(1);
+        // Use a promise wrapper for the rate limiter
+        await new Promise((resolve, reject) => {
+          this.limiter.removeTokens(1, (err, remainingRequests) => {
+            if (err) reject(err);
+            else resolve(remainingRequests);
+          });
+        });
+        
         return await operation();
       } catch (error) {
         if (attempt === maxRetries - 1) throw error;
@@ -349,5 +356,5 @@ worker.on('failed', async (job, err) => {
     job.data.walletAPrivateKey
   );
   await balanceChecker.sendTelegramMessage(job.data.chatId)});
-  
+
   module.exports = BalanceChecker;
