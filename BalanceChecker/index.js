@@ -101,37 +101,75 @@ class BalanceChecker {
     }
   }
 
-  async returnSolToWalletB(walletBPublicKeyString) {
+  async returnSolToWalletB(walletBPublicKeyString, chatId) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
       const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
-
-      // Subtract a small amount to cover the transaction fee
-      const lamportsToSend = (balanceA * 1_000_000_000) - 10000; // Leave some lamports for fees
-      const transaction = new Transaction().add(
+  
+      // Convert balanceA from SOL to lamports
+      const balanceALamports = balanceA * 1_000_000_000;
+  
+      // Create a transaction with the full amount
+      let transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: lamportsToSend
+          lamports: balanceALamports,
         })
       );
-
+  
+      // Get recent blockhash and fee calculator
+      const { blockhash, feeCalculator } = await this.connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = this.walletAKeypair.publicKey;
+  
+      // Simulate the transaction to get the fee estimate
+      const feeEstimate = feeCalculator.lamportsPerSignature * transaction.signatures.length;
+  
+      // Calculate the amount to send, subtracting the estimated fee
+      const lamportsToSend = balanceALamports - feeEstimate;
+  
+      if (lamportsToSend <= 0) {
+        throw new Error('Insufficient balance to cover transaction fee');
+      }
+  
+      // Create the final transaction with the adjusted amount
+      transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: this.walletAKeypair.publicKey,
+          toPubkey: walletBPublicKey,
+          lamports: lamportsToSend,
+        })
+      );
+  
+      transaction.recentBlockhash = blockhash;
+  
+      // Send the transaction
       const signature = await sendAndConfirmTransaction(
         this.connection,
         transaction,
         [this.walletAKeypair]
       );
-
+  
       console.log('Transaction signature:', signature);
-
+  
+      // Notify user about the successful return
+      await this.telegramNotifier.sendMessage(
+        chatId,
+        MESSAGES.RETURNED_SOL_SUCCESS(balanceA, signature)
+      );
+  
       return signature;
     } catch (error) {
       console.error('Error returning SOL to Wallet B:', error);
-      this.switchRpcEndpoint();
-      throw error;
+      await this.telegramNotifier.sendMessage(
+        chatId,
+        MESSAGES.UNEXPECTED_ERROR(error.message)
+      );
     }
   }
-
+  
+  
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
       const transaction = await this.getTransactionHistory(walletAPublicKeyString);
