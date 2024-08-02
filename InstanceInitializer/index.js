@@ -5,6 +5,7 @@ const { exec } = require('child_process');
 const Docker = require('dockerode');
 const admin = require('firebase-admin');
 const DataManager = require('../Database');
+const solDistributionQueue = require('../Solana'); // Adjust the import as per your file structure
 
 class InstanceInitializer {
   constructor(basePath, instancePath) {
@@ -18,7 +19,7 @@ class InstanceInitializer {
   async initializeMarketMakerInstance(chatId) {
     try {
       const userData = await this.dataManager.getCollection(chatId);
-      const { contractAddress, batchSize } = userData;
+      const { contractAddress, batchSize, creatorsWallet, wallets } = userData; // Ensure wallets and creatorsWallet are included
       const userDir = `${this.instancePath}/${chatId}`;
       if (!fs.existsSync(userDir)) {
         fs.mkdirSync(userDir, { recursive: true });
@@ -35,6 +36,9 @@ class InstanceInitializer {
       } else {
         fs.writeFileSync(envFilePath, envContent);
       }
+
+      // Distribute SOL before starting the container
+      await this.distributeSol({ creatorsWallet, wallets });
 
       // Build and run the Docker container
       await this.buildAndRunDockerContainer(chatId, userDir);
@@ -60,6 +64,20 @@ class InstanceInitializer {
     }
   }
 
+  // Function to distribute SOL using bullmq
+  async distributeSol({ creatorsWallet, wallets }) {
+    // Assuming totalAmount is the total SOL in walletA
+    const totalAmount = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
+
+    await solDistributionQueue.add('distribute-sol', {
+      creatorsWallet,
+      wallets,
+      totalAmount,
+    });
+
+    console.log('SOL distribution job added to queue');
+  }
+
   // Function to build and run Docker container
   async buildAndRunDockerContainer(chatId, userDir) {
     const imageName = `market-maker-${chatId}`;
@@ -78,7 +96,7 @@ class InstanceInitializer {
           PortBindings: {
             '443/tcp': [
               {
-                HostPort: '443',
+                HostPort: '8443',
               },
             ],
           },
@@ -107,6 +125,12 @@ class InstanceInitializer {
       });
     });
   }
+
+  // Placeholder function for checking SOL balance
+  // async checkSolBalance(publicKey) {
+  //   // Implement the actual logic to check SOL balance
+  //   return 100; // Return a dummy value for now
+  // }
 }
 
 module.exports = InstanceInitializer;
