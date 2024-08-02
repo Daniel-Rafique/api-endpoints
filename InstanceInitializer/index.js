@@ -2,6 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
+const Docker = require('dockerode');
 const admin = require('firebase-admin');
 const DataManager = require('../Database');
 
@@ -10,12 +11,13 @@ class InstanceInitializer {
         this.basePath = basePath;
         this.instancePath = instancePath;
         this.dataManager = new DataManager();
+        this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
     }
 
     // Function to initialize a market maker instance
     async initializeMarketMakerInstance(chatId) {
-        const userData = await dataManager.getCollection(chatId);
-        const { contractAddress, batchSize, makers } = userData;
+        const userData = await this.dataManager.getCollection(chatId);
+        const { contractAddress, batchSize } = userData;
         const userDir = `${this.instancePath}/${chatId}`;
         if (!fs.existsSync(userDir)) {
             fs.mkdirSync(userDir, { recursive: true });
@@ -33,18 +35,8 @@ class InstanceInitializer {
             fs.writeFileSync(envFilePath, envContent);
         }
 
-        // Install dependencies and start the instance using PM2
-        exec(`npm install`, { cwd: userDir }, (installError) => {
-            if (installError) {
-                console.error('Failed to install dependencies:', installError);
-                return;
-            }
-            exec(`cd ${userDir} && pm2 start dist/index.js --name ${ENV}-market-maker-${chatId}`, (pm2Error) => {
-                if (pm2Error) {
-                    console.error('Failed to start market maker instance with PM2:', pm2Error);
-                }
-            });
-        });
+        // Build and run the Docker container
+        await this.buildAndRunDockerContainer(chatId, userDir);
     }
 
     // Function to recursively copy files and directories
@@ -62,6 +54,54 @@ class InstanceInitializer {
         } else {
             fs.copyFileSync(src, dest);
         }
+    }
+
+    // Function to build and run Docker container
+    async buildAndRunDockerContainer(chatId, userDir) {
+        const imageName = `koynlabs-${chatId}`;
+        const containerName = `koynlabs-instance-${chatId}`;
+        const buildCommand = `docker build -t ${imageName} ${userDir}`;
+
+        try {
+            await this.runCommand(buildCommand);
+            console.log(`Docker image ${imageName} built successfully`);
+
+            // Create and start the Docker container
+            const container = await this.docker.createContainer({
+                Image: imageName,
+                name: containerName,
+                HostConfig: {
+                    PortBindings: {
+                        '443/tcp': [
+                            {
+                                HostPort: '443',
+                            },
+                        ],
+                    },
+                },
+                ExposedPorts: {
+                    '443/tcp': {},
+                },
+            });
+
+            await container.start();
+            console.log(`Docker container ${containerName} started successfully`);
+        } catch (error) {
+            console.error('Failed to build or run Docker container:', error);
+        }
+    }
+
+    // Function to run shell commands
+    runCommand(command) {
+        return new Promise((resolve, reject) => {
+            exec(command, (error, stdout, stderr) => {
+                if (error) {
+                    reject(`Error: ${stderr}`);
+                } else {
+                    resolve(stdout);
+                }
+            });
+        });
     }
 }
 

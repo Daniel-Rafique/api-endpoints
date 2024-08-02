@@ -6,6 +6,8 @@ const DataManager = require('../Database');
 class WalletProcessor {
   constructor() {
     this.walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
+
+    // Prepare the directories for initialization
     this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
     this.dataManager = new DataManager();
 
@@ -27,7 +29,7 @@ class WalletProcessor {
 
       try {
         const wallets = this.walletManager.createSolanaWallets(makers);
-        
+
         await this.walletManager.saveWallets(chatId, wallets);
 
         if(wallets){

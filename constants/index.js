@@ -3,7 +3,7 @@ const TOKEN = process.env.TOKEN;
 
 const MESSAGES = {
   BALANCE_CHECK_REPORT: '🔍 Balance check report:',
-  SOL_BALANCE_A: (balance) => `\n💰 Your SOL balance is: ${balance.toFixed(2)} SOL`,
+  SOL_BALANCE_A: (balance) => `\n💰 SOL balance is: ${balance.toFixed(2)} SOL`,
   TOKEN_BALANCE_B: (balance) => `\n💸 Senders' ${escapeMarkdown(TOKEN)} balance is: ${balance.toFixed(2)}`,
   SUFFICIENT_BALANCE: '\n✅ Both balances are sufficient',
   INSUFFICIENT_SOL: (minBalance) => `\n❌ Insufficient SOL balance. Minimum required: ${minBalance.toFixed(2)} SOL`,
