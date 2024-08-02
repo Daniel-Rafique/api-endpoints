@@ -115,12 +115,11 @@ class BalanceChecker {
           lamports: lamportsToSend
         })
       );
-
+      
       const signature = await sendAndConfirmTransaction(
         this.connection,
         transaction,
-        [this.walletAKeypair],
-        { commitment: 'finalized' }
+        [this.walletAKeypair]
       );
 
       console.log('Transaction signature:', signature);
