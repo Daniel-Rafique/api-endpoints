@@ -174,7 +174,7 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA, {parse_mode: 'Markdown'});
+            message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA, {parse_mode: 'MarkdownV2'});
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
@@ -223,13 +223,13 @@ const worker = new Worker('transactionQueue', async job => {
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, {package: 'Markdown'});
+  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, escapeMarkdown(result.signature), {parse_mode: 'MarkdownV2'});
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     result.walletAPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(result.chatId, message);
+  await balanceChecker.sendTelegramMessage(result.chatId, escapeMarkdown(message), {parse_mode: 'MarkdownV2'});
 });
 
 worker.on('failed', (job, err) => {
