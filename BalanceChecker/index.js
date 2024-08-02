@@ -174,7 +174,7 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL(solBalanceA, '(pending)');
+            message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA, {parse_mode: 'Markdown'});
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
