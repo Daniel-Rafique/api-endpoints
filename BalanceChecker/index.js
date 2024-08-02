@@ -4,8 +4,8 @@ const bs58 = require('bs58');
 const cron = require('node-cron');
 const { Queue, Worker } = require('bullmq');
 const { MESSAGES } = require('../constants');
-const DataManager = require('../Database');
-const TelegramNotifier = require('../Telegram');
+const DataManager = require('../database');
+const TelegramNotifier = require('../TelegramNotifier');
 const { escapeMarkdown, sleep } = require('../utils');
 
 const redisOptions = {
@@ -52,33 +52,33 @@ class BalanceChecker {
       console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenMintPublicKey = new PublicKey(tokenMintAddress);
-  
+
       console.log('Validated Wallet Public Key:', walletPublicKey.toString());
       console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
-  
+
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
         programId: TOKEN_PROGRAM_ID,
       });
-  
+
       console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
-  
+
       if (!tokenAccounts) {
         console.warn('No token accounts found.');
         return 0; // Return 0 to indicate no tokens found
       }
-  
+
       const tokenAccount = tokenAccounts.value.find(
         account => account.account.data.parsed.info.owner === walletPublicKey.toString()
       );
-  
+
       if (!tokenAccount) {
         console.warn('No token account matching the mint address found.');
         return 0; // Return 0 to indicate no tokens found
       }
-  
+
       const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
       console.log('Token Balance: ', tokenBalance);
-  
+
       return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
@@ -106,19 +106,6 @@ class BalanceChecker {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
       const lamportsToSend = solBalanceA * 1_000_000_000 - 10000; // Subtract a small amount to cover the transaction fee
 
-      // Ensure wallet B has enough funds for rent-exempt balance
-      const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
-      const walletBBalance = await this.connection.getBalance(walletBPublicKey);
-
-      if (walletBBalance < minBalanceForRentExemption) {
-        console.error('Insufficient funds for rent-exemption in Wallet B');
-        await this.telegramNotifier.sendMessage(
-          chatId,
-          MESSAGES.INSUFFICIENT_FUNDS_FOR_RENT(minBalanceForRentExemption)
-        );
-        return;
-      }
-
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
@@ -145,32 +132,21 @@ class BalanceChecker {
 
           console.log('Transaction signature:', signature);
 
-          // Notify user about the successful return
-          await this.telegramNotifier.sendMessage(
-            chatId,
-            MESSAGES.RETURNED_SOL_SUCCESS(solBalanceA, signature)
-          );
-
+          await this.sendTelegramMessage(chatId, MESSAGES.RETURNED_SOL_SUCCESS(solBalanceA, signature));
           return { signature, chatId, solBalanceA, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) };
         } catch (error) {
           if (error.message.includes('BlockheightExceeded') || error.message.includes('TransactionExpired')) {
             console.error('Transaction expired, retrying...', error);
             retries -= 1;
             await sleep(retryDelay[5 - retries]); // Wait before retrying
-          } else if (error.message.includes('insufficient funds')) {
-            console.error('Insufficient funds error, cannot proceed:', error);
-            await this.telegramNotifier.sendMessage(
-              chatId,
-              MESSAGES.INSUFFICIENT_FUNDS
-            );
-            return;
           } else {
-            throw error;
+            console.error('Error returning SOL to Wallet B:', error);
+            await this.sendTelegramMessage(chatId, MESSAGES.UNEXPECTED_ERROR(error.message));
+            return;
           }
         }
       }
 
-      // If retries are exhausted, add job to retryQueue
       await retryQueue.add(
         'retryReturnSol',
         { walletBPublicKeyString, solBalanceA, chatId },
@@ -179,10 +155,7 @@ class BalanceChecker {
 
     } catch (error) {
       console.error('Error returning SOL to Wallet B:', error);
-      await this.telegramNotifier.sendMessage(
-        chatId,
-        MESSAGES.UNEXPECTED_ERROR(error.message)
-      );
+      await this.sendTelegramMessage(chatId, MESSAGES.UNEXPECTED_ERROR(error.message));
     }
   }
 
@@ -199,14 +172,12 @@ class BalanceChecker {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
 
-      // Check SOL balance of Wallet A
       const solBalanceA = await this.checkSolBalance(walletAPublicKeyString);
       console.log('Wallet A SOL balance:', solBalanceA);
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSolBalance;
 
-      // Check Token balance of Wallet B
       const tokenBalanceB = await this.checkTokenBalance(walletBPublicKey.toString(), tokenMintAddress);
       console.log('Wallet B Token balance:', tokenBalanceB);
 
@@ -260,7 +231,6 @@ class BalanceChecker {
   }
 }
 
-// Worker to process the transaction queue
 const worker = new Worker('transactionQueue', async job => {
   const { walletBPublicKeyString, solBalanceA, chatId, walletAPrivateKey } = job.data;
   console.log('Worker received walletAPrivateKey:', walletAPrivateKey);
