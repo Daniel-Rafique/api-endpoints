@@ -119,19 +119,23 @@ class BalanceChecker {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
       const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
-
+  
       if (balanceA <= 0) {
         console.log('Insufficient balance to return SOL');
         return null;
       }
-
-      const lamportsToSend = Math.max((balanceA * 1_000_000_000) - 10000, 0);
-
+  
+      // Get the minimum balance for rent exemption
+      const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+  
+      // Calculate lamports to send, leaving enough for rent exemption and fees
+      const lamportsToSend = Math.max((balanceA * 1_000_000_000) - minBalanceForRentExemption - 10000, 0);
+  
       if (lamportsToSend <= 0) {
-        console.log('Not enough balance to cover fees');
+        console.log('Not enough balance to cover rent exemption and fees');
         return null;
       }
-
+  
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
@@ -139,14 +143,19 @@ class BalanceChecker {
           lamports: lamportsToSend
         })
       );
-
+  
+      // Get the latest blockhash
+      const { blockhash } = await this.connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = this.walletAKeypair.publicKey;
+  
       const signature = await sendAndConfirmTransaction(
         this.connection,
         transaction,
         [this.walletAKeypair],
         { maxRetries: 5 }
       );
-
+  
       console.log('Transaction signature:', signature);
       return signature;
     } catch (error) {
