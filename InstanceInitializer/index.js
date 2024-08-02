@@ -8,6 +8,9 @@ const DataManager = require('../Database');
 
 class InstanceInitializer {
   constructor(basePath, instancePath, walletAKeypair) {
+
+    console.log(walletAKeypair)
+    
     this.basePath = basePath;
     this.instancePath = instancePath;
     this.dataManager = new DataManager();
