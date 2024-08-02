@@ -26,6 +26,13 @@ class BalanceChecker {
     this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
     this.messageCache = {}; // Simple in-memory cache
+    this.clearCache();
+  }
+
+  // Method to clear the cache
+  clearCache() {
+    this.messageCache = {};
+    console.log('Message cache cleared on instantiation');
   }
 
   switchRpcEndpoint() {
@@ -51,33 +58,33 @@ class BalanceChecker {
       console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenMintPublicKey = new PublicKey(tokenMintAddress);
-  
+
       console.log('Validated Wallet Public Key:', walletPublicKey.toString());
       console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
-  
+
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
         programId: TOKEN_PROGRAM_ID,
       });
-  
+
       console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
-  
+
       if (!tokenAccounts) {
         console.warn('No token accounts found.');
         return 0; // Return 0 to indicate no tokens found
       }
-  
+
       const tokenAccount = tokenAccounts.value.find(
         account => account.account.data.parsed.info.owner === walletPublicKey.toString()
       );
-  
+
       if (!tokenAccount) {
         console.warn('No token account matching the mint address found.');
         return 0; // Return 0 to indicate no tokens found
       }
-  
+
       const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
       console.log('Token Balance: ', tokenBalance);
-  
+
       return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
@@ -91,6 +98,10 @@ class BalanceChecker {
       const walletAPublicKey = new PublicKey(walletAPublicKeyString);
       console.log('Wallet A Public Key:', walletAPublicKey.toString());
       const signatures = await this.connection.getSignaturesForAddress(walletAPublicKey, { limit: 1 });
+      if (signatures.length === 0) {
+        console.warn('No transaction signatures found.');
+        return null;
+      }
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
       return confirmedTransaction;
     } catch (error) {
@@ -105,8 +116,13 @@ class BalanceChecker {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
       const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
 
+      if (balanceA <= 0) {
+        console.warn('No balance to return.');
+        return;
+      }
+
       // Subtract a small amount to cover the transaction fee
-      const lamportsToSend = (balanceA * 1_000_000_000) - 25000; // Leave some lamports for fees
+      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
@@ -130,10 +146,13 @@ class BalanceChecker {
       throw error;
     }
   }
-  
+
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
       const transaction = await this.getTransactionHistory(walletAPublicKeyString);
+      if (!transaction) {
+        throw new Error('No transaction found for Wallet A.');
+      }
       console.log('Transaction:', transaction);
 
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
@@ -173,7 +192,7 @@ class BalanceChecker {
           console.log('Returning SOL to Wallet B:', solBalanceA);
           if (solBalanceA > 0) {
             await transactionQueue.add('returnSol', { walletBPublicKeyString: walletBPublicKey.toString(), solBalanceA, chatId, walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey) });
-            message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA, {parse_mode: 'MarkdownV2'});
+            message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA, { parse_mode: 'MarkdownV2' });
           } else {
             console.log('SOL balance is 0, not returning funds.');
           }
@@ -222,13 +241,13 @@ const worker = new Worker('transactionQueue', async job => {
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, escapeMarkdown(result.signature), {parse_mode: 'MarkdownV2'});
+  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, escapeMarkdown(result.signature), { parse_mode: 'MarkdownV2' });
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     result.walletAPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(result.chatId, escapeMarkdown(message), {parse_mode: 'MarkdownV2'});
+  await balanceChecker.sendTelegramMessage(result.chatId, escapeMarkdown(message), { parse_mode: 'MarkdownV2' });
 });
 
 worker.on('failed', (job, err) => {
