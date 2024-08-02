@@ -109,22 +109,24 @@ class BalanceChecker {
       // Convert balanceA from SOL to lamports
       const balanceALamports = balanceA * 1_000_000_000;
   
-      // Create a transaction with the full amount
-      let transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: this.walletAKeypair.publicKey,
-          toPubkey: walletBPublicKey,
-          lamports: balanceALamports,
-        })
-      );
-  
       // Get recent blockhash and fee calculator
       const { blockhash, feeCalculator } = await this.connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = this.walletAKeypair.publicKey;
   
-      // Simulate the transaction to get the fee estimate
-      const feeEstimate = feeCalculator.lamportsPerSignature * transaction.signatures.length;
+      // Estimate fee
+      const feeEstimate = feeCalculator.lamportsPerSignature * 2; // Adjust for number of signatures in transaction
+  
+      // Check rent-exemption for wallet B
+      const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+      const walletBBalance = await this.connection.getBalance(walletBPublicKey);
+  
+      if (walletBBalance < minBalanceForRentExemption) {
+        console.error('Insufficient funds for rent-exemption in Wallet B');
+        await this.telegramNotifier.sendMessage(
+          chatId,
+          MESSAGES.INSUFFICIENT_FUNDS_FOR_RENT(minBalanceForRentExemption)
+        );
+        return;
+      }
   
       // Calculate the amount to send, subtracting the estimated fee
       const lamportsToSend = balanceALamports - feeEstimate;
@@ -134,7 +136,7 @@ class BalanceChecker {
       }
   
       // Create the final transaction with the adjusted amount
-      transaction = new Transaction().add(
+      let transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
@@ -143,6 +145,7 @@ class BalanceChecker {
       );
   
       transaction.recentBlockhash = blockhash;
+      transaction.feePayer = this.walletAKeypair.publicKey;
   
       // Send the transaction
       const signature = await sendAndConfirmTransaction(
@@ -161,14 +164,22 @@ class BalanceChecker {
   
       return signature;
     } catch (error) {
-      console.error('Error returning SOL to Wallet B:', error);
-      await this.telegramNotifier.sendMessage(
-        chatId,
-        MESSAGES.UNEXPECTED_ERROR(error.message)
-      );
+      if (error instanceof SendTransactionError) {
+        console.error('SendTransactionError:', error.message);
+        console.error('Transaction logs:', error.logs);
+        await this.telegramNotifier.sendMessage(
+          chatId,
+          MESSAGES.UNEXPECTED_ERROR(`Transaction failed: ${error.message}`)
+        );
+      } else {
+        console.error('Error returning SOL to Wallet B:', error);
+        await this.telegramNotifier.sendMessage(
+          chatId,
+          MESSAGES.UNEXPECTED_ERROR(error.message)
+        );
+      }
     }
   }
-  
   
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
