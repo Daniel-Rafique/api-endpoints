@@ -361,7 +361,7 @@ worker.on('completed', async (job, result) => {
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     result.walletAPrivateKey
   );
-  if (signature) {
+  if (result.signature) {
     await balanceChecker.sendTelegramMessage(result.chatId, message);
   }
 });
