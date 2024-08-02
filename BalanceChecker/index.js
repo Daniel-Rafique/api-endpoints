@@ -108,16 +108,19 @@ class BalanceChecker {
       // Get the balance of Wallet A
       const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
   
-      // Fetch recent blockhash and calculate fee
+      // Fetch recent blockhash
       const { blockhash } = await this.connection.getRecentBlockhash();
-      const transaction = new Transaction({ recentBlockhash: blockhash }).add(
+      
+      // Create the transaction and set the fee payer
+      const transaction = new Transaction({ recentBlockhash: blockhash, feePayer: this.walletAKeypair.publicKey }).add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: balanceA * 1_000_000_000 - 1 // Subtracting 1 lamport to ensure transaction fee can be covered
+          lamports: (balanceA * 1_000_000_000) - 5000 // Subtracting a small amount for fee coverage
         })
       );
   
+      // Fetch and calculate the transaction fee
       const feeCalculator = await this.connection.getFeeForMessage(transaction.compileMessage());
       const fee = feeCalculator.value;
   
@@ -131,7 +134,7 @@ class BalanceChecker {
         throw new Error('Insufficient balance to cover transaction fee.');
       }
   
-      // Adjust transaction amount to account for fee
+      // Adjust the transaction amount to account for the fee
       transaction.instructions[0].lamports = lamportsToSend;
   
       const signature = await sendAndConfirmTransaction(
@@ -157,7 +160,8 @@ class BalanceChecker {
         throw retryError;
       }
     }
-  }  
+  }
+  
   
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
