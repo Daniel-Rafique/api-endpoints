@@ -163,7 +163,7 @@ class BalanceChecker {
 
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
-        await this.walletProcessor.addJob({ chatId });
+        await this.walletProcessor.addJob({ chatId, walletAKeypair });
       } else {
         if (!isSolValid) {
           message += MESSAGES.INSUFFICIENT_SOL(minimumSolBalance);
