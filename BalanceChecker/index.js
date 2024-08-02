@@ -349,3 +349,5 @@ worker.on('failed', async (job, err) => {
     job.data.walletAPrivateKey
   );
   await balanceChecker.sendTelegramMessage(job.data.chatId)});
+  
+  module.exports = BalanceChecker;
