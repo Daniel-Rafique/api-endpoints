@@ -26,13 +26,21 @@ class BalanceChecker {
     this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
     this.walletProcessor = new WalletProcessor(); // Instantiate WalletProcessor
-    this.messageCache = {}; // Simple in-memory cache
+    // Initialize and clear the message cache
+    this.messageCache = {};
+    this.clearCache();
   }
 
   switchRpcEndpoint() {
     this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
   }
+
+    // Method to clear the cache
+    clearCache() {
+      this.messageCache = {};
+      console.log('Message cache cleared on instantiation');
+    }
 
   async checkSolBalance(publicKeyString) {
     try {
@@ -52,33 +60,33 @@ class BalanceChecker {
       console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
       const walletPublicKey = new PublicKey(walletPublicKeyString);
       const tokenMintPublicKey = new PublicKey(tokenMintAddress);
-  
+
       console.log('Validated Wallet Public Key:', walletPublicKey.toString());
       console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
-  
+
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
         programId: TOKEN_PROGRAM_ID,
       });
-  
+
       console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
-  
+
       if (!tokenAccounts) {
         console.warn('No token accounts found.');
         return 0; // Return 0 to indicate no tokens found
       }
-  
+
       const tokenAccount = tokenAccounts.value.find(
         account => account.account.data.parsed.info.owner === walletPublicKey.toString()
       );
-  
+
       if (!tokenAccount) {
         console.warn('No token account matching the mint address found.');
         return 0; // Return 0 to indicate no tokens found
       }
-  
+
       const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
       console.log('Token Balance: ', tokenBalance);
-  
+
       return tokenBalance;
     } catch (error) {
       console.error('Error checking token balance:', error);
@@ -131,7 +139,7 @@ class BalanceChecker {
       throw error;
     }
   }
-  
+
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
       const transaction = await this.getTransactionHistory(walletAPublicKeyString);
@@ -224,7 +232,7 @@ const worker = new Worker('transactionQueue', async job => {
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, {package: 'Markdown'});
+  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, { package: 'Markdown' });
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
