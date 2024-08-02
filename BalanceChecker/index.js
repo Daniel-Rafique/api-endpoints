@@ -191,7 +191,7 @@ class BalanceChecker {
   async sendTelegramMessage(chatId, text) {
     const cacheKey = `${chatId}`;
     if (this.messageCache[cacheKey] !== text) {
-      await this.telegramNotifier.sendTelegramMessage(chatId, text, { parse_mode: 'MarkdownV2' });
+      await this.telegramNotifier.sendTelegramMessage(chatId, text);
       this.messageCache[cacheKey] = text;
     } else {
       console.log('Duplicate message detected, skipping send.');
