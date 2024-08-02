@@ -104,64 +104,34 @@ class BalanceChecker {
   async returnSolToWalletB(walletBPublicKeyString) {
     try {
       const walletBPublicKey = new PublicKey(walletBPublicKeyString);
-  
-      // Get the balance of Wallet A
       const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
-  
-      // Fetch recent blockhash
-      const { blockhash } = await this.connection.getRecentBlockhash();
-      
-      // Create the transaction and set the fee payer
-      const transaction = new Transaction({ recentBlockhash: blockhash, feePayer: this.walletAKeypair.publicKey }).add(
+
+      // Subtract a small amount to cover the transaction fee
+      const lamportsToSend = (balanceA * 1_000_000_000) - 5000; // Leave some lamports for fees
+      const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.walletAKeypair.publicKey,
           toPubkey: walletBPublicKey,
-          lamports: (balanceA * 1_000_000_000) - 5000 // Subtracting a small amount for fee coverage
+          lamports: lamportsToSend
         })
       );
-  
-      // Fetch and calculate the transaction fee
-      const feeCalculator = await this.connection.getFeeForMessage(transaction.compileMessage());
-      const fee = feeCalculator.value;
-  
-      if (fee === null) {
-        throw new Error('Failed to fetch transaction fee.');
-      }
-  
-      // Ensure the balance covers the fee
-      const lamportsToSend = (balanceA * 1_000_000_000) - fee;
-      if (lamportsToSend <= 0) {
-        throw new Error('Insufficient balance to cover transaction fee.');
-      }
-  
-      // Adjust the transaction amount to account for the fee
-      transaction.instructions[0].lamports = lamportsToSend;
-  
+
       const signature = await sendAndConfirmTransaction(
         this.connection,
         transaction,
         [this.walletAKeypair],
         { commitment: 'finalized' }
       );
-  
+
       console.log('Transaction signature:', signature);
+
       return signature;
     } catch (error) {
       console.error('Error returning SOL to Wallet B:', error);
-  
-      // Ensure the RPC endpoint is switched on error
       this.switchRpcEndpoint();
-  
-      // Retry logic to guarantee the SOL will be sent
-      try {
-        return await this.returnSolToWalletB(walletBPublicKeyString);
-      } catch (retryError) {
-        console.error('Retry failed:', retryError);
-        throw retryError;
-      }
+      throw error;
     }
   }
-  
   
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
