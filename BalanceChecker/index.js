@@ -104,53 +104,53 @@ class BalanceChecker {
   }
 
   async getTransactionHistory(chatId, receiverPublicKeyString) {
-    console.log(chatId)
+    console.log('Chat ID:', chatId);
     return this.retryOperation(async () => {
       const receiverPublicKey = new PublicKey(receiverPublicKeyString);
       const signatures = await this.connection.getSignaturesForAddress(receiverPublicKey, { limit: 1 });
-      console.log('Signature', signatures)
-
+      console.log('Signatures:', signatures);
+  
       if (signatures.length === 0) {
         throw new Error('No transaction signatures found for the given public key.');
       }
-
+  
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
-
-      console.log('Confirm Transactions', confirmedTransaction)
+      console.log('Confirmed Transaction:', confirmedTransaction);
+  
       if (!confirmedTransaction) {
         throw new Error('Failed to retrieve confirmed transaction.');
       }
-
+  
       // Log the entire confirmedTransaction for debugging
       console.log('Confirmed Transaction:', JSON.stringify(confirmedTransaction, null, 2));
-
+  
       // Extract and log the details of the transaction
       const { transaction, meta } = confirmedTransaction;
-      
       console.log('Transaction Details:', transaction);
       console.log('Transaction Meta:', meta);
-
+  
       // Identify the sender (Wallet B)
-      const senderPublicKey = transaction.message.accountKeys[0]
-
+      const senderPublicKey = transaction.message.accountKeys[0];
+      console.log('Sender (Wallet B) PublicKey:', senderPublicKey);
+  
       if (!senderPublicKey) {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
-
-      console.log(`Sender (Wallet B) PublicKey: ${senderPublicKey}`);
-
+  
       const amount = meta.preBalances[0] / 1_000_000_000;
-      console.log('Transaction amount', amount)
-      try{
-        await this.dataManager.saveTransaction(chatId, transaction.signatures[0], senderPublicKey.toString(), amount);
-      }catch(error){
-        console.log('Error saving transaction', error.message)
+      console.log('Transaction Amount:', amount);
+  
+      try {
+        await this.dataManager.saveTransaction(chatId.toString(), transaction.signatures[0], senderPublicKey.toString(), amount);
+        console.log('Transaction saved successfully.');
+      } catch (error) {
+        console.log('Error saving transaction:', error.message);
       }
-
+  
       return confirmedTransaction;
     });
   }
-
+  
   async returnSolToSender(chatId, transactionId, retryCount = 0) {
     try {
       console.log(chatId)
