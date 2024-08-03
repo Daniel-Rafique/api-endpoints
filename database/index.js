@@ -31,12 +31,13 @@ class DataManager {
     }
   }
 
-  async saveTransaction(chatId, signature, senderPublicKeyString) {
+  async saveTransaction(chatId, signature, senderPublicKeyString, amount) {
     console.log(`Saving transaction info for chat ID ${chatId}`);
     try {
       await db.collection(FIRESTORE_COLLECTION).doc(chatId).set({
         signature: signature,
         senderPublicKey: senderPublicKeyString,
+        amount: amount
       }, { merge: true });
       console.log(`Saved transaction info for chat ID ${chatId}`);
     } catch (error) {
