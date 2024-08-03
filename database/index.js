@@ -38,9 +38,9 @@ class DataManager {
         senderPublicKey: senderPublicKeyString,
         amount: amount
       }, { merge: true });
-      console.log(`Saved holder_boost for chat ID ${chatId}`);
+      console.log(`Saved transaction info for chat ID ${chatId}`);
     }catch(error){
-      console.error(`Error saving holder_boost for ${chatId}:`, error);
+      console.error(`Error saving info for ${chatId}:`, error);
     }
   }
 }

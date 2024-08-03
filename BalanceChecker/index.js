@@ -140,7 +140,11 @@ class BalanceChecker {
 
       const amount = meta.preBalances[0] / 1_000_000_000;
       console.log(amount)
-      await this.dataManager.saveTransaction(chatId, transaction.signatures[0], senderPublicKey.toString(), amount);
+      try{
+        await this.dataManager.saveTransaction(chatId, transaction.signatures[0], senderPublicKey.toString(), amount);
+      }catch(error){
+        console.log('Error saving transaction', error.message)
+      }
 
       return confirmedTransaction;
     });
