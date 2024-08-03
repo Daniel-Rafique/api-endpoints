@@ -139,6 +139,7 @@ class BalanceChecker {
       console.log(`Sender (Wallet B) PublicKey: ${senderPublicKey}`);
 
       const amount = meta.preBalances[0] / 1_000_000_000;
+      console.log(amount)
       await this.dataManager.saveTransaction(chatId, transaction.signatures[0], senderPublicKey.toString(), amount);
 
       return confirmedTransaction;
