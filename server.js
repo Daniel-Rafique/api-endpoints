@@ -66,6 +66,7 @@ app.post('/api/create', async (req, res) => {
 
     try {
         const userData = await dataManager.getCollection(chatId);
+        console.log(chatId, userData);
         if (!userData) {
             return res.status(404).send('User data not found');
         }
