@@ -20,23 +20,15 @@ const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 
 class BalanceChecker {
-  constructor(
-    rpcEndpoints,
-    telegramNotifier,
-    walletAPrivateKey,
-    dataManager,
-    walletProcessor,
-    connection,
-    queueManager
-  ) {
+  constructor(rpcEndpoints, telegramNotifier, walletAPrivateKey) {
+    console.log('Wallet A Private Key:', walletAPrivateKey);
     this.rpcEndpoints = rpcEndpoints;
     this.currentRpcIndex = 0;
+    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.telegramNotifier = telegramNotifier;
-    this.dataManager = dataManager;
+    this.dataManager = new DataManager();
     this.walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
-    this.walletProcessor = walletProcessor;
-    this.connection = connection || new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
-    this.queueManager = queueManager;
+    this.walletProcessor = new WalletProcessor();
     this.messageCache = {};
     this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
     this.failedTransactionsQueue = path.join(__dirname, 'failedTransactions.json');
@@ -130,7 +122,7 @@ class BalanceChecker {
 
   async returnSolToWalletB(chatId, transactionId, retryCount = 0) {
     try {
-      const depositInfo = await this.dataManager.getCollection(chatId, transactionId);
+      const depositInfo = await this.dataManager.getTransaction(chatId, transactionId);
       if (!depositInfo) {
         throw new Error('Sender address not found for transaction ID: ' + transactionId);
       }
@@ -160,7 +152,7 @@ class BalanceChecker {
         })
       );
 
-      const { blockhash } = await this.connection.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.walletAKeypair.publicKey;
 
@@ -180,12 +172,12 @@ class BalanceChecker {
       console.error('Error returning SOL to Wallet B:', error);
       if (error.message.includes('block height exceeded')) {
         console.error('Block height exceeded error. Retrying with new blockhash...');
-        return this.returnSolToWalletB(chatId, transactionId, retryCount);
+        return this.returnSolToWalletB(transactionId, retryCount);
       } else if (retryCount < 3) {
         console.error('Error returning SOL to Wallet B:', error);
         console.log(`Retrying (${retryCount + 1}/3)...`);
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-        return this.returnSolToWalletB(chatId, transactionId, retryCount + 1);
+        return this.returnSolToWalletB(transactionId, retryCount + 1);
       } else {
         console.error('Max retries reached. Adding to failed transactions queue.');
         await this.addToFailedTransactionsQueue(chatId, transactionId);
@@ -196,6 +188,7 @@ class BalanceChecker {
 
   async addToFailedTransactionsQueue(transactionId) {
     const failedTransaction = {
+      chatId,
       transactionId,
       timestamp: Date.now(),
       attempts: 0
@@ -236,7 +229,7 @@ class BalanceChecker {
       for (let i = 0; i < queue.length; i++) {
         const transaction = queue[i];
         try {
-          await this.returnSolToWalletB(transaction.transactionId);
+          await this.returnSolToWalletB(transaction.chatId, transaction.transactionId);
           queue.splice(i, 1);
           i--;
         } catch (error) {
@@ -279,9 +272,11 @@ class BalanceChecker {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
 
+      // Save the transaction details to Firestore
       await this.dataManager.saveTransaction(chatId, transaction.transaction.signatures[0], walletBPublicKey.toString(), transaction.meta.postBalances[0]);
 
       const solBalanceA = await this.checkSolBalance(walletAPublicKeyString);
+
       console.log('Wallet A SOL balance:', solBalanceA);
       
       let message = MESSAGES.BALANCE_CHECK_REPORT;
@@ -307,11 +302,11 @@ class BalanceChecker {
           message += MESSAGES.INSUFFICIENT_TOKEN(minimumTokenBalance);
         }
         if (solBalanceA > 0) {
-          const job = await this.queueManager.addToQueue('returnSol', {
+          const job = await transactionQueue.add('returnSol', {
             walletBPublicKeyString: walletBPublicKey.toString(),
             solBalanceA,
             chatId,
-            transactionId: transaction.transaction.signatures[0],
+            transactionId: transaction.transaction.signatures[0], // Pass the transaction ID
             walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey)
           }, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
           message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA);
@@ -361,7 +356,7 @@ const worker = new Worker('transactionQueue', async job => {
     walletAPrivateKey
   );
 
-  const signature = await balanceChecker.returnSolToWalletB(chatId, transactionId);
+  const signature = await balanceChecker.returnSolToWalletB(transactionId);
   return { signature, chatId, solBalanceA, walletAPrivateKey };
 }, { connection: redisOptions });
 
