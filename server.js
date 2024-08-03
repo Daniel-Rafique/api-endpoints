@@ -37,8 +37,6 @@ app.use(bodyParser.json());
 const SECRET_KEY = process.env.SECRET_KEY;
 let tokenMintAddress;
 
-console.log(tokenMintAddress)
-
 // Function to generate the hash
 function generateHash(chatId, timestamp) {
     const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
@@ -48,6 +46,8 @@ function generateHash(chatId, timestamp) {
 // Initialize TelegramNotifier
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramNotifier = new TelegramNotifier(telegramToken);
+
+console.log(telegramToken)
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
