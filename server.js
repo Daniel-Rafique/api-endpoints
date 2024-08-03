@@ -59,16 +59,13 @@ app.post('/api/create', async (req, res) => {
     // Validate the hash
     const expectedHash = generateHash(chatId, timestamp);
 
-    console.log(chatId)
-
     if (hash !== expectedHash) {
         console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
         return res.status(403).send('Invalid request signature');
     }
 
     try {
-        const userData = await dataManager.getCollection(chatId);
-        console.log(chatId, userData);
+        const userData = await dataManager.getCollection(chatId.toString());    
         if (!userData) {
             return res.status(404).send('User data not found');
         }
