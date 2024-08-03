@@ -3,6 +3,7 @@ const admin = require('firebase-admin');
 const db = admin.firestore();
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+console.log(FIRESTORE_COLLECTION);
 
 class DataManager {
 
