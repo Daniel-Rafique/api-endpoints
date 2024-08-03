@@ -157,7 +157,7 @@ class BalanceChecker {
       // const senderPublicKey = '8HBx72n7HNkD3uk536yFG62vuThuFKffmUEdX8kDzdvu';
       // const amount = 0.005;
 
-      const depositInfo = await this.dataManager.getTransaction(chatId, transactionId);
+      const depositInfo = await this.dataManager.getTransaction(chatId);
 
       if (!depositInfo?.signature) {
         
