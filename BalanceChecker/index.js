@@ -62,6 +62,7 @@ class BalanceChecker {
     return this.retryOperation(async () => {
       const publicKey = new PublicKey(publicKeyString);
       const balance = await this.connection.getBalance(publicKey);
+      console.log(balance)
       return balance / 1_000_000_000;
     });
   }
@@ -106,7 +107,7 @@ class BalanceChecker {
     console.log(chatId)
     return this.retryOperation(async () => {
       const receiverPublicKey = new PublicKey(receiverPublicKeyString);
-      const signatures = await this.connection.getSignaturesForAddress(receiverPublicKey, { limit: 100 });
+      const signatures = await this.connection.getSignaturesForAddress(receiverPublicKey, { limit: 1 });
       console.log(signatures)
 
       if (signatures.length === 0) {
@@ -155,7 +156,7 @@ class BalanceChecker {
       const depositInfo = await this.dataManager.getTransaction(chatId, transactionId);
 
       if (!depositInfo) {
-        throw new Error('Sender address not found for transaction ID: ' + transactionId);
+        await this.getTransactionHistory(chatId, this.receiverKeypair.publicKey.toString());
       }
 
       const { senderPublicKey, amount } = depositInfo;
