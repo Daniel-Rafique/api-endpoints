@@ -154,6 +154,7 @@ class BalanceChecker {
       }
 
       const { senderPublicKey, amount } = depositInfo;
+      consoel.log(depositInfo)
       const senderPublicKeyInstance = new PublicKey(senderPublicKey);
       const balanceA = await this.checkSolBalance(this.receiverKeypair.publicKey.toBase58());
 
