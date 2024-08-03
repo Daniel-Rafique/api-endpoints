@@ -126,7 +126,7 @@ class BalanceChecker {
 
       // Extract and log the details of the transaction
       const { transaction, meta } = confirmedTransaction;
-      s
+      
       console.log('Transaction Details:', transaction);
       console.log('Transaction Meta:', meta);
 
