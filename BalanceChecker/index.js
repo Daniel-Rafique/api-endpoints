@@ -7,6 +7,7 @@ const { MESSAGES } = require('../constants');
 const DataManager = require('../Database');
 const TelegramNotifier = require('../Telegram');
 const { RateLimiter } = require('limiter');
+const WalletProcessor = require('../WalletProcessor');
 const fs = require('fs').promises;
 const path = require('path');
 
