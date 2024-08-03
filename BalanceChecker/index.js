@@ -186,7 +186,7 @@ class BalanceChecker {
         return null;
       }
 
-      const lamportsToSend = amount * 1_000_000_000 - 10000;;
+      const lamportsToSend = amount * 1_000_000_000 - 20000;;
 
       if (lamportsToSend <= 0) {
         console.log('Not enough balance to cover transaction fees');
