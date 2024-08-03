@@ -60,7 +60,6 @@ app.post('/api/create', async (req, res) => {
 
     // Validate the hash
     const expectedHash = generateHash(chatId, timestamp);
-    console.log(`Received hash: ${hash}, Expected hash: ${expectedHash}`);
 
     if (hash !== expectedHash) {
         console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);

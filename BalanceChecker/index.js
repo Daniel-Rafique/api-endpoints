@@ -153,11 +153,10 @@ class BalanceChecker {
   
   async returnSolToSender(chatId, transactionId, retryCount = 0) {
     try {
-      console.log(chatId)
       // const senderPublicKey = '8HBx72n7HNkD3uk536yFG62vuThuFKffmUEdX8kDzdvu';
       // const amount = 0.005;
 
-      const depositInfo = await this.dataManager.getTransaction(chatId);
+      const depositInfo = await this.dataManager.getTransaction(chatId.toString());
 
       if (!depositInfo?.signature) {
         
