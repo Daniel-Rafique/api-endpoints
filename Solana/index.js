@@ -28,11 +28,11 @@ class Solana {
       const newWallets = JSON.parse(fileContent);
 
       // Calculate 75% of Wallet A's balance
-      const amountToDistribute = Math.floor(walletABalance * 1);
+      const amountToDistribute = Math.floor(walletABalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
 
       // Calculate 25% for KOYNLABS_WALLET
-      const amountForKoynlabs = Math.floor(walletABalance * 1);
+      const amountForKoynlabs = Math.floor(walletABalance * 0.25);
 
       // Create and send transactions to newly created wallets
       for (const wallet of newWallets) {
