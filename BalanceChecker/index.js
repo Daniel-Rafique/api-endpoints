@@ -49,6 +49,7 @@ class BalanceChecker {
             else resolve(remainingRequests);
           });
         });
+
         return await operation();
       } catch (error) {
         if (attempt === maxRetries - 1) throw error;
@@ -320,13 +321,13 @@ class BalanceChecker {
       console.log('Receiver SOL balance:', solBalanceReceiver);
 
       let message = MESSAGES.BALANCE_CHECK_REPORT;
-      message += MESSAGES.SOL_BALANCE_RECEIVER(solBalanceReceiver);
+      message += MESSAGES.SOL_BALANCE_A(solBalanceReceiver);
       const isSolValid = solBalanceReceiver >= minimumSolBalance;
 
       const tokenBalanceSender = await this.checkTokenBalance(senderPublicKey.toString(), tokenMintAddress);
       console.log('Sender Token balance:', tokenBalanceSender);
 
-      message += MESSAGES.TOKEN_BALANCE_SENDER(tokenBalanceSender);
+      message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceSender);
       const isTokenValid = tokenBalanceSender >= minimumTokenBalance;
 
       console.log('SOL balance:', solBalanceReceiver, 'Token balance:', tokenBalanceSender);
@@ -402,7 +403,7 @@ const worker = new Worker('transactionQueue', async job => {
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceReceiver, result.signature, { package: 'Markdown' });
+  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceReceiver, result.signature);
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
@@ -420,7 +421,7 @@ worker.on('failed', async (job, err) => {
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     job.data.receiverPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(job.data.chatId);
+  await balanceChecker.sendTelegramMessage(job.data.chatId, MESSAGES.UNEXPECTED_ERROR(err.message));
 });
 
 module.exports = BalanceChecker;
