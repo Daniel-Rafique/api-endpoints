@@ -18,9 +18,6 @@ const redisOptions = {
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
-const transactionComplete = this.dataManager.transactionComplete(chatId.toString());
-const cronOneMinute = transactionComplete.complete ? true : ('*/1 * * * *');
-const cronFiveMinute = transactionComplete.complete ? true : ('*/5 * * * *');
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, receiverPrivateKey) {
@@ -166,13 +163,13 @@ class BalanceChecker {
       return confirmedTransaction;
     });
   }
-  
+
   async returnSolToSender(chatId, transactionId, retryCount = 0) {
     try {
       const depositInfo = await this.dataManager.getTransaction(chatId.toString());
 
       if (!depositInfo?.signature) {
-        
+
         await this.getTransactionHistory(chatId, this.receiverKeypair.publicKey.toString());
       }
 
@@ -384,6 +381,9 @@ class BalanceChecker {
   }
 
   startPeriodicCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
+    const transactionComplete = this.dataManager.transactionComplete(chatId.toString());
+    const cronOneMinute = transactionComplete.complete ? true : ('*/1 * * * *');
+    const cronFiveMinute = transactionComplete.complete ? true : ('*/5 * * * *');
     cron.schedule(cronOneMinute, async () => {
       console.log('Running periodic balance check...');
       await this.runBalanceCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
@@ -397,7 +397,7 @@ class BalanceChecker {
 }
 
 const worker = new Worker('transactionQueue', async job => {
-  const {solBalanceA, chatId, receiverPrivateKey, transactionId } = job.data;
+  const { solBalanceA, chatId, receiverPrivateKey, transactionId } = job.data;
   console.log('Worker received receiverPrivateKey:', receiverPrivateKey);
 
   const balanceChecker = new BalanceChecker(
