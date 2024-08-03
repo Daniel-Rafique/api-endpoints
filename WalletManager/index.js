@@ -1,6 +1,6 @@
 require('dotenv').config();
 const bs58 = require('bs58');
-const DataManager = require('../Database');
+const DataManager = require('../database');
 const { Keypair } = require('@solana/web3.js');
 const fs = require('fs');
 const path = require('path');

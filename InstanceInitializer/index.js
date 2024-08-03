@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const Docker = require('dockerode');
-const DataManager = require('../Database');
+const DataManager = require('../database');
 
 class InstanceInitializer {
   constructor(basePath, instancePath, receiverKeypair) {

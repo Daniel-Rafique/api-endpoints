@@ -1,7 +1,7 @@
 const { Queue, Worker } = require('bullmq');
 const WalletManager = require('../WalletManager');
 const InstanceInitializer = require('../InstanceInitializer');
-const DataManager = require('../Database');
+const DataManager = require('../database');
 
 class WalletProcessor {
   constructor() {
