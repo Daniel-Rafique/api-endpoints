@@ -117,11 +117,11 @@ class BalanceChecker {
 
       console.log(confirmedTransaction)
 
-      // if (!confirmedTransaction) {
-      //   throw new Error('Failed to retrieve confirmed transaction.');
-      // }
-      // await this.dataManager.saveTransaction(chatId, confirmedTransaction, walletAPublicKey);
-      // return confirmedTransaction;
+      if (!confirmedTransaction) {
+        throw new Error('Failed to retrieve confirmed transaction.');
+      }
+      await this.dataManager.saveTransaction(chatId, confirmedTransaction, walletAPublicKey);
+      return confirmedTransaction;
     });
   }
 
