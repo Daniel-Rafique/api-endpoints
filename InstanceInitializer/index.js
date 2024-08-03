@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const Docker = require('dockerode');
-const admin = require('firebase-admin');
 const DataManager = require('../Database');
 
 class InstanceInitializer {
@@ -65,8 +64,8 @@ class InstanceInitializer {
 
   // Function to build and run Docker container
   async buildAndRunDockerContainer(chatId, userDir) {
-    const imageName = `market-maker-${chatId}`;
-    const containerName = `market-maker-instance-${chatId}`;
+    const imageName = `koynlabs-${chatId}`;
+    const containerName = `koynlabs-instance-${chatId}`;
     const buildCommand = `docker build -t ${imageName} ${userDir}`;
 
     try {

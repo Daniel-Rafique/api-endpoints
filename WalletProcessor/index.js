@@ -33,7 +33,12 @@ class WalletProcessor {
         await this.walletManager.saveWallets(chatId, wallets);
 
         if(wallets){
-        await this.instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, wallets, batchSize);
+          try{
+
+          }catch(error){
+
+          }
+        // await this.instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, wallets, batchSize);
         }
 
         console.log(`Processed job for chatId: ${chatId}`);
