@@ -159,7 +159,7 @@ class BalanceChecker {
 
       const depositInfo = await this.dataManager.getTransaction(chatId, transactionId);
 
-      if (!depositInfo.signature) {
+      if (!depositInfo?.signature) {
         
         await this.getTransactionHistory(chatId, this.receiverKeypair.publicKey.toString());
       }
