@@ -35,7 +35,7 @@ class WalletManager {
             
             // Add new wallets to the existing array
             await data.update({
-                wallets: Firestore.FieldValue.arrayUnion(...newWallets),
+                wallets: this.createSolanaWallets.arrayUnion(...newWallets),
                 instancesCreated: true
             });
 
@@ -47,7 +47,7 @@ class WalletManager {
         }
     }
     
-    async saveWalletsToFile(newWallets, docRef) {
+    async saveWalletsToFile(newWallets, data) {
         try {
             const filePath = path.resolve(__dirname, './marketMaker/wallets.json');
             const walletData = newWallets.map(newWallets => ({
@@ -56,8 +56,8 @@ class WalletManager {
             }));
     
             await fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
-            await this.solana.airDropSolana(docRef, walletData);
-            
+            await this.solana.airDropSolana(data);
+
             console.log(`Wallets saved to ${filePath}`);
         } catch (error) {
             console.error("Error saving wallets to file:", error);
