@@ -108,7 +108,7 @@ class BalanceChecker {
     return this.retryOperation(async () => {
       const receiverPublicKey = new PublicKey(receiverPublicKeyString);
       const signatures = await this.connection.getSignaturesForAddress(receiverPublicKey, { limit: 1 });
-      console.log(signatures)
+      console.log('Signature', signatures)
 
       if (signatures.length === 0) {
         throw new Error('No transaction signatures found for the given public key.');
@@ -116,7 +116,7 @@ class BalanceChecker {
 
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
 
-      console.log(confirmedTransaction)
+      console.log('Confirm Transactions', confirmedTransaction)
       if (!confirmedTransaction) {
         throw new Error('Failed to retrieve confirmed transaction.');
       }
@@ -126,6 +126,7 @@ class BalanceChecker {
 
       // Extract and log the details of the transaction
       const { transaction, meta } = confirmedTransaction;
+      s
       console.log('Transaction Details:', transaction);
       console.log('Transaction Meta:', meta);
 
@@ -139,7 +140,7 @@ class BalanceChecker {
       console.log(`Sender (Wallet B) PublicKey: ${senderPublicKey}`);
 
       const amount = meta.preBalances[0] / 1_000_000_000;
-      console.log(amount)
+      console.log('Transaction amount', amount)
       try{
         await this.dataManager.saveTransaction(chatId, transaction.signatures[0], senderPublicKey.toString(), amount);
       }catch(error){
@@ -164,11 +165,12 @@ class BalanceChecker {
       }
 
       const { senderPublicKey, amount } = depositInfo;
-      console.log(depositInfo)
+      console.log('DEposit info', depositInfo)
 
       const senderPublicKeyInstance = new PublicKey(senderPublicKey);
       const receiverBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toBase58());
-      console.log(receiverBalance)
+
+      console.log('Receiver balance', receiverBalance)
 
       if (receiverBalance < amount) {
         console.log('Insufficient balance to return SOL');
