@@ -106,7 +106,8 @@ class BalanceChecker {
     console.log(chatId)
     return this.retryOperation(async () => {
       const receiverPublicKey = new PublicKey(receiverPublicKeyString);
-      const signatures = await this.connection.getSignaturesForAddress(receiverPublicKey, { limit: 1 });
+      const signatures = await this.connection.getSignaturesForAddress(receiverPublicKey, { limit: 100 });
+      console.log(signatures)
 
       if (signatures.length === 0) {
         throw new Error('No transaction signatures found for the given public key.');
@@ -114,6 +115,7 @@ class BalanceChecker {
 
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
 
+      console.log(confirmedTransaction)
       if (!confirmedTransaction) {
         throw new Error('Failed to retrieve confirmed transaction.');
       }
