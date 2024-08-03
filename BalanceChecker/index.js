@@ -137,7 +137,7 @@ class BalanceChecker {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
   
-      const amount = this.checkSolBalance()
+      const amount = meta.preBalances[0] / 1_000_000_000;
       console.log('Transaction Amount:', amount);
   
       try {
