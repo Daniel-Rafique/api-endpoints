@@ -339,7 +339,8 @@ class BalanceChecker {
 
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
-        await this.dataManager.transactionComplete(chatId.toString());
+        const transactionComplete = true;
+        await this.dataManager.transactionComplete(chatId.toString(), transactionComplete);
         await this.walletProcessor.addJob({ chatId });
       } else {
         if (!isSolValid) {
@@ -381,7 +382,7 @@ class BalanceChecker {
   }
 
   startPeriodicCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
-    const transactionComplete = this.dataManager.transactionComplete(chatId.toString());
+    const transactionComplete = this.dataManager.getCollection(chatId.toString());
     const cronOneMinute = transactionComplete.complete ? true : ('*/1 * * * *');
     const cronFiveMinute = transactionComplete.complete ? true : ('*/5 * * * *');
     cron.schedule(cronOneMinute, async () => {
