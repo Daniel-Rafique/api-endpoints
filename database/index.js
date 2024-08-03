@@ -17,6 +17,31 @@ class DataManager {
       console.error('Error getting collection:', error);
     }
   }
+
+  async getTransaction(chatId) {
+    try {
+      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).get();
+      if (doc.exists) {
+        return doc.data();
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting transaction:', error);
+    }
+  }
+
+  async saveTransaction(chatId, signature, postBalances){
+    try {
+      await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).set({
+        signature: signature,
+        walletBPublicKey: walletBPublicKey,
+        postBalances: postBalances
+      }, { merge: true });
+      console.log(`Saved holder_boost for chat ID ${chatId}`);
+    }catch(error){
+      console.error(`Error saving holder_boost for ${chatId}:`, error);
+    }
+  }
 }
 
 module.exports = DataManager;

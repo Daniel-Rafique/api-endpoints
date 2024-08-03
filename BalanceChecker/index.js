@@ -122,7 +122,7 @@ class BalanceChecker {
 
   async returnSolToWalletB(transactionId, retryCount = 0) {
     try {
-      const depositInfo = await this.dataManager.getTransaction(transactionId);
+      const depositInfo = await this.dataManager.getTransaction(chatId, transactionId);
       if (!depositInfo) {
         throw new Error('Sender address not found for transaction ID: ' + transactionId);
       }
@@ -272,7 +272,7 @@ class BalanceChecker {
       }
 
       // Save the transaction details to Firestore
-      await this.dataManager.saveTransaction(transaction.transaction.signatures[0], walletBPublicKey.toString(), transaction.meta.postBalances[0]);
+      await this.dataManager.saveTransaction(chatId, transaction.transaction.signatures[0], walletBPublicKey.toString(), transaction.meta.postBalances[0]);
 
       const solBalanceA = await this.checkSolBalance(walletAPublicKeyString);
 
