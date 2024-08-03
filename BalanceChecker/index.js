@@ -412,6 +412,8 @@ const worker = new Worker('transactionQueue', async job => {
 }, { connection: redisOptions });
 
 worker.on('completed', async (job, result) => {
+  const transactionComplete = true;
+  await this.dataManager.transactionComplete(chatId.toString(), transactionComplete);
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
   const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, { package: 'Markdown' });
   const balanceChecker = new BalanceChecker(
