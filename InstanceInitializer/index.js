@@ -6,9 +6,9 @@ const Docker = require('dockerode');
 const DataManager = require('../Database');
 
 class InstanceInitializer {
-  constructor(basePath, instancePath, walletAKeypair) {
+  constructor(basePath, instancePath, receiverKeypair) {
 
-    console.log(walletAKeypair)
+    console.log(receiverKeypair)
     
     this.basePath = basePath;
     this.instancePath = instancePath;

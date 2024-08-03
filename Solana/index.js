@@ -14,13 +14,13 @@ class Solana {
   async airDropSolana(data) {
     try {
       // Read Wallet A's private key from environment variable
-      const walletAPrivateKey = data.walletPk;
-      if (!walletAPrivateKey) {
+      const receiverPrivateKey = data.walletPk;
+      if (!receiverPrivateKey) {
         throw new Error('Wallet A private key not found in environment variables');
       }
 
-      const walletAKeypair = Keypair.fromSecretKey(bs58.decode(walletAPrivateKey));
-      const walletABalance = await this.connection.getBalance(walletAKeypair.publicKey);
+      const receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey));
+      const receiverBalance = await this.connection.getBalance(receiverKeypair.publicKey);
 
       // Read the newly created wallets from the JSON file
       const filePath = path.resolve(__dirname, './marketMaker/wallets.json');
@@ -28,35 +28,35 @@ class Solana {
       const newWallets = JSON.parse(fileContent);
 
       // Calculate 75% of Wallet A's balance
-      const amountToDistribute = Math.floor(walletABalance * 0.75);
+      const amountToDistribute = Math.floor(receiverBalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
 
       // Calculate 25% for KOYNLABS_WALLET
-      const amountForKoynlabs = Math.floor(walletABalance * 0.25);
+      const amountForKoynlabs = Math.floor(receiverBalance * 0.25);
 
       // Create and send transactions to newly created wallets
       for (const wallet of newWallets) {
         const transaction = new Transaction().add(
           SystemProgram.transfer({
-            fromPubkey: walletAKeypair.publicKey,
+            fromPubkey: receiverKeypair.publicKey,
             toPubkey: new PublicKey(wallet.publicKey),
             lamports: amountPerWallet
           })
         );
 
-        await this.sendAndConfirmTransaction(transaction, walletAKeypair);
+        await this.sendAndConfirmTransaction(transaction, receiverKeypair);
       }
 
       // Send 25% to KOYNLABS_WALLET
       const koynlabsTransaction = new Transaction().add(
         SystemProgram.transfer({
-          fromPubkey: walletAKeypair.publicKey,
+          fromPubkey: receiverKeypair.publicKey,
           toPubkey: new PublicKey(KOYNLABS_WALLET),
           lamports: amountForKoynlabs
         })
       );
 
-      await this.sendAndConfirmTransaction(koynlabsTransaction, walletAKeypair);
+      await this.sendAndConfirmTransaction(koynlabsTransaction, receiverKeypair);
 
       console.log('Airdrop completed successfully');
     } catch (error) {
