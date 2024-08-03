@@ -158,12 +158,14 @@ class BalanceChecker {
 
       const depositInfo = await this.dataManager.getTransaction(chatId, transactionId);
 
-      if (!depositInfo) {
+      if (!depositInfo.signature) {
+        
         await this.getTransactionHistory(chatId, this.receiverKeypair.publicKey.toString());
       }
 
       const { senderPublicKey, amount } = depositInfo;
       console.log(depositInfo)
+
       const senderPublicKeyInstance = new PublicKey(senderPublicKey);
       const receiverBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toBase58());
       console.log(receiverBalance)
