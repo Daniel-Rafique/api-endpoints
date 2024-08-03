@@ -162,6 +162,7 @@ class BalanceChecker {
       // console.log(depositInfo)
       const senderPublicKeyInstance = new PublicKey(senderPublicKey);
       const balanceA = await this.checkSolBalance(this.receiverKeypair.publicKey.toBase58());
+      console.log(balanceA)
 
       if (balanceA < amount) {
         console.log('Insufficient balance to return SOL');
