@@ -49,7 +49,6 @@ class BalanceChecker {
             else resolve(remainingRequests);
           });
         });
-
         return await operation();
       } catch (error) {
         if (attempt === maxRetries - 1) throw error;
