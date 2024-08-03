@@ -126,10 +126,12 @@ class BalanceChecker {
       }
 
       // Get the minimum balance for rent exemption
-      const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+      // const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
 
       // Calculate lamports to send, leaving enough for rent exemption and fees
-      const lamportsToSend = Math.max((balanceA * 1_000_000_000) - minBalanceForRentExemption - 100000, 0);
+      // const lamportsToSend = Math.max((balanceA * 1_000_000_000) - minBalanceForRentExemption - 100000, 0);
+
+      const lamportsToSend = balanceA * 1_000_000_000 - 10000; // Subtract a small amount to cover the transaction fee and rent
 
       if (lamportsToSend <= 0) {
         console.log('Not enough balance to cover rent exemption and fees');
