@@ -127,7 +127,7 @@ class BalanceChecker {
 
       // Get the minimum balance for rent exemption
       // const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
-      conole.log(minBalanceForRentExemption)
+      console.log(minBalanceForRentExemption)
 
       // Calculate lamports to send, leaving enough for rent exemption and fees
       // const lamportsToSend = Math.max((balanceA * 1_000_000_000) - minBalanceForRentExemption - 100000, 0);
