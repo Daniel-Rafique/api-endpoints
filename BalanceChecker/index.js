@@ -166,7 +166,7 @@ class BalanceChecker {
   
   async returnSolToSender(chatId, transactionId, retryCount = 0) {
     try {
-      const depositInfo = await this.dataManager.getTransaction(chatId);
+      const depositInfo = await this.dataManager.getTransaction(chatId.toString());
 
       if (!depositInfo?.signature) {
         
