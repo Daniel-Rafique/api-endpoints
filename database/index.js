@@ -44,6 +44,17 @@ class DataManager {
       console.error(`Error saving info for ${chatId}:`, error);
     }
   }
+
+  async transactionComplete(chatId) {
+    try {
+      await db.collection(FIRESTORE_COLLECTION).doc(chatId).set({
+        complete: true
+      }, { merge: true });
+      console.log(`Saved transaction info for chat ID ${chatId}`);
+    } catch (error) {
+      console.error(`Error saving info for ${chatId}:`, error);
+    }
+  }
   
 }
 
