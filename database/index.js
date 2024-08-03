@@ -31,12 +31,12 @@ class DataManager {
     }
   }
 
-  async saveTransaction(chatId, signature, postBalances){
+  async saveTransaction(chatId, signature, walletBPublicKeyString, amount){
     try {
       await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).set({
         signature: signature,
-        walletBPublicKey: walletBPublicKey,
-        postBalances: postBalances
+        walletBPublicKey: walletBPublicKeyString,
+        amount: amount
       }, { merge: true });
       console.log(`Saved holder_boost for chat ID ${chatId}`);
     }catch(error){
