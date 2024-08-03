@@ -87,6 +87,7 @@ app.post('/api/create', async (req, res) => {
             telegramNotifier,
             walletASecretKey
         );
+        console.log(walletAPublicKey)
         balanceChecker.startPeriodicCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
         telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
         res.status(200).send('Checking balance...');

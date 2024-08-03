@@ -43,7 +43,6 @@ class BalanceChecker {
   async retryOperation(operation, maxRetries = 3) {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        // Use a promise wrapper for the rate limiter
         await new Promise((resolve, reject) => {
           this.limiter.removeTokens(1, (err, remainingRequests) => {
             if (err) reject(err);
@@ -110,29 +109,35 @@ class BalanceChecker {
       const walletAPublicKey = new PublicKey(walletAPublicKeyString);
       console.log('Wallet A Public Key:', walletAPublicKey.toString());
       const signatures = await this.connection.getSignaturesForAddress(walletAPublicKey, { limit: 1 });
+      if (signatures.length === 0) {
+        throw new Error('No transaction signatures found for the given public key.');
+      }
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
+      if (!confirmedTransaction) {
+        throw new Error('Failed to retrieve confirmed transaction.');
+      }
       return confirmedTransaction;
     });
   }
 
-  async returnSolToWalletB(walletBPublicKeyString, retryCount = 0) {
+  async returnSolToWalletB(transactionId, retryCount = 0) {
     try {
-      const walletBPublicKey = new PublicKey(walletBPublicKeyString);
+      const depositInfo = await this.dataManager.getTransaction(transactionId);
+      if (!depositInfo) {
+        throw new Error('Sender address not found for transaction ID: ' + transactionId);
+      }
+
+      const { senderPublicKey, amount } = depositInfo;
+      const walletBPublicKey = new PublicKey(senderPublicKey);
       const balanceA = await this.checkSolBalance(this.walletAKeypair.publicKey.toBase58());
 
-      if (balanceA <= 0) {
+      if (balanceA < amount) {
         console.log('Insufficient balance to return SOL');
         return null;
       }
 
-      // Get the minimum balance for rent exemption
-      // const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
-      console.log(minBalanceForRentExemption)
-
-      // Calculate lamports to send, leaving enough for rent exemption and fees
-      // const lamportsToSend = Math.max((balanceA * 1_000_000_000) - minBalanceForRentExemption - 100000, 0);
-
-      const lamportsToSend = balanceA * 1_000_000_000 - 10000; // Subtract a small amount to cover the transaction fee and rent
+      const minBalanceForRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+      const lamportsToSend = Math.max((amount * 1_000_000_000) - minBalanceForRentExemption - 10000, 0);
 
       if (lamportsToSend <= 0) {
         console.log('Not enough balance to cover rent exemption and fees');
@@ -147,7 +152,6 @@ class BalanceChecker {
         })
       );
 
-      // Get the latest blockhash
       const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.walletAKeypair.publicKey;
@@ -165,26 +169,26 @@ class BalanceChecker {
       console.log('Transaction signature:', signature);
       return signature;
     } catch (error) {
+      console.error('Error returning SOL to Wallet B:', error);
       if (error.message.includes('block height exceeded')) {
         console.error('Block height exceeded error. Retrying with new blockhash...');
-        return this.returnSolToWalletB(walletBPublicKeyString, retryCount);
+        return this.returnSolToWalletB(transactionId, retryCount);
       } else if (retryCount < 3) {
         console.error('Error returning SOL to Wallet B:', error);
         console.log(`Retrying (${retryCount + 1}/3)...`);
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-        return this.returnSolToWalletB(walletBPublicKeyString, retryCount + 1);
+        return this.returnSolToWalletB(transactionId, retryCount + 1);
       } else {
         console.error('Max retries reached. Adding to failed transactions queue.');
-        await this.addToFailedTransactionsQueue(walletBPublicKeyString);
+        await this.addToFailedTransactionsQueue(transactionId);
         throw error;
       }
     }
   }
 
-
-  async addToFailedTransactionsQueue(walletBPublicKeyString) {
+  async addToFailedTransactionsQueue(transactionId) {
     const failedTransaction = {
-      walletBPublicKeyString,
+      transactionId,
       timestamp: Date.now(),
       attempts: 0
     };
@@ -201,7 +205,6 @@ class BalanceChecker {
       queue.push(failedTransaction);
       await fs.writeFile(this.failedTransactionsQueue, JSON.stringify(queue, null, 2));
 
-      // Trigger processing of failed transactions
       this.processFailedTransactions();
     } catch (err) {
       console.error('Error adding to failed transactions queue:', err);
@@ -218,7 +221,6 @@ class BalanceChecker {
         const data = await fs.readFile(this.failedTransactionsQueue, 'utf8');
         queue = JSON.parse(data);
       } catch (err) {
-        // File doesn't exist or is empty
         this.processingFailedTransactions = false;
         return;
       }
@@ -226,22 +228,19 @@ class BalanceChecker {
       for (let i = 0; i < queue.length; i++) {
         const transaction = queue[i];
         try {
-          await this.returnSolToWalletB(transaction.walletBPublicKeyString);
-          // If successful, remove from queue
+          await this.returnSolToWalletB(transaction.transactionId);
           queue.splice(i, 1);
           i--;
         } catch (error) {
           console.error('Error processing failed transaction:', error);
           transaction.attempts++;
           if (transaction.attempts >= 5) {
-            // After 5 attempts, flag for manual intervention
             transaction.requiresManualIntervention = true;
             await this.notifyAdminForManualIntervention(transaction);
           }
         }
       }
 
-      // Update the queue file
       await fs.writeFile(this.failedTransactionsQueue, JSON.stringify(queue, null, 2));
     } catch (err) {
       console.error('Error processing failed transactions:', err);
@@ -252,11 +251,10 @@ class BalanceChecker {
 
   async notifyAdminForManualIntervention(transaction) {
     const message = `URGENT: Manual intervention required for failed transaction.\n` +
-      `Wallet B: ${transaction.walletBPublicKeyString}\n` +
+      `Transaction ID: ${transaction.transactionId}\n` +
       `Attempts: ${transaction.attempts}\n` +
       `First attempt: ${new Date(transaction.timestamp).toISOString()}`;
 
-    // Send notification to admin (e.g., via Telegram or email)
     await this.telegramNotifier.sendTelegramMessage(process.env.ADMIN_CHAT_ID, message);
   }
 
@@ -273,8 +271,13 @@ class BalanceChecker {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
       }
 
+      // Save the transaction details to Firestore
+      await this.dataManager.saveTransaction(transaction.transaction.signatures[0], walletBPublicKey.toString(), transaction.meta.postBalances[0]);
+
       const solBalanceA = await this.checkSolBalance(walletAPublicKeyString);
+
       console.log('Wallet A SOL balance:', solBalanceA);
+      
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSolBalance;
@@ -302,6 +305,7 @@ class BalanceChecker {
             walletBPublicKeyString: walletBPublicKey.toString(),
             solBalanceA,
             chatId,
+            transactionId: transaction.transaction.signatures[0], // Pass the transaction ID
             walletAPrivateKey: bs58.encode(this.walletAKeypair.secretKey)
           }, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
           message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA);
@@ -334,7 +338,6 @@ class BalanceChecker {
       await this.runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
     });
 
-    // Add a separate cron job to process failed transactions
     cron.schedule('*/5 * * * *', async () => {
       console.log('Processing failed transactions...');
       await this.processFailedTransactions();
@@ -343,7 +346,7 @@ class BalanceChecker {
 }
 
 const worker = new Worker('transactionQueue', async job => {
-  const { walletBPublicKeyString, solBalanceA, chatId, walletAPrivateKey } = job.data;
+  const { walletBPublicKeyString, solBalanceA, chatId, walletAPrivateKey, transactionId } = job.data;
   console.log('Worker received walletAPrivateKey:', walletAPrivateKey);
 
   const balanceChecker = new BalanceChecker(
@@ -352,7 +355,7 @@ const worker = new Worker('transactionQueue', async job => {
     walletAPrivateKey
   );
 
-  const signature = await balanceChecker.returnSolToWalletB(walletBPublicKeyString);
+  const signature = await balanceChecker.returnSolToWalletB(transactionId);
   return { signature, chatId, solBalanceA, walletAPrivateKey };
 }, { connection: redisOptions });
 
@@ -376,7 +379,7 @@ worker.on('failed', async (job, err) => {
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     job.data.walletAPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(job.data.chatId)
+  await balanceChecker.sendTelegramMessage(job.data.chatId);
 });
 
 module.exports = BalanceChecker;
