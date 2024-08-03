@@ -32,6 +32,7 @@ class DataManager {
   }
 
   async saveTransaction(chatId, signature, senderPublicKeyString, amount){
+    console.log(`Saving transaction info for chat ID ${chatId, signature, senderPublicKeyString, amount}`);
     try {
       await db.collection(FIRESTORE_COLLECTION).doc(chatId).set({
         signature: signature,
