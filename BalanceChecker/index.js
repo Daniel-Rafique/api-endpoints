@@ -269,7 +269,7 @@ class BalanceChecker {
 
   async runBalanceCheck(chatId, walletAPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
-      const transaction = await this.getTransactionHistory(walletAPublicKeyString);
+      const transaction = await this.getTransactionHistory(chatId, walletAPublicKeyString);
       console.log('Transaction:', transaction);
 
       const walletBPublicKey = transaction.transaction.message.accountKeys.find(
