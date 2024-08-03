@@ -115,7 +115,7 @@ class BalanceChecker {
       }
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
 
-      console.log(confirmedTransaction)
+      console.log('Getting transaction History', confirmedTransaction)
 
       if (!confirmedTransaction) {
         throw new Error('Failed to retrieve confirmed transaction.');
