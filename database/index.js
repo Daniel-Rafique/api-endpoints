@@ -9,7 +9,7 @@ class DataManager {
 
   async getCollection(chatId) {
     try {
-      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).get();
+      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId).get();
       if (doc.exists) {
         return doc.data();
       }
@@ -21,7 +21,7 @@ class DataManager {
 
   async getTransaction(chatId) {
     try {
-      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).get();
+      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId).get();
       if (doc.exists) {
         return doc.data();
       }
@@ -33,7 +33,7 @@ class DataManager {
 
   async saveTransaction(chatId, signature, senderPublicKeyString, amount){
     try {
-      await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).set({
+      await db.collection(FIRESTORE_COLLECTION).doc(chatId).set({
         signature: signature,
         senderPublicKey: senderPublicKeyString,
         amount: amount
