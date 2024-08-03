@@ -130,9 +130,7 @@ class BalanceChecker {
       console.log('Transaction Meta:', meta);
 
       // Identify the sender (Wallet B)
-      const senderPublicKey = transaction.message.accountKeys.find(
-        key => key.toString() !== receiverPublicKeyString && key.toString() !== this.receiverKeypair.publicKey.toString()
-      );
+      const senderPublicKey = transaction.message.accountKeys[0]
 
       if (!senderPublicKey) {
         throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
