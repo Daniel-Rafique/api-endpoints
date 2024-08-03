@@ -149,22 +149,22 @@ class BalanceChecker {
   async returnSolToSender(chatId, transactionId, retryCount = 0) {
     try {
       console.log(chatId)
-      const senderPublicKey = '8HBx72n7HNkD3uk536yFG62vuThuFKffmUEdX8kDzdvu';
-      const amount = 0.005;
+      // const senderPublicKey = '8HBx72n7HNkD3uk536yFG62vuThuFKffmUEdX8kDzdvu';
+      // const amount = 0.005;
 
-      // const depositInfo = await this.dataManager.getTransaction(chatId, transactionId);
+      const depositInfo = await this.dataManager.getTransaction(chatId, transactionId);
 
-      // if (!depositInfo) {
-      //   throw new Error('Sender address not found for transaction ID: ' + transactionId);
-      // }
+      if (!depositInfo) {
+        throw new Error('Sender address not found for transaction ID: ' + transactionId);
+      }
 
-      // const { senderPublicKey, amount } = depositInfo;
-      // console.log(depositInfo)
+      const { senderPublicKey, amount } = depositInfo;
+      console.log(depositInfo)
       const senderPublicKeyInstance = new PublicKey(senderPublicKey);
-      const balanceA = await this.checkSolBalance(this.receiverKeypair.publicKey.toBase58());
-      console.log(balanceA)
+      const receiverBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toBase58());
+      console.log(receiverBalance)
 
-      if (balanceA < amount) {
+      if (receiverBalance < amount) {
         console.log('Insufficient balance to return SOL');
         return null;
       }
