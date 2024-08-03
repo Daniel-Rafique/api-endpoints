@@ -18,7 +18,6 @@ const redisOptions = {
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
-
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, receiverPrivateKey) {
     this.rpcEndpoints = rpcEndpoints;
@@ -340,7 +339,7 @@ class BalanceChecker {
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
         const transactionComplete = true;
-        await this.dataManager.transactionComplete(chatId.toString(), transactionComplete);
+        await this.dataManager.saveTransactionComplete(chatId.toString(), transactionComplete);
         await this.walletProcessor.addJob({ chatId });
       } else {
         if (!isSolValid) {
@@ -420,8 +419,6 @@ worker.on('completed', async (job, result) => {
     result.receiverPrivateKey
   );
   if (result.signature) {
-    const transactionComplete = true;
-    await this.dataManager.transactionComplete(chatId.toString(), transactionComplete);
     await balanceChecker.sendTelegramMessage(result.chatId, message);
   }
 });
