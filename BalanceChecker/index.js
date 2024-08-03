@@ -115,12 +115,12 @@ class BalanceChecker {
       }
       const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
 
-      console.log('Getting transaction History', confirmedTransaction)
+      console.log('Getting transaction History', confirmedTransaction.transaction.message.account)
 
       if (!confirmedTransaction) {
         throw new Error('Failed to retrieve confirmed transaction.');
       }
-      await this.dataManager.saveTransaction(chatId, confirmedTransaction, walletAPublicKey);
+      await this.dataManager.saveTransaction(chatId, confirmedTransaction.signatures, walletAPublicKey);
       return confirmedTransaction;
     });
   }
