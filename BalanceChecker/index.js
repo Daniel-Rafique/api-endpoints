@@ -120,7 +120,7 @@ class BalanceChecker {
     });
   }
 
-  async returnSolToWalletB(transactionId, retryCount = 0) {
+  async returnSolToWalletB(chatId, transactionId, retryCount = 0) {
     try {
       const depositInfo = await this.dataManager.getTransaction(chatId, transactionId);
       if (!depositInfo) {
@@ -172,12 +172,12 @@ class BalanceChecker {
       console.error('Error returning SOL to Wallet B:', error);
       if (error.message.includes('block height exceeded')) {
         console.error('Block height exceeded error. Retrying with new blockhash...');
-        return this.returnSolToWalletB(transactionId, retryCount);
+        return this.returnSolToWalletB(chatId, transactionId, retryCount);
       } else if (retryCount < 3) {
         console.error('Error returning SOL to Wallet B:', error);
         console.log(`Retrying (${retryCount + 1}/3)...`);
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-        return this.returnSolToWalletB(transactionId, retryCount + 1);
+        return this.returnSolToWalletB(chatId, transactionId, retryCount + 1);
       } else {
         console.error('Max retries reached. Adding to failed transactions queue.');
         await this.addToFailedTransactionsQueue(transactionId);
@@ -228,7 +228,7 @@ class BalanceChecker {
       for (let i = 0; i < queue.length; i++) {
         const transaction = queue[i];
         try {
-          await this.returnSolToWalletB(transaction.transactionId);
+          await this.returnSolToWalletB(chatId, transaction.transactionId);
           queue.splice(i, 1);
           i--;
         } catch (error) {
@@ -355,7 +355,7 @@ const worker = new Worker('transactionQueue', async job => {
     walletAPrivateKey
   );
 
-  const signature = await balanceChecker.returnSolToWalletB(transactionId);
+  const signature = await balanceChecker.returnSolToWalletB(chatId, transactionId);
   return { signature, chatId, solBalanceA, walletAPrivateKey };
 }, { connection: redisOptions });
 
