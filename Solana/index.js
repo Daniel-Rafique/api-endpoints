@@ -4,7 +4,6 @@ const fs = require('fs').promises;
 const path = require('path');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
-const { RateLimiter } = require('limiter');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
@@ -18,26 +17,22 @@ class Solana {
       projectId: 'koynlabs-2f749',
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
-    this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' }); // Limiting to 10 transactions per second
   }
 
   async distributeSolana(chatId) {
     const chatIdStr = chatId.toString();
-
     if (!chatIdStr || typeof chatIdStr !== 'string') {
       throw new Error('Invalid chatIdStr');
     }
 
     const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
     const userDoc = await userDocRef.get();
-
     if (!userDoc.exists) {
       throw new Error('User document does not exist');
     }
 
     const userData = userDoc.data();
     const senderPrivateKey = userData.walletPk;
-
     if (!senderPrivateKey) {
       throw new Error('Wallet private key not found in user data');
     }
@@ -47,63 +42,50 @@ class Solana {
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Distribute Solana, sender balance:', senderBalance);
 
-      // Read the recipient wallets from the JSON file
       const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const recipientWallets = JSON.parse(fileContent);
-      console.log(recipientWallets);
 
-      // Calculate 75% of sender's balance
       const amountToDistribute = Math.floor(senderBalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / recipientWallets.length);
-
-      // Calculate 25% for KOYNLABS_WALLET
       const amountForKoynlabs = Math.floor(senderBalance * 0.25);
 
       console.log(`Amount to distribute: ${amountToDistribute}`);
       console.log(`Amount per wallet: ${amountPerWallet}`);
       console.log(`Amount for KOYNLABS_WALLET: ${amountForKoynlabs}`);
 
-      const batchSize = parseInt(process.env.BATCH_SIZE, 10); // Number of wallets to process in parallel
+      const batchSize = 10; // Adjust based on your needs and network conditions
+      const results = [];
 
       for (let i = 0; i < recipientWallets.length; i += batchSize) {
         const batch = recipientWallets.slice(i, i + batchSize);
-
-        await Promise.all(batch.map(async (wallet) => {
-          try {
-            const signature = await this.sendSol(senderKeypair, new PublicKey(wallet.publicKey), amountPerWallet);
-            console.log(`Sent ${amountPerWallet} lamports to ${wallet.publicKey}. Signature: ${signature}`);
-
-            await new Promise((resolve, reject) => {
-              this.limiter.removeTokens(1, (err, remainingRequests) => {
-                if (err) reject(err);
-                else resolve(remainingRequests);
-              });
-            });
-          } catch (error) {
-            console.error(`Error sending to ${wallet.publicKey}:`, error.message);
-          }
-        }));
+        const batchResults = await this.processBatch(senderKeypair, batch, amountPerWallet);
+        results.push(...batchResults);
+        
+        // Add a delay between batches to avoid overwhelming the network
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      // Send 25% to KOYNLABS_WALLET
-      try {
-        const signature = await this.sendSol(senderKeypair, new PublicKey(KOYNLABS_WALLET), amountForKoynlabs);
-        console.log(`Sent ${amountForKoynlabs} lamports to KOYNLABS_WALLET. Signature: ${signature}`);
-      } catch (error) {
-        console.error(`Error sending to KOYNLABS_WALLET:`, error);
-      }
+      // Send to KOYNLABS_WALLET
+      const koynlabsResult = await this.sendSol(senderKeypair, new PublicKey(KOYNLABS_WALLET), amountForKoynlabs);
+      results.push(koynlabsResult);
 
-      // Update the database flag after successful completion
-      await userDocRef.update({
-        distributeSolana: true
-      });
+      const successfulTransactions = results.filter(r => r.success).length;
+      console.log(`Successfully sent to ${successfulTransactions} out of ${results.length} wallets`);
 
-      console.log('Distribution completed successfully');
+      await userDocRef.update({ distributeSolana: true });
+      
+      return results;
     } catch (error) {
       console.error('Error during distribution:', error.message);
       throw error;
     }
+  }
+
+  async processBatch(senderKeypair, batch, amountPerWallet) {
+    return Promise.all(batch.map(wallet => 
+      this.sendSol(senderKeypair, new PublicKey(wallet.publicKey), amountPerWallet)
+    ));
   }
 
   async sendSol(senderKeypair, recipientPublicKey, amount, retries = 3) {
@@ -116,40 +98,35 @@ class Solana {
             lamports: amount,
           })
         );
-  
-        // Get a recent blockhash
-        const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+
+        const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = senderKeypair.publicKey;
-  
-        // Sign transaction, broadcast, and confirm
         transaction.sign(senderKeypair);
-        const rawTransaction = transaction.serialize();
-        const signature = await this.connection.sendRawTransaction(rawTransaction, {
+
+        const signature = await this.connection.sendRawTransaction(transaction.serialize(), {
           skipPreflight: true,
-          preflightCommitment: 'confirmed',
+          maxRetries: 5,
         });
-  
-        // Wait for confirmation with a longer timeout
-        const confirmation = await this.connection.confirmTransaction({
+
+        const result = await this.connection.confirmTransaction({
           signature,
           blockhash,
-          lastValidBlockHeight: await this.connection.getBlockHeight() + 150
-        }, 'confirmed');
-  
-        if (confirmation.value.err) {
-          throw new Error(`Transaction failed: ${confirmation.value.err}`);
+          lastValidBlockHeight,
+        });
+
+        if (result.value.err) {
+          throw new Error(`Transaction failed: ${JSON.stringify(result.value.err)}`);
         }
-  
+
         console.log(`Transaction ${signature} confirmed`);
-        return signature;
+        return { success: true, signature, recipient: recipientPublicKey.toBase58() };
       } catch (error) {
-        console.error(`Attempt ${attempt + 1} failed:`, error);
+        console.error(`Attempt ${attempt + 1} failed for ${recipientPublicKey.toBase58()}:`, error);
         if (attempt === retries - 1) {
-          throw error; // Rethrow the error if this was the last attempt
+          return { success: false, error: error.message, recipient: recipientPublicKey.toBase58() };
         }
-        // Wait for a short time before retrying
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
   }
