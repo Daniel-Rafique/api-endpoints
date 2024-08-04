@@ -81,7 +81,10 @@ app.post('/api/create', async (req, res) => {
         }
 
         // Start the periodic check
-        const receiverSecretKey = userData.walletPk;
+        const receiverSecretKey = userData.walletPk.toString();
+        if (typeof receiverPrivateKey !== 'string') {
+            throw new TypeError('Receiver private key must be a string');
+          }
         const balanceChecker = new BalanceChecker(
             [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
             telegramNotifier,
