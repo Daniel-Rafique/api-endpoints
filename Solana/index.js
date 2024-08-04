@@ -1,12 +1,11 @@
-require('dotenv').config();
-const bs58 = require('bs58');
-const DataManager = require('../database');
-const { Firestore } = require('@google-cloud/firestore');
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
+const bs58 = require('bs58');
 const fs = require('fs').promises;
 const path = require('path');
+const DataManager = require('./database');
+const Firestore = require('@google-cloud/firestore');
+const { RateLimiter } = require('limiter');
 
-const ENV_PATH = process.env.ENV;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 
@@ -18,6 +17,7 @@ class Solana {
       projectId: 'koynlabs-2f749',
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
+    this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' }); // Limiting to 10 transactions per second
   }
 
   async airDropSolana(chatId) {
@@ -59,17 +59,21 @@ class Solana {
       // Calculate 25% for KOYNLABS_WALLET
       const amountForKoynlabs = Math.floor(receiverBalance * 0.25);
 
-      // Create and send transactions to newly created wallets
-      for (const wallet of newWallets) {
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({
-            fromPubkey: receiverKeypair.publicKey,
-            toPubkey: new PublicKey(wallet.publicKey),
-            lamports: amountPerWallet
-          })
-        );
+      // Create and send transactions to newly created wallets in batches
+      const batchSize = 50; // Number of transactions per batch
+      for (let i = 0; i < newWallets.length; i += batchSize) {
+        const batch = newWallets.slice(i, i + batchSize);
+        const transactions = batch.map(wallet => {
+          return new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: receiverKeypair.publicKey,
+              toPubkey: new PublicKey(wallet.publicKey),
+              lamports: amountPerWallet
+            })
+          );
+        });
 
-        await this.sendAndConfirmTransaction(transaction, receiverKeypair);
+        await this.sendBatchTransactions(transactions, receiverKeypair);
       }
 
       // Send 25% to KOYNLABS_WALLET
@@ -92,6 +96,18 @@ class Solana {
     }
   }
 
+  async sendBatchTransactions(transactions, signer) {
+    try {
+      await Promise.all(transactions.map(async (transaction) => {
+        await this.limiter.removeTokens(1); // Apply rate limiting
+        await this.sendAndConfirmTransaction(transaction, signer);
+      }));
+    } catch (error) {
+      console.error('Error sending batch transactions:', error);
+      throw error;
+    }
+  }
+
   async sendAndConfirmTransaction(transaction, signer) {
     const { blockhash } = await this.connection.getRecentBlockhash();
     transaction.recentBlockhash = blockhash;
@@ -107,8 +123,5 @@ class Solana {
     console.log('Transaction confirmed:', signature);
   }
 }
-
-module.exports = Solana;
-
 
 module.exports = Solana;
