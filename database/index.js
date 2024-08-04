@@ -45,7 +45,7 @@ class DataManager {
     }
   }
 
-  async saveTransactionComplete(chatId) {
+  async saveTransactionComplete(chatId, transactionComplete) {
     try {
       await db.collection(FIRESTORE_COLLECTION).doc(chatId, transactionComplete).set({
         complete: transactionComplete
