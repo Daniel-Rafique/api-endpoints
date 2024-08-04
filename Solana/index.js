@@ -25,6 +25,7 @@ class Solana {
 
     // Add new wallets to the existing array
     try {
+      console.log(' Airdrop Solana')
       // Read Master wallet's private key from environment variable
       const receiverPrivateKey = userData.walletPk;
       if (!receiverPrivateKey) {
@@ -33,11 +34,13 @@ class Solana {
 
       const receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey));
       const receiverBalance = await this.connection.getBalance(receiverKeypair.publicKey);
+      console.log(' Airdrop Solana', receiverBalance)
 
       // Read the newly created wallets from the JSON file
       const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
+      console.log(newWallets)
 
       // Calculate 75% of Wallet A's balance
       const amountToDistribute = Math.floor(receiverBalance * 0.75);

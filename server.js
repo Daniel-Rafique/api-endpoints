@@ -47,8 +47,6 @@ function generateHash(chatId, timestamp) {
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramNotifier = new TelegramNotifier(telegramToken);
 
-console.log(telegramToken)
-
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
     const { chatId, timestamp, hash } = req.body;
