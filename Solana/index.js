@@ -11,91 +11,99 @@ const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 
 class Solana {
-  constructor() {
-    this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
-    this.dataManager = new DataManager();
-    this.firestore = new Firestore({
-      projectId: 'koynlabs-2f749', 
-      keyFilename: '.config/firebaseServiceAccountKey.json',
-  });
-  }
+    constructor() {
+        this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
+        this.dataManager = new DataManager();
+        this.firestore = new Firestore({
+            projectId: 'koynlabs-2f749',
+            keyFilename: '.config/firebaseServiceAccountKey.json',
+        });
+    }
 
-  async airDropSolana(chatIdStr) {
-    const userData = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
+    async airDropSolana(chatIdStr) {
+        if (!chatIdStr || typeof chatIdStr !== 'string') {
+            throw new Error('Invalid chatIdStr');
+        }
 
-    // Add new wallets to the existing array
-    try {
-      console.log(' Airdrop Solana', userData.walletPk)
-      // Read Master wallet's private key from environment variable
-      const senderPrivateKey = userData.walletPk;
-      if (!senderPrivateKey) {
-        throw new Error('Wallet private key not found in environment variables');
-      }
+        const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
+        const userDoc = await userDocRef.get();
 
-      const receiverKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
-      const receiverBalance = await this.connection.getBalance(receiverKeypair.publicKey);
-      console.log(' Airdrop Solana', receiverBalance)
+        if (!userDoc.exists) {
+            throw new Error('User document does not exist');
+        }
 
-      // Read the newly created wallets from the JSON file
-      const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
-      const fileContent = await fs.readFile(filePath, 'utf8');
-      const newWallets = JSON.parse(fileContent);
-      console.log(newWallets)
+        const userData = userDoc.data();
+        const senderPrivateKey = userData.walletPk;
 
-      // Calculate 75% of Wallet A's balance
-      const amountToDistribute = Math.floor(receiverBalance * 0.75);
-      const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
+        if (!senderPrivateKey) {
+            throw new Error('Wallet private key not found in user data');
+        }
 
-      // Calculate 25% for KOYNLABS_WALLET
-      const amountForKoynlabs = Math.floor(receiverBalance * 0.25);
+        try {
+            const receiverKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+            const receiverBalance = await this.connection.getBalance(receiverKeypair.publicKey);
+            console.log('Airdrop Solana, receiver balance:', receiverBalance);
 
-      // Create and send transactions to newly created wallets
-      for (const wallet of newWallets) {
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({
-            fromPubkey: receiverKeypair.publicKey,
-            toPubkey: new PublicKey(wallet.publicKey),
-            lamports: amountPerWallet
-          })
+            // Read the newly created wallets from the JSON file
+            const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            const newWallets = JSON.parse(fileContent);
+            console.log(newWallets);
+
+            // Calculate 75% of Wallet A's balance
+            const amountToDistribute = Math.floor(receiverBalance * 0.75);
+            const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
+
+            // Calculate 25% for KOYNLABS_WALLET
+            const amountForKoynlabs = Math.floor(receiverBalance * 0.25);
+
+            // Create and send transactions to newly created wallets
+            for (const wallet of newWallets) {
+                const transaction = new Transaction().add(
+                    SystemProgram.transfer({
+                        fromPubkey: receiverKeypair.publicKey,
+                        toPubkey: new PublicKey(wallet.publicKey),
+                        lamports: amountPerWallet
+                    })
+                );
+
+                await this.sendAndConfirmTransaction(transaction, receiverKeypair);
+            }
+
+            // Send 25% to KOYNLABS_WALLET
+            const koynlabsTransaction = new Transaction().add(
+                SystemProgram.transfer({
+                    fromPubkey: receiverKeypair.publicKey,
+                    toPubkey: new PublicKey(KOYNLABS_WALLET),
+                    lamports: amountForKoynlabs
+                })
+            );
+
+            await this.sendAndConfirmTransaction(koynlabsTransaction, receiverKeypair);
+            await userDocRef.update({
+                airDropSolana: true
+            });
+
+            console.log('Airdrop completed successfully');
+        } catch (error) {
+            console.error('Error during airdrop:', error);
+        }
+    }
+
+    async sendAndConfirmTransaction(transaction, signer) {
+        const { blockhash } = await this.connection.getRecentBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = signer.publicKey;
+
+        const signature = await sendAndConfirmTransaction(
+            this.connection,
+            transaction,
+            [signer],
+            { commitment: 'confirmed' }
         );
 
-        await this.sendAndConfirmTransaction(transaction, receiverKeypair);
-      }
-
-      // Send 25% to KOYNLABS_WALLET
-      const koynlabsTransaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: receiverKeypair.publicKey,
-          toPubkey: new PublicKey(KOYNLABS_WALLET),
-          lamports: amountForKoynlabs
-        })
-      );
-
-      await this.sendAndConfirmTransaction(koynlabsTransaction, receiverKeypair);
-      await userData.update({
-        airDropSolana: true
-      });
-
-      console.log('Airdrop completed successfully');
-    } catch (error) {
-      console.error('Error during airdrop:', error);
+        console.log('Transaction confirmed:', signature);
     }
-  }
-
-  async sendAndConfirmTransaction(transaction, signer) {
-    const { blockhash } = await this.connection.getRecentBlockhash();
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = signer.publicKey;
-
-    const signature = await sendAndConfirmTransaction(
-      this.connection,
-      transaction,
-      [signer],
-      { commitment: 'confirmed' }
-    );
-
-    console.log('Transaction confirmed:', signature);
-  }
 }
 
 module.exports = Solana;
