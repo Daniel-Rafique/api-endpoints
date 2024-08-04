@@ -1,15 +1,15 @@
-const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
+const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmRawTransaction } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const fs = require('fs').promises;
 const path = require('path');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
-const axios = require('axios'); // For making HTTP requests
+const { RateLimiter } = require('limiter');
+const TransactionManager = require('./TransactionManager'); // Assuming the TransactionManager is in the same directory
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const ENV_PATH = process.env.ENV;
-const JITO_RPC_ENDPOINT = process.env.JITO_API_URL; // Replace with the actual Jito Labs RPC endpoint
 
 class Solana {
   constructor() {
@@ -19,6 +19,8 @@ class Solana {
       projectId: 'koynlabs-2f749',
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
+    this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' }); // Limiting to 10 transactions per second
+    this.transactionManager = new TransactionManager(); // Initialize TransactionManager
   }
 
   async airDropSolana(chatId) {
@@ -64,24 +66,19 @@ class Solana {
 
       for (let i = 0; i < newWallets.length; i += batchSize) {
         const batch = newWallets.slice(i, i + batchSize);
-        const transactions = await Promise.all(batch.map(async (wallet) => {
-          const transaction = new Transaction().add(
-            SystemProgram.transfer({
-              fromPubkey: receiverKeypair.publicKey,
-              toPubkey: new PublicKey(wallet.publicKey),
-              lamports: amountPerWallet
-            })
-          );
+        const transaction = new Transaction();
 
-          const { blockhash } = await this.connection.getRecentBlockhash();
-          transaction.recentBlockhash = blockhash;
-          transaction.feePayer = receiverKeypair.publicKey;
-          transaction.sign(receiverKeypair);
+        await Promise.all(batch.map(async (wallet) => {
+          const instruction = SystemProgram.transfer({
+            fromPubkey: receiverKeypair.publicKey,
+            toPubkey: new PublicKey(wallet.publicKey),
+            lamports: amountPerWallet
+          });
 
-          return transaction;
+          transaction.add(instruction);
         }));
 
-        await this.sendBundle(transactions);
+        await this.sendAndRetryTransaction(transaction, receiverKeypair);
       }
 
       // Send 25% to KOYNLABS_WALLET
@@ -93,12 +90,7 @@ class Solana {
         })
       );
 
-      const { blockhash: koynlabsBlockhash } = await this.connection.getRecentBlockhash();
-      koynlabsTransaction.recentBlockhash = koynlabsBlockhash;
-      koynlabsTransaction.feePayer = receiverKeypair.publicKey;
-      koynlabsTransaction.sign(receiverKeypair);
-
-      await this.sendBundle([koynlabsTransaction]);
+      await this.sendAndRetryTransaction(koynlabsTransaction, receiverKeypair);
 
       // Update the database flag after successful completion
       await userDocRef.update({
@@ -112,25 +104,36 @@ class Solana {
     }
   }
 
-  async sendBundle(transactions) {
-    const serializedTransactions = transactions.map(tx => tx.serialize().toString('base64'));
-    const bundleRequest = {
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'sendBundle',
-      params: [serializedTransactions],
-    };
-
-    try {
-      const response = await axios.post(JITO_RPC_ENDPOINT, bundleRequest);
-      if (response.data.error) {
-        throw new Error(response.data.error.message);
+  async sendAndRetryTransaction(transaction, signer) {
+    let retries = 5;
+    while (retries > 0) {
+      try {
+        await this.sendAndConfirmTransaction(transaction, signer);
+        return;
+      } catch (error) {
+        if (error.message.includes('block height exceeded')) {
+          console.log('Transaction expired, retrying with updated block height');
+          retries -= 1;
+          if (retries === 0) throw error; // Rethrow if retries exhausted
+          const { blockhash } = await this.transactionManager.getRecentBlockhash(this.connection);
+          transaction.recentBlockhash = blockhash;
+          transaction.sign(signer);
+        } else {
+          throw error;
+        }
       }
-      console.log('Bundle sent:', response.data.result);
-    } catch (error) {
-      console.error('Error sending bundle:', error);
-      throw error;
     }
+  }
+
+  async sendAndConfirmTransaction(transaction, signer) {
+    const rawTransaction = transaction.serialize();
+    const signature = await sendAndConfirmRawTransaction(
+      this.connection,
+      rawTransaction,
+      { commitment: 'confirmed' }
+    );
+
+    console.log('Transaction confirmed:', signature);
   }
 }
 
