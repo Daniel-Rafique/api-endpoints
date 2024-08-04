@@ -106,18 +106,52 @@ class Solana {
     }
   }
 
-  async sendSol(senderKeypair, recipientPublicKey, amount) {
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: senderKeypair.publicKey,
-        toPubkey: recipientPublicKey,
-        lamports: amount,
-      })
-    );
-
-    const signature = await this.connection.sendTransaction(transaction, [senderKeypair]);
-    await this.connection.confirmTransaction(signature);
-    return signature;
+  async sendSol(senderKeypair, recipientPublicKey, amount, retries = 3) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: senderKeypair.publicKey,
+            toPubkey: recipientPublicKey,
+            lamports: amount,
+          })
+        );
+  
+        // Get a recent blockhash
+        const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = senderKeypair.publicKey;
+  
+        // Sign transaction, broadcast, and confirm
+        transaction.sign(senderKeypair);
+        const rawTransaction = transaction.serialize();
+        const signature = await this.connection.sendRawTransaction(rawTransaction, {
+          skipPreflight: true,
+          preflightCommitment: 'confirmed',
+        });
+  
+        // Wait for confirmation with a longer timeout
+        const confirmation = await this.connection.confirmTransaction({
+          signature,
+          blockhash,
+          lastValidBlockHeight: await this.connection.getBlockHeight() + 150
+        }, 'confirmed');
+  
+        if (confirmation.value.err) {
+          throw new Error(`Transaction failed: ${confirmation.value.err}`);
+        }
+  
+        console.log(`Transaction ${signature} confirmed`);
+        return signature;
+      } catch (error) {
+        console.error(`Attempt ${attempt + 1} failed:`, error);
+        if (attempt === retries - 1) {
+          throw error; // Rethrow the error if this was the last attempt
+        }
+        // Wait for a short time before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
   }
 }
 
