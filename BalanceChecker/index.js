@@ -451,7 +451,7 @@ worker.on('failed', async (job, err) => {
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     job.data.receiverPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(job.data.chatId, MESSAGES.RETURNED_SOL_FAILURE(job.data.solBalanceA, err.message));
+  // await balanceChecker.sendTelegramMessage(job.data.chatId, MESSAGES.RETURNED_SOL_FAILURE(job.data.solBalanceA, err.message));
 });
 
 module.exports = BalanceChecker;
