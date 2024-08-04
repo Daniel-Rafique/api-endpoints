@@ -29,8 +29,7 @@ class WalletProcessor {
       const userData = await this.dataManager.getCollection(chatId);
       const { makers } = userData;
       try {
-        const userData = this.dataManager.getCollection(chatId);
-        if (userData.walletsCreated === false) {
+        if (!userData.walletsCreated) {
           console.log('Creating wallets')
           try {
             const walletsArray = this.walletManager.createSolanaWallets(makers, chatId);
@@ -39,11 +38,13 @@ class WalletProcessor {
             console.log(error)
           }
         }
-        if (userData.airDropSolana === false) {
+        if (!userData.airDropSolana) {
+          console.log('Airdropping Solona')
           await this.solana.airDropSolana(chatId)
         }
 
-        if(userData.instancesCreated === false){
+        if(!userData.instancesCreated){
+          console.log('Airdropping Solona')
           await this.instanceInitializer.initializeMarketMakerInstance(chatId);
         }
         console.log(`Processed job for chatId: ${chatId}`);
