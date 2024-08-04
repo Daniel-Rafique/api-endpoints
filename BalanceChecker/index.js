@@ -36,14 +36,13 @@ class BalanceChecker {
     this.dataManager = new DataManager();
     this.receiverKeypair = null;
     
-    // Add logging and validation for receiverPrivateKey
     try {
       if (typeof receiverPrivateKey !== 'string') {
         throw new TypeError('Receiver private key must be a string');
       }
       this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey));
     } catch (error) {
-      console.error('Error decoding receiver private key:', error);
+      console.error('Error decoding receiver private key:', error.message);
       throw error;
     }
 
