@@ -1,5 +1,6 @@
 require('dotenv').config();
 const bs58 = require('bs58');
+const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
@@ -12,6 +13,7 @@ const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 class Solana {
   constructor() {
     this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
+    this.dataManager = DataManager;
     this.firestore = new Firestore({
       projectId: projectId,
       keyFilename: keyFilename,
