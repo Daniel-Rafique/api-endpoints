@@ -14,7 +14,7 @@ const HELIUS_API_KEY = process.env.HELIUS_API_KEY; // Your Helius API key
 
 class Solana {
   constructor() {
-    this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
+    this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_2, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
