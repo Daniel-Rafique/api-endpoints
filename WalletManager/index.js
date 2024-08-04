@@ -8,7 +8,11 @@ const path = require('path');
 const Solana = require('../Solana');
 
 class WalletManager {
-    constructor() {
+    constructor(projectId, keyFilename) {
+        this.firestore = new Firestore({
+            projectId: projectId,
+            keyFilename: keyFilename,
+        }),
         this.dataManager = new DataManager; 
         this.solana = new Solana();
     }
@@ -37,7 +41,7 @@ class WalletManager {
             // Add new wallets to the existing array
             await docRef.update({
                 wallets: Firestore.FieldValue.arrayUnion(...newWallets),
-                instancesCreated: true
+                walletsCreated: true
             });
 
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
