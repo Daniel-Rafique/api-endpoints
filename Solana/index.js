@@ -6,8 +6,6 @@ const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
 const InstanceInitializer = require('../InstanceInitializer');
 const { RateLimiter } = require('limiter');
-const InstanceInitializer = require('../InstanceInitializer');
-z
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
