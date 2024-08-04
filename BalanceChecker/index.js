@@ -142,7 +142,7 @@ class BalanceChecker {
           SystemProgram.transfer({
             fromPubkey: this.receiverKeypair.publicKey,
             toPubkey: new PublicKey(senderPublicKey),
-            lamports: amountReceived - 5000 // Adjusting for transaction fee in lamports
+            lamports: amountReceived - 10000 // Adjusting for transaction fee in lamports
           })
         );
 
@@ -195,7 +195,7 @@ class BalanceChecker {
             SystemProgram.transfer({
                 fromPubkey: this.receiverKeypair.publicKey,
                 toPubkey: new PublicKey(senderPublicKey),
-                lamports: amountReceived - 5000 // Adjusting for transaction fee in lamports
+                lamports: amountReceived - 10000 // Adjusting for transaction fee in lamports
             })
         );
 
