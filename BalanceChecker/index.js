@@ -80,7 +80,9 @@ class BalanceChecker {
       if (response.method === 'logsNotification') {
         const transactionSignature = response.params.result.signature;
         console.log(`New transaction: ${transactionSignature}`);
-        await this.handleTransaction(transactionSignature);
+        if (transactionSignature) {
+          await this.handleTransaction(transactionSignature);
+        }
       }
     });
 
@@ -152,7 +154,7 @@ class BalanceChecker {
         );
 
         console.log(`Returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
-        await this.sendTelegramMessage(this.chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
+        await this.sendTelegramMessage(this.chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. \nTX signature: ${signature}`);
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
@@ -405,7 +407,7 @@ const worker = new Worker('transactionQueue', async job => {
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  // const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, { package: 'Markdown' });
+  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, { package: 'Markdown' });
   const balanceChecker = new BalanceChecker(
     [SOLANA_RPC_ENDPOINT_1, SOLANA_RPC_ENDPOINT_2],
     [ // Add your WebSocket endpoints here
