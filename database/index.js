@@ -9,7 +9,7 @@ class DataManager {
 
   async getCollection(chatId) {
     try {
-      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId).get();
+      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).get();
       if (doc.exists) {
         return doc.data();
       }
@@ -21,7 +21,7 @@ class DataManager {
 
   async getTransaction(chatId) {
     try {
-      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId).get();
+      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).get();
       if (doc.exists) {
         return doc.data();
       }
@@ -34,7 +34,7 @@ class DataManager {
   async saveTransaction(chatId, signature, senderPublicKeyString, amount) {
     console.log(`Saving transaction info for chat ID ${chatId}`);
     try {
-      await db.collection(FIRESTORE_COLLECTION).doc(chatId).set({
+      await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).set({
         signature: signature,
         senderPublicKey: senderPublicKeyString,
         balance: amount
@@ -47,7 +47,7 @@ class DataManager {
 
   async saveTransactionComplete(chatId, transactionComplete) {
     try {
-      await db.collection(FIRESTORE_COLLECTION).doc(chatId, transactionComplete).set({
+      await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString(), transactionComplete).set({
         complete: transactionComplete
       }, { merge: true });
       console.log(`Saved transaction info for chat ID ${chatId}`);
