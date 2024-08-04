@@ -37,7 +37,7 @@ class DataManager {
       await db.collection(FIRESTORE_COLLECTION).doc(chatId).set({
         signature: signature,
         senderPublicKey: senderPublicKeyString,
-        amount: amount
+        balance: amount
       }, { merge: true });
       console.log(`Saved transaction info for chat ID ${chatId}`);
     } catch (error) {

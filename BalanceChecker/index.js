@@ -15,8 +15,8 @@ const redisOptions = {
   host: 'localhost',
   port: 6379,
 };
-
-const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const PROGRAM_ID = process.env.PROGRAM_ID
+const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, receiverPrivateKey) {
