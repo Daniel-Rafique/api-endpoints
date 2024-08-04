@@ -102,6 +102,11 @@ class BalanceChecker {
     console.log(`Switched to WebSocket endpoint: ${this.websocketEndpoints[this.currentWebSocketIndex]}`);
   }
 
+  switchRpcEndpoint() {
+    this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
+    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
+  }
+  
   async handleTransaction(signature) {
     try {
       const confirmedTransaction = await this.connection.getTransaction(signature);
@@ -163,76 +168,75 @@ class BalanceChecker {
 
   async returnSolToSender(chatId, transactionId) {
     try {
-        const transaction = await this.connection.getTransaction(transactionId);
-        if (!transaction) {
-            throw new Error('Transaction not found');
-        }
+      const transaction = await this.connection.getTransaction(transactionId);
+      if (!transaction) {
+        throw new Error('Transaction not found');
+      }
 
-        const { transaction: tx, meta } = transaction;
+      const { transaction: tx, meta } = transaction;
 
-        // Find the account index of the receiver and the sender
-        const receiverIndex = tx.message.accountKeys.findIndex(key => key.toString() === this.receiverKeypair.publicKey.toString());
-        const senderIndex = tx.message.accountKeys.findIndex(key => key.toString() !== this.receiverKeypair.publicKey.toString());
+      // Find the account index of the receiver and the sender
+      const receiverIndex = tx.message.accountKeys.findIndex(key => key.toString() === this.receiverKeypair.publicKey.toString());
+      const senderIndex = tx.message.accountKeys.findIndex(key => key.toString() !== this.receiverKeypair.publicKey.toString());
 
-        if (receiverIndex === -1 || senderIndex === -1) {
-            throw new Error('Receiver or Sender public key not found in the transaction.');
-        }
+      if (receiverIndex === -1 || senderIndex === -1) {
+        throw new Error('Receiver or Sender public key not found in the transaction.');
+      }
 
-        // Extract the pre- and post- balances of the receiver
-        const receiverPreBalance = meta.preBalances[receiverIndex];
-        const receiverPostBalance = meta.postBalances[receiverIndex];
+      // Extract the pre- and post- balances of the receiver
+      const receiverPreBalance = meta.preBalances[receiverIndex];
+      const receiverPostBalance = meta.postBalances[receiverIndex];
 
-        // Calculate the amount sent to the receiver in lamports
-        const amountReceived = receiverPostBalance - receiverPreBalance;
-        console.log('Transaction Amount in lamports:', amountReceived);
+      // Calculate the amount sent to the receiver in lamports
+      const amountReceived = receiverPostBalance - receiverPreBalance;
+      console.log('Transaction Amount in lamports:', amountReceived);
 
-        const senderPublicKey = tx.message.accountKeys[senderIndex];
+      const senderPublicKey = tx.message.accountKeys[senderIndex];
 
-        const solBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toString());
-        console.log(`Returning ${solBalance} SOL to sender: ${senderPublicKey}`);
+      const solBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toString());
+      console.log(`Returning ${solBalance} SOL to sender: ${senderPublicKey}`);
 
-        const returnTransaction = new Transaction().add(
-            SystemProgram.transfer({
-                fromPubkey: this.receiverKeypair.publicKey,
-                toPubkey: new PublicKey(senderPublicKey),
-                lamports: amountReceived - 5000 // Adjusting for transaction fee in lamports
-            })
+      const returnTransaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: this.receiverKeypair.publicKey,
+          toPubkey: new PublicKey(senderPublicKey),
+          lamports: amountReceived - 5000 // Adjusting for transaction fee in lamports
+        })
+      );
+
+      let signature;
+      try {
+        signature = await sendAndConfirmTransaction(
+          this.connection,
+          returnTransaction,
+          [this.receiverKeypair],
+          { commitment: 'confirmed' }
         );
-
-        let signature;
-        try {
-            signature = await sendAndConfirmTransaction(
-                this.connection,
-                returnTransaction,
-                [this.receiverKeypair],
-                { commitment: 'confirmed' }
-            );
-        } catch (error) {
-            if (error.message.includes('block height exceeded')) {
-                console.log('Transaction expired, retrying with updated block height');
-                // Update block height and retry
-                const latestBlockhash = await this.connection.getLatestBlockhash();
-                returnTransaction.recentBlockhash = latestBlockhash.blockhash;
-                signature = await sendAndConfirmTransaction(
-                    this.connection,
-                    returnTransaction,
-                    [this.receiverKeypair],
-                    { commitment: 'confirmed' }
-                );
-            } else {
-                throw error;
-            }
+      } catch (error) {
+        if (error.message.includes('block height exceeded')) {
+          console.log('Transaction expired, retrying with updated block height');
+          // Update block height and retry
+          const latestBlockhash = await this.connection.getLatestBlockhash();
+          returnTransaction.recentBlockhash = latestBlockhash.blockhash;
+          signature = await sendAndConfirmTransaction(
+            this.connection,
+            returnTransaction,
+            [this.receiverKeypair],
+            { commitment: 'confirmed' }
+          );
+        } else {
+          throw error;
         }
+      }
 
-        console.log(`Returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
-        await this.sendTelegramMessage(chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
-        return signature;
+      console.log(`Returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
+      await this.sendTelegramMessage(chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
+      return signature;
     } catch (error) {
-        console.error('Error returning SOL to sender:', error);
-        throw error;
+      console.error('Error returning SOL to sender:', error);
+      throw error;
     }
-}
-
+  }
 
   async retryOperation(operation, maxRetries = 3) {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -252,11 +256,6 @@ class BalanceChecker {
         await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
       }
     }
-  }
-
-  switchRpcEndpoint() {
-    this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
-    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
   }
 
   async runBalanceCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
