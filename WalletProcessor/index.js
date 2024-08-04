@@ -1,12 +1,12 @@
 const { Queue, Worker } = require('bullmq');
+const DataManager = require('../database');
 const WalletManager = require('../WalletManager');
 const InstanceInitializer = require('../InstanceInitializer');
-const DataManager = require('../database');
 const Solana = require('../Solana');
 
 class WalletProcessor {
   constructor() {
-    this.walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
+    this.walletManager = new WalletManager();
 
     // Prepare the directories for initialization
     this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');

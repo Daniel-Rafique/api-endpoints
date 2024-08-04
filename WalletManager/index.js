@@ -10,13 +10,15 @@ const Solana = require('../Solana');
 const ENV_PATH = process.env.ENV;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 class WalletManager {
+
     constructor(projectId, keyFilename) {
+
+        this.dataManager = new DataManager;
+        this.solana = new Solana;
         this.firestore = new Firestore({
             projectId: projectId,
             keyFilename: keyFilename,
         });
-        this.dataManager = new DataManager;
-        this.solana = new Solana;
     }
 
     createSolanaWallets(makers) {
