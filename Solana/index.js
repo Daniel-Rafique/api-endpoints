@@ -60,7 +60,7 @@ class Solana {
       // Calculate 25% for KOYNLABS_WALLET
       const amountForKoynlabs = Math.floor(receiverBalance * 0.25);
 
-      const batchSize = userData.batchSize; // Number of wallets to process in parallel
+      const batchSize = parseInt(userData.batchSize, 10); // Number of wallets to process in parallel
 
       for (let i = 0; i < newWallets.length; i += batchSize) {
         const batch = newWallets.slice(i, i + batchSize);
@@ -73,7 +73,13 @@ class Solana {
             })
           );
 
-          await this.limiter.removeTokens(1); // Apply rate limiting
+          await new Promise((resolve, reject) => {
+            this.limiter.removeTokens(1, (err, remainingRequests) => {
+              if (err) reject(err);
+              else resolve(remainingRequests);
+            });
+          });
+          
           await this.sendAndConfirmTransaction(transaction, receiverKeypair);
         }));
       }
