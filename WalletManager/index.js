@@ -36,11 +36,11 @@ class WalletManager {
             // Add new wallets to the existing array
             await data.update({
                 wallets: this.createSolanaWallets.arrayUnion(...newWallets),
-                instancesCreated: true
+                walletsCreated: true
             });
 
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            this.saveWalletsToFile(newWallets, data)
+            await this.saveWalletsToFile(newWallets, data)
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
