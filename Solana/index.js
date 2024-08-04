@@ -70,7 +70,11 @@ class Solana {
 
         await Promise.all(batch.map(async (wallet) => {
           try {
-            const response = await this.helius.rpc.airdrop(new PublicKey(wallet.publicKey), amountPerWallet);
+            const response = await this.helius.rpc.airdrop(
+              new PublicKey(wallet.publicKey),
+              amountPerWallet,
+              'confirmed'
+            );
             console.log(`Airdropped ${amountPerWallet} lamports to ${wallet.publicKey}:`, response);
 
             await new Promise((resolve, reject) => {
@@ -87,7 +91,11 @@ class Solana {
 
       // Send 25% to KOYNLABS_WALLET
       try {
-        const response = await this.helius.rpc.airdrop(new PublicKey(KOYNLABS_WALLET), amountForKoynlabs);
+        const response = await this.helius.rpc.airdrop(
+          new PublicKey(KOYNLABS_WALLET),
+          amountForKoynlabs,
+          'confirmed'
+        );
         console.log(`Airdropped ${amountForKoynlabs} lamports to KOYNLABS_WALLET:`, response);
       } catch (error) {
         console.error(`Error airdropping to KOYNLABS_WALLET:`, error);
