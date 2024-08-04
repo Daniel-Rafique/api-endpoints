@@ -69,4 +69,4 @@ class WalletManager {
     }
 }
 
-module.exports = WalletManager;Z
+module.exports = WalletManager;
