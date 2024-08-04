@@ -13,7 +13,8 @@ const MESSAGES = {
   INSUFFICIENT_FUNDS_FOR_RENT: (minBalance) => `\n❌ Sender does not have enough funds to be rent-exempt. Minimum required: ${(minBalance / 1_000_000_000).toFixed(2)} SOL`,
   INSUFFICIENT_FUNDS: '\n❌ Transaction failed due to insufficient funds',
   UNEXPECTED_ERROR: (message) => `\n⚠️ Unexpected error during balance check: ${message}`,
-  ERROR_DURING_CHECK: (message) => `\n⚠️ Error during balance check: ${message}`
+  ERROR_DURING_CHECK: (message) => `\n⚠️ Error during balance check: ${message}`,
+  RETURNED_SOL_FAILURE: (balance) => `\n❌ Failed to return ${balance.toFixed(2)} SOL`,
 };
 
 module.exports = {
