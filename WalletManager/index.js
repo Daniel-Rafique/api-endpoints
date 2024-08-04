@@ -51,14 +51,14 @@ class WalletManager {
             });
 
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            await this.saveWalletsToFile(newWallets, chatIdStr)
+            await this.saveWalletsToFile(chatIdStr, newWallets)
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
         }
     }
 
-    async saveWalletsToFile(newWallets, chatIdStr) {
+    async saveWalletsToFile(chatIdStr, newWallets) {
         try {
             const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
             const walletData = newWallets.map(wallet => ({
@@ -67,7 +67,7 @@ class WalletManager {
             }));
 
             fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
-            await this.solana.airDropSolana(chatIdStr, walletData);
+            await this.solana.airDropSolana(chatIdStr);
             console.log(`Wallets saved to ${filePath}`);
         } catch (error) {
             console.error("Error saving wallets to file:", error);
