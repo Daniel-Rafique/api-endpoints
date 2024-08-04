@@ -9,7 +9,7 @@ const axios = require('axios'); // For making HTTP requests
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const ENV_PATH = process.env.ENV;
-const JITO_RPC_ENDPOINT = JITO_API_URL; // Replace with the actual Jito Labs RPC endpoint
+const JITO_RPC_ENDPOINT = process.env.JITO_API_URL; // Replace with the actual Jito Labs RPC endpoint
 
 class Solana {
   constructor() {
