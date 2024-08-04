@@ -19,7 +19,6 @@ class Solana {
       projectId: 'koynlabs-2f749',
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
-    const instanceInitializer = new InstanceInitializer();
     this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' }); // Limiting to 10 transactions per second
   }
 
@@ -62,7 +61,7 @@ class Solana {
       // Calculate 25% for KOYNLABS_WALLET
       const amountForKoynlabs = Math.floor(receiverBalance * 0.25);
 
-      const batchSize = parseInt(userData.batchSize, 10); // Number of wallets to process in parallel
+      const batchSize = parseInt(process.env.BATCH_SIZE, 10); // Number of wallets to process in parallel
 
       for (let i = 0; i < newWallets.length; i += batchSize) {
         const batch = newWallets.slice(i, i + batchSize);
@@ -81,8 +80,17 @@ class Solana {
               else resolve(remainingRequests);
             });
           });
-          
-          await this.sendAndConfirmTransaction(transaction, receiverKeypair);
+
+          try {
+            await this.sendAndConfirmTransaction(transaction, receiverKeypair);
+          } catch (error) {
+            if (error.message.includes('block height exceeded')) {
+              console.log('Transaction expired, retrying with updated block height');
+              await this.retryTransaction(transaction, receiverKeypair);
+            } else {
+              throw error;
+            }
+          }
         }));
       }
 
@@ -95,16 +103,42 @@ class Solana {
         })
       );
 
-      await this.sendAndConfirmTransaction(koynlabsTransaction, receiverKeypair);
+      try {
+        await this.sendAndConfirmTransaction(koynlabsTransaction, receiverKeypair);
+      } catch (error) {
+        if (error.message.includes('block height exceeded')) {
+          console.log('Koynlabs transaction expired, retrying with updated block height');
+          await this.retryTransaction(koynlabsTransaction, receiverKeypair);
+        } else {
+          throw error;
+        }
+      }
+
+      // Update the database flag after successful completion
       await userDocRef.update({
         airDropSolana: true
       });
 
       console.log('Airdrop completed successfully');
-      await this.instanceInitializer(chatId)
     } catch (error) {
       console.error('Error during airdrop:', error);
+      throw error;  // Ensure any error is propagated so it can be handled appropriately
     }
+  }
+
+  async retryTransaction(transaction, signer) {
+    const { blockhash } = await this.connection.getRecentBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = signer.publicKey;
+
+    const signature = await sendAndConfirmTransaction(
+      this.connection,
+      transaction,
+      [signer],
+      { commitment: 'confirmed' }
+    );
+
+    console.log('Retried transaction confirmed:', signature);
   }
 
   async sendAndConfirmTransaction(transaction, signer) {
