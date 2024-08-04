@@ -1,10 +1,8 @@
 require('dotenv').config();
 const bs58 = require('bs58');
-const DataManager = require('../database');
+const DataManager = require('../database')
 const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
-const fs = require('fs');
-const path = require('path');
 const Solana = require('../Solana');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
@@ -14,12 +12,12 @@ class WalletManager {
         this.firestore = new Firestore({
             projectId: projectId,
             keyFilename: keyFilename,
-        }),
+        });
         this.dataManager = new DataManager; 
-        this.solana = new Solana();
+        this.solana = new Solana;
     }
 
-    async createSolanaWallets(makers) {
+    createSolanaWallets(makers) {
         console.log("Creating wallets");
         const wallets = [];
         for (let i = 0; i < makers; i++) {
@@ -43,18 +41,18 @@ class WalletManager {
             // Add new wallets to the existing array
             await docRef.update({
                 wallets: Firestore.FieldValue.arrayUnion(...newWallets),
-                walletsCreated: true
+                instancesCreated: true
             });
 
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            await this.saveWalletsToFile(newWallets, data)
+            await this.saveWalletsToFile(newWallets)
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
         }
     }
-    
-    async saveWalletsToFile(newWallets, data) {
+
+    async saveWalletsToFile(newWallets, chatIdStr) {
         try {
             const filePath = path.resolve(__dirname, './marketMaker/wallets.json');
             const walletData = newWallets.map(newWallets => ({
@@ -63,8 +61,7 @@ class WalletManager {
             }));
     
             await fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
-            await this.solana.airDropSolana(data);
-
+            await this.solana.airDropSolana(chatIdStr);
             console.log(`Wallets saved to ${filePath}`);
         } catch (error) {
             console.error("Error saving wallets to file:", error);
@@ -72,4 +69,4 @@ class WalletManager {
     }
 }
 
-module.exports = WalletManager;
+module.exports = WalletManager;Z

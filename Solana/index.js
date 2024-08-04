@@ -1,5 +1,6 @@
 require('dotenv').config();
 const bs58 = require('bs58');
+const DataManager = require('../database')
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
@@ -9,12 +10,14 @@ const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 class Solana {
   constructor() {
     this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
+    this.dataManager = new DataManager;
   }
 
-  async airDropSolana(data) {
+  async airDropSolana(chatIdStr) {
+    const userData = this.dataManager.getCollection()
     try {
       // Read Wallet A's private key from environment variable
-      const receiverPrivateKey = data.walletPk;
+      const receiverPrivateKey = userData.walletPk;
       if (!receiverPrivateKey) {
         throw new Error('Wallet A private key not found in environment variables');
       }
