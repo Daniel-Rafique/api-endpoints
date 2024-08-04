@@ -20,8 +20,8 @@ class Solana {
   });
   }
 
-  async airDropSolana(chatIdStr) {
-    const userData = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
+  async airDropSolana(chatId) {
+    const userData = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
 
     // Add new wallets to the existing array
     try {
