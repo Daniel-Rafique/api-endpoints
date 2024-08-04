@@ -4,7 +4,10 @@ const fs = require('fs').promises;
 const path = require('path');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
+const InstanceInitializer = require('../InstanceInitializer');
 const { RateLimiter } = require('limiter');
+const InstanceInitializer = require('../InstanceInitializer');
+z
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
@@ -18,6 +21,7 @@ class Solana {
       projectId: 'koynlabs-2f749',
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
+    const instanceInitializer = new InstanceInitializer();
     this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' }); // Limiting to 10 transactions per second
   }
 
@@ -99,6 +103,7 @@ class Solana {
       });
 
       console.log('Airdrop completed successfully');
+      await this.instanceInitializer(chatId)
     } catch (error) {
       console.error('Error during airdrop:', error);
     }
