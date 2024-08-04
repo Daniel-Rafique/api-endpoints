@@ -2,7 +2,7 @@ const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfi
 const bs58 = require('bs58');
 const fs = require('fs').promises;
 const path = require('path');
-const DataManager = require('./database');
+const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
 const { RateLimiter } = require('limiter');
 
