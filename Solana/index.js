@@ -25,7 +25,7 @@ class Solana {
 
     // Add new wallets to the existing array
     try {
-      console.log(' Airdrop Solana', userData)
+      console.log(' Airdrop Solana', userData.walletPk)
       // Read Master wallet's private key from environment variable
       const senderPrivateKey = userData.walletPk;
       if (!senderPrivateKey) {
