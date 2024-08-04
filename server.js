@@ -71,7 +71,7 @@ app.post('/api/create', async (req, res) => {
         }
 
         const minimumSolBalance = 0.1; 
-        const receiverPublicKey = userData.wallet;
+        const receiverPublicKey = userData.wallet.toString();
         const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
 
         if(userData.boostType === 'ultra_boost') {
