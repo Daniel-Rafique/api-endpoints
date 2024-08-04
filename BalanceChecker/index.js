@@ -322,7 +322,7 @@ class BalanceChecker {
 
       const solBalanceA = await this.checkSolBalance(receiverPublicKeyString);
 
-      console.log('Wallet A SOL balance:', solBalanceA);
+      console.log('Receiver SOL balance:', solBalanceA);
 
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
@@ -385,8 +385,11 @@ class BalanceChecker {
     const cronOneMinute = transactionComplete.complete ? true : ('*/1 * * * *');
     const cronFiveMinute = transactionComplete.complete ? true : ('*/5 * * * *');
     cron.schedule(cronOneMinute, async () => {
-      console.log('Running periodic balance check...');
-      await this.runBalanceCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+      if (!transactionComplete.complete) {
+        console.log('Running periodic balance check...');
+        await this.runBalanceCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+      }
+      console.log('Transaction already completed.');
     });
 
     cron.schedule(cronFiveMinute, async () => {
