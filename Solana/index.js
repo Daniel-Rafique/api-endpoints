@@ -14,9 +14,9 @@ class Solana {
   }
 
   async airDropSolana(chatIdStr) {
-    const userData = this.dataManager.getCollection()
+    const userData = this.dataManager.getCollection(chatIdStr)
     try {
-      // Read Wallet A's private key from environment variable
+      // Read Master wallet's private key from environment variable
       const receiverPrivateKey = userData.walletPk;
       if (!receiverPrivateKey) {
         throw new Error('Wallet A private key not found in environment variables');
@@ -26,7 +26,7 @@ class Solana {
       const receiverBalance = await this.connection.getBalance(receiverKeypair.publicKey);
 
       // Read the newly created wallets from the JSON file
-      const filePath = path.resolve(__dirname, './marketMaker/wallets.json');
+      const filePath = path.resolve(__dirname, '../../marketMaker/wallets.json');
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
 
