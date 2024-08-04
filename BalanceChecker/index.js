@@ -34,7 +34,19 @@ class BalanceChecker {
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
-    this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey));
+    this.receiverKeypair = null;
+    
+    // Add logging and validation for receiverPrivateKey
+    try {
+      if (typeof receiverPrivateKey !== 'string') {
+        throw new TypeError('Receiver private key must be a string');
+      }
+      this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey));
+    } catch (error) {
+      console.error('Error decoding receiver private key:', error);
+      throw error;
+    }
+
     this.walletProcessor = new WalletProcessor();
     this.messageCache = {};
     this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
@@ -381,9 +393,9 @@ worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
   const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, { package: 'Markdown' });
   const balanceChecker = new BalanceChecker(
-    [SOLANA_RPC_ENDPOINT_1,SOLANA_RPC_ENDPOINT_2],
+    [SOLANA_RPC_ENDPOINT_1, SOLANA_RPC_ENDPOINT_2],
     [ // Add your WebSocket endpoints here
-      SOLANA_WEBSOCKET_1,SOLANA_WEBSOCKET_2
+      SOLANA_WEBSOCKET_1, SOLANA_WEBSOCKET_2
     ],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     result.receiverPrivateKey
@@ -396,7 +408,7 @@ worker.on('completed', async (job, result) => {
 worker.on('failed', async (job, err) => {
   console.error(`Transaction job failed: ${job.id}`, err);
   const balanceChecker = new BalanceChecker(
-    [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+    [SOLANA_RPC_ENDPOINT_1, SOLANA_RPC_ENDPOINT_2],
     [ // Add your WebSocket endpoints here
       SOLANA_WEBSOCKET_1,
       SOLANA_WEBSOCKET_2
