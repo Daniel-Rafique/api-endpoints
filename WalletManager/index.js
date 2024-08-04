@@ -1,7 +1,7 @@
 require('dotenv').config();
 const bs58 = require('bs58');
 const DataManager = require('../database');
-const admin = require('firebase-admin');
+const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
 const fs = require('fs');
 const path = require('path');
