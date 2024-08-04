@@ -56,7 +56,7 @@ class WalletManager {
 
     async saveWalletsToFile(newWallets, chatIdStr) {
         try {
-            const filePath = path.resolve(__dirname, './marketMaker/wallets.json');
+            const filePath = path.resolve(__dirname, '../../marketMaker/wallets.json');
             const walletData = newWallets.map(wallet => ({
                 publicKey: wallet.publicKey,
                 secretKey: wallet.privateKey
