@@ -7,6 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const Solana = require('../Solana');
 
+const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+
 class WalletManager {
     constructor(projectId, keyFilename) {
         this.firestore = new Firestore({
