@@ -20,6 +20,7 @@ class Solana {
   }
 
   async distributeSolana(chatId) {
+    console.log(`Starting distribution for chatId: ${chatId}`);
     const chatIdStr = chatId.toString();
     if (!chatIdStr || typeof chatIdStr !== 'string') {
       throw new Error('Invalid chatIdStr');
@@ -46,6 +47,8 @@ class Solana {
       const fileContent = await fs.readFile(filePath, 'utf8');
       const recipientWallets = JSON.parse(fileContent);
 
+      console.log(`Total recipient wallets: ${recipientWallets.length}`);
+
       const amountToDistribute = Math.floor(senderBalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / recipientWallets.length);
       const amountForKoynlabs = Math.floor(senderBalance * 0.25);
@@ -54,19 +57,23 @@ class Solana {
       console.log(`Amount per wallet: ${amountPerWallet}`);
       console.log(`Amount for KOYNLABS_WALLET: ${amountForKoynlabs}`);
 
-      const batchSize = 10; // Adjust based on your needs and network conditions
+      const batchSize = 5; // Reduced batch size for better manageable
       const results = [];
 
       for (let i = 0; i < recipientWallets.length; i += batchSize) {
+        console.log(`Processing batch ${i / batchSize + 1}`);
         const batch = recipientWallets.slice(i, i + batchSize);
         const batchResults = await this.processBatch(senderKeypair, batch, amountPerWallet);
         results.push(...batchResults);
         
+        console.log(`Batch ${i / batchSize + 1} results:`, batchResults);
+        
         // Add a delay between batches to avoid overwhelming the network
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
       }
 
       // Send to KOYNLABS_WALLET
+      console.log(`Sending to KOYNLABS_WALLET: ${KOYNLABS_WALLET}`);
       const koynlabsResult = await this.sendSol(senderKeypair, new PublicKey(KOYNLABS_WALLET), amountForKoynlabs);
       results.push(koynlabsResult);
 
@@ -91,6 +98,8 @@ class Solana {
   async sendSol(senderKeypair, recipientPublicKey, amount, retries = 3) {
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
+        console.log(`Attempt ${attempt + 1} to send ${amount} lamports to ${recipientPublicKey.toBase58()}`);
+        
         const transaction = new Transaction().add(
           SystemProgram.transfer({
             fromPubkey: senderKeypair.publicKey,
@@ -105,9 +114,11 @@ class Solana {
         transaction.sign(senderKeypair);
 
         const signature = await this.connection.sendRawTransaction(transaction.serialize(), {
-          skipPreflight: true,
+          skipPreflight: false,
           maxRetries: 5,
         });
+
+        console.log(`Transaction sent. Signature: ${signature}`);
 
         const result = await this.connection.confirmTransaction({
           signature,
@@ -119,7 +130,7 @@ class Solana {
           throw new Error(`Transaction failed: ${JSON.stringify(result.value.err)}`);
         }
 
-        console.log(`Transaction ${signature} confirmed`);
+        console.log(`Transaction ${signature} confirmed for ${recipientPublicKey.toBase58()}`);
         return { success: true, signature, recipient: recipientPublicKey.toBase58() };
       } catch (error) {
         console.error(`Attempt ${attempt + 1} failed for ${recipientPublicKey.toBase58()}:`, error);
