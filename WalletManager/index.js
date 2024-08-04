@@ -5,6 +5,7 @@ const { Keypair } = require('@solana/web3.js');
 const fs = require('fs');
 const path = require('path');
 const Solana = require('../Solana');
+const admin = require('firebase-admin'); // Ensure Firebase admin is correctly imported
 
 class WalletManager {
     constructor() {
@@ -32,29 +33,35 @@ class WalletManager {
             }
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
             const data = this.dataManager.getCollection(chatIdStr);
-            
-            // Add new wallets to the existing array
+
+            // Convert newWallets to the required format for Firestore
+            const walletsArray = newWallets.map(wallet => ({
+                privateKey: wallet.privateKey,
+                publicKey: wallet.publicKey
+            }));
+
+            // Add new wallets to the existing array using Firestore's arrayUnion
             await data.update({
-                wallets: this.createSolanaWallets.arrayUnion(...newWallets),
+                wallets: admin.firestore.FieldValue.arrayUnion(...walletsArray),
                 walletsCreated: true
             });
 
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            await this.saveWalletsToFile(newWallets, data)
+            await this.saveWalletsToFile(newWallets, data);
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
         }
     }
-    
+
     async saveWalletsToFile(newWallets, data) {
         try {
             const filePath = path.resolve(__dirname, './marketMaker/wallets.json');
-            const walletData = newWallets.map(newWallets => ({
-                publicKey: newWallets.publicKey.toBase58(),
-                secretKey: bs58.encode(newWallets.secretKey)
+            const walletData = newWallets.map(wallet => ({
+                publicKey: wallet.publicKey,
+                secretKey: wallet.privateKey
             }));
-    
+
             await fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
             await this.solana.airDropSolana(data);
 
