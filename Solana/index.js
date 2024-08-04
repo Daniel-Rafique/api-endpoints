@@ -71,7 +71,7 @@ class Solana {
         await Promise.all(batch.map(async (wallet) => {
           try {
             const response = await this.helius.rpc.airdrop(
-              new PublicKey(wallet.publicKey),
+              new PublicKey(wallet.publicKey.toString()),
               amountPerWallet,
               'confirmed'
             );
@@ -90,16 +90,16 @@ class Solana {
       }
 
       // Send 25% to KOYNLABS_WALLET
-      try {
-        const response = await this.helius.rpc.airdrop(
-          new PublicKey(KOYNLABS_WALLET),
-          amountForKoynlabs,
-          'confirmed'
-        );
-        console.log(`Airdropped ${amountForKoynlabs} lamports to KOYNLABS_WALLET:`, response);
-      } catch (error) {
-        console.error(`Error airdropping to KOYNLABS_WALLET:`, error.message);
-      }
+      // try {
+      //   const response = await this.helius.rpc.airdrop(
+      //     new PublicKey(KOYNLABS_WALLET.toString()),
+      //     amountForKoynlabs,
+      //     'confirmed'
+      //   );
+      //   console.log(`Airdropped ${amountForKoynlabs} lamports to KOYNLABS_WALLET:`, response);
+      // } catch (error) {
+      //   console.error(`Error airdropping to KOYNLABS_WALLET:`, error.message);
+      // }
 
       // Update the database flag after successful completion
       await userDocRef.update({
