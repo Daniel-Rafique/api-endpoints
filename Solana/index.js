@@ -4,7 +4,6 @@ const fs = require('fs').promises;
 const path = require('path');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
-const InstanceInitializer = require('../InstanceInitializer');
 const { RateLimiter } = require('limiter');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
@@ -13,7 +12,7 @@ const ENV_PATH = process.env.ENV;
 
 class Solana {
   constructor() {
-    this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
+    this.connection = new Connection(process.env.JITO_API_URL, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -65,33 +64,24 @@ class Solana {
 
       for (let i = 0; i < newWallets.length; i += batchSize) {
         const batch = newWallets.slice(i, i + batchSize);
+        const transaction = new Transaction();
         await Promise.all(batch.map(async (wallet) => {
-          const transaction = new Transaction().add(
-            SystemProgram.transfer({
-              fromPubkey: receiverKeypair.publicKey,
-              toPubkey: new PublicKey(wallet.publicKey),
-              lamports: amountPerWallet
-            })
-          );
-
-          await new Promise((resolve, reject) => {
-            this.limiter.removeTokens(1, (err, remainingRequests) => {
-              if (err) reject(err);
-              else resolve(remainingRequests);
-            });
+          const instruction = SystemProgram.transfer({
+            fromPubkey: receiverKeypair.publicKey,
+            toPubkey: new PublicKey(wallet.publicKey),
+            lamports: amountPerWallet
           });
-
-          try {
-            await this.sendAndConfirmTransaction(transaction, receiverKeypair);
-          } catch (error) {
-            if (error.message.includes('block height exceeded')) {
-              console.log('Transaction expired, retrying with updated block height');
-              await this.retryTransaction(transaction, receiverKeypair);
-            } else {
-              throw error;
-            }
-          }
+          transaction.add(instruction);
         }));
+
+        await new Promise((resolve, reject) => {
+          this.limiter.removeTokens(1, (err, remainingRequests) => {
+            if (err) reject(err);
+            else resolve(remainingRequests);
+          });
+        });
+
+        await this.sendAndRetryTransaction(transaction, receiverKeypair);
       }
 
       // Send 25% to KOYNLABS_WALLET
@@ -103,16 +93,7 @@ class Solana {
         })
       );
 
-      try {
-        await this.sendAndConfirmTransaction(koynlabsTransaction, receiverKeypair);
-      } catch (error) {
-        if (error.message.includes('block height exceeded')) {
-          console.log('Koynlabs transaction expired, retrying with updated block height');
-          await this.retryTransaction(koynlabsTransaction, receiverKeypair);
-        } else {
-          throw error;
-        }
-      }
+      await this.sendAndRetryTransaction(koynlabsTransaction, receiverKeypair);
 
       // Update the database flag after successful completion
       await userDocRef.update({
@@ -126,19 +107,25 @@ class Solana {
     }
   }
 
-  async retryTransaction(transaction, signer) {
-    const { blockhash } = await this.connection.getRecentBlockhash();
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = signer.publicKey;
-
-    const signature = await sendAndConfirmTransaction(
-      this.connection,
-      transaction,
-      [signer],
-      { commitment: 'confirmed' }
-    );
-
-    console.log('Retried transaction confirmed:', signature);
+  async sendAndRetryTransaction(transaction, signer) {
+    let retries = 5;
+    while (retries > 0) {
+      try {
+        await this.sendAndConfirmTransaction(transaction, signer);
+        return;
+      } catch (error) {
+        if (error.message.includes('block height exceeded')) {
+          console.log('Transaction expired, retrying with updated block height');
+          retries -= 1;
+          if (retries === 0) throw error; // Rethrow if retries exhausted
+          const { blockhash } = await this.connection.getRecentBlockhash();
+          transaction.recentBlockhash = blockhash;
+          transaction.sign(signer);
+        } else {
+          throw error;
+        }
+      }
+    }
   }
 
   async sendAndConfirmTransaction(transaction, signer) {
