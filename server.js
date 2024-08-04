@@ -71,7 +71,7 @@ app.post('/api/create', async (req, res) => {
         }
 
         const minimumSolBalance = 0.1; 
-        const receiverPublicKey = userData.wallet.toString();
+        const receiverPublicKey = userData.wallet;
         const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
 
         if(userData.boostType === 'ultra_boost') {
@@ -81,16 +81,16 @@ app.post('/api/create', async (req, res) => {
         }
 
         // Start the periodic check
-        const receiverPrivateKey = userData.walletPk.toString();
-        if (typeof receiverPrivateKey !== 'string') {
+        const receiverPrivateKey = userData.walletPk;
+        if (typeof receiverPrivateKey.toString() !== 'string') {
             throw new TypeError('Receiver private key must be a string');
           }
         const balanceChecker = new BalanceChecker(
             [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
             telegramNotifier,
-            receiverPrivateKey
+            receiverPrivateKey.toString()
         );
-        balanceChecker.startPeriodicCheck(chatId, receiverPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+        balanceChecker.startPeriodicCheck(chatId, receiverPublicKey.toString(), minimumSolBalance, minimumTokenBalance, tokenMintAddress);
         telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
         res.status(200).send('Checking balance...');
     } catch (error) {
