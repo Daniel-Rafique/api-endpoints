@@ -8,6 +8,7 @@ const { RateLimiter } = require('limiter');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
+const ENV_PATH = process.env.ENV_PATH;
 
 class Solana {
   constructor() {
