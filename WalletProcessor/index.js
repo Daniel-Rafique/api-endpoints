@@ -39,12 +39,12 @@ class WalletProcessor {
             console.log(error);
           }
         }
-        if (!userData.airDropSolana) {
+        if (userData.walletsCreated) {
           console.log('Airdrop Solana for chatId:', chatId);
           await this.solana.airDropSolana(chatId);
         }
 
-        if (!userData.instancesCreated) {
+        if (userData.airDropSolana) {
           console.log('Initializing market maker instance for chatId:', chatId);
           await this.instanceInitializer.initializeMarketMakerInstance(chatId);
         }

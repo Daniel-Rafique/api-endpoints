@@ -15,8 +15,13 @@ const crypto = require('crypto');
 const DataManager = require('./database');
 const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./Telegram');
+const Solana = require('./Solana');
+const InstanceInitializer = require('./InstanceInitializer');
 
 const dataManager = new DataManager();
+const solana = new Solana();
+const instanceInitializer = new InstanceInitializer();
+
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
 
@@ -96,9 +101,19 @@ app.post('/api/create', async (req, res) => {
             telegramNotifier,
             receiverPrivateKey
         );
+        if(!userData?.walletsCreated) {
         balanceChecker.startPeriodicCheck(chatId, receiverPublicKey.toString(), minimumSolBalance, minimumTokenBalance, tokenMintAddress);
         telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
         res.status(200).send('Checking balance...');
+        }
+        if(!userData?.airDropSolana) {
+            await solana.airDropSolana(chatId);
+            res.status(200).send('Airdropping SOL...');
+        }
+        if(!userData.instancesCreated) {
+            await instanceInitializer.initializeMarketMakerInstance(chatId);
+            res.status(200).send('Instances created...');
+        }
     } catch (error) {
         console.error('Error processing request:', error);
         res.status(500).send('Internal Server Error');
