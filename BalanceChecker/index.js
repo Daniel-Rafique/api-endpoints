@@ -35,7 +35,7 @@ class BalanceChecker {
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
     this.receiverKeypair = null;
-    
+
     try {
       if (typeof receiverPrivateKey !== 'string') {
         throw new TypeError('Receiver private key must be a string');
@@ -140,7 +140,7 @@ class BalanceChecker {
           SystemProgram.transfer({
             fromPubkey: this.receiverKeypair.publicKey,
             toPubkey: new PublicKey(senderPublicKey),
-            lamports: amountReceived * 1_000_000_000
+            lamports: (amountReceived - 0.000005) * 1_000_000_000 // Adjusting for transaction fee
           })
         );
 
@@ -180,7 +180,7 @@ class BalanceChecker {
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
           toPubkey: new PublicKey(senderPublicKey),
-          lamports: solBalance * 1_000_000_000
+          lamports: (solBalance - 0.000005) * 1_000_000_000 // Adjusting for transaction fee
         })
       );
 
