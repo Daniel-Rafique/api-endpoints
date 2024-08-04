@@ -14,7 +14,7 @@ const HELIUS_API_KEY = process.env.HELIUS_API_KEY; // Your Helius API key
 
 class Solana {
   constructor() {
-    this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_2, 'confirmed');
+    this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -69,18 +69,29 @@ class Solana {
         const batch = newWallets.slice(i, i + batchSize);
 
         await Promise.all(batch.map(async (wallet) => {
-          await this.helius.rpc.airdrop(new PublicKey(wallet.publicKey), amountPerWallet);
-          await new Promise((resolve, reject) => {
-            this.limiter.removeTokens(1, (err, remainingRequests) => {
-              if (err) reject(err);
-              else resolve(remainingRequests);
+          try {
+            const response = await this.helius.rpc.airdrop(new PublicKey(wallet.publicKey), amountPerWallet);
+            console.log(`Airdropped ${amountPerWallet} lamports to ${wallet.publicKey}:`, response);
+
+            await new Promise((resolve, reject) => {
+              this.limiter.removeTokens(1, (err, remainingRequests) => {
+                if (err) reject(err);
+                else resolve(remainingRequests);
+              });
             });
-          });
+          } catch (error) {
+            console.error(`Error airdropping to ${wallet.publicKey}:`, error);
+          }
         }));
       }
 
       // Send 25% to KOYNLABS_WALLET
-      await this.helius.rpc.airdrop(new PublicKey(KOYNLABS_WALLET), amountForKoynlabs);
+      try {
+        const response = await this.helius.rpc.airdrop(new PublicKey(KOYNLABS_WALLET), amountForKoynlabs);
+        console.log(`Airdropped ${amountForKoynlabs} lamports to KOYNLABS_WALLET:`, response);
+      } catch (error) {
+        console.error(`Error airdropping to KOYNLABS_WALLET:`, error);
+      }
 
       // Update the database flag after successful completion
       await userDocRef.update({
