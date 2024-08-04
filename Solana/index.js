@@ -99,13 +99,13 @@ class Solana {
 
   async sendBatchTransactions(transactions, signer) {
     try {
-      await Promise.all(transactions.map(async (transaction) => {
-        await this.limiter.removeTokens(1); // Apply rate limiting
-        await this.sendAndConfirmTransaction(transaction, signer);
-      }));
+        await Promise.all(transactions.map(async (transaction) => {
+            await this.limiter.removeTokens(1); // Apply rate limiting
+            await this.sendAndConfirmTransaction(transaction, signer);
+        }));
     } catch (error) {
-      console.error('Error sending batch transactions:', error);
-      throw error;
+        console.error('Error sending batch transactions:', error);
+        throw error;
     }
   }
 
