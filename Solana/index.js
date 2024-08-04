@@ -6,6 +6,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
+const ENV_PATH = process.env.ENV;
 
 class Solana {
   constructor() {
@@ -26,7 +27,7 @@ class Solana {
       const receiverBalance = await this.connection.getBalance(receiverKeypair.publicKey);
 
       // Read the newly created wallets from the JSON file
-      const filePath = path.resolve(__dirname, '../../marketMaker/wallets.json');
+      const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
 

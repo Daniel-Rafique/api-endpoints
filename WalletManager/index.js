@@ -8,18 +8,19 @@ const { Keypair } = require('@solana/web3.js');
 const Solana = require('../Solana');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
-
+const ENV_PATH = process.env.ENV;
 class WalletManager {
     constructor(projectId, keyFilename) {
         this.firestore = new Firestore({
             projectId: projectId,
             keyFilename: keyFilename,
         });
-        this.dataManager = new DataManager; 
+        this.dataManager = new DataManager;
         this.solana = new Solana;
     }
 
     createSolanaWallets(makers) {
+
         console.log("Creating wallets");
         const wallets = [];
         for (let i = 0; i < makers; i++) {
@@ -39,7 +40,7 @@ class WalletManager {
             }
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
             const docRef = this.firestore.collection(`${FIRESTORE_COLLECTION}`).doc(chatIdStr);
-            
+
             // Add new wallets to the existing array
             await docRef.update({
                 wallets: Firestore.FieldValue.arrayUnion(...newWallets),
@@ -56,12 +57,12 @@ class WalletManager {
 
     async saveWalletsToFile(newWallets, chatIdStr) {
         try {
-            const filePath = path.resolve(__dirname, '../../marketMaker/wallets.json');
+            const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
             const walletData = newWallets.map(wallet => ({
                 publicKey: wallet.publicKey,
                 secretKey: wallet.privateKey
             }));
-    
+
             fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
             await this.solana.airDropSolana(chatIdStr, walletData);
             console.log(`Wallets saved to ${filePath}`);
@@ -69,7 +70,7 @@ class WalletManager {
             console.error("Error saving wallets to file:", error);
         }
     }
-    
+
 }
 
 module.exports = WalletManager;

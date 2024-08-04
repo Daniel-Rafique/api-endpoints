@@ -26,21 +26,17 @@ class WalletProcessor {
       const { chatId } = job.data;
       const userData = await this.dataManager.getCollection(chatId);
       const { contractAddress, batchSize, makers } = userData;
-
       try {
-        const wallets = this.walletManager.createSolanaWallets(makers);
-
-        await this.walletManager.saveWallets(chatId, wallets);
-
-        if(wallets){
-          try{
-
-          }catch(error){
-
+        const wallets = this.dataManager.getCollection(chatId).walletsCreated;
+        if (!wallets) {
+          try {
+            this.walletManager.createSolanaWallets(makers, chatId);
+            await this.walletManager.saveWallets(chatId, wallets);
+          } catch (error) {
+            console.log(error)
           }
-        // await this.instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, wallets, batchSize);
+          await this.instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, wallets, batchSize);
         }
-
         console.log(`Processed job for chatId: ${chatId}`);
       } catch (error) {
         console.error('Error processing job:', error);
