@@ -1,11 +1,11 @@
 require('dotenv').config();
 const bs58 = require('bs58');
 const DataManager = require('../database');
+const admin = require('firebase-admin');
 const { Keypair } = require('@solana/web3.js');
 const fs = require('fs');
 const path = require('path');
 const Solana = require('../Solana');
-const admin = require('firebase-admin'); // Ensure Firebase admin is correctly imported
 
 class WalletManager {
     constructor() {
@@ -32,36 +32,30 @@ class WalletManager {
                 throw new Error('Invalid chatId');
             }
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
-            const data = this.dataManager.getCollection(chatIdStr);
-
-            // Convert newWallets to the required format for Firestore
-            const walletsArray = newWallets.map(wallet => ({
-                privateKey: wallet.privateKey,
-                publicKey: wallet.publicKey
-            }));
-
-            // Add new wallets to the existing array using Firestore's arrayUnion
-            await data.update({
-                wallets: admin.firestore.FieldValue.arrayUnion(...walletsArray),
-                walletsCreated: true
+            const docRef = this.firestore.collection(`${FIRESTORE_COLLECTION}`).doc(chatIdStr);
+            
+            // Add new wallets to the existing array
+            await docRef.update({
+                wallets: Firestore.FieldValue.arrayUnion(...newWallets),
+                instancesCreated: true
             });
 
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            await this.saveWalletsToFile(newWallets, data);
+            await this.saveWalletsToFile(newWallets, data)
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
         }
     }
-
+    
     async saveWalletsToFile(newWallets, data) {
         try {
             const filePath = path.resolve(__dirname, './marketMaker/wallets.json');
-            const walletData = newWallets.map(wallet => ({
-                publicKey: wallet.publicKey,
-                secretKey: wallet.privateKey
+            const walletData = newWallets.map(newWallets => ({
+                publicKey: newWallets.publicKey.toBase58(),
+                secretKey: bs58.encode(newWallets.secretKey)
             }));
-
+    
             await fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
             await this.solana.airDropSolana(data);
 
