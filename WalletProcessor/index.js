@@ -29,6 +29,7 @@ class WalletProcessor {
       try {
         const wallets = this.dataManager.getCollection(chatId).walletsCreated;
         if (!wallets) {
+          console.log('Creating wallets')
           try {
             this.walletManager.createSolanaWallets(makers, chatId);
             await this.walletManager.saveWallets(chatId, wallets);
