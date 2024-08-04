@@ -60,21 +60,22 @@ class Solana {
       // Calculate 25% for KOYNLABS_WALLET
       const amountForKoynlabs = Math.floor(receiverBalance * 0.25);
 
-      // Create and send transactions to newly created wallets in batches
-      const batchSize = 50; // Number of transactions per batch
+      const batchSize = userData.batchSize; // Number of wallets to process in parallel
+
       for (let i = 0; i < newWallets.length; i += batchSize) {
         const batch = newWallets.slice(i, i + batchSize);
-        const transactions = batch.map(wallet => {
-          return new Transaction().add(
+        await Promise.all(batch.map(async (wallet) => {
+          const transaction = new Transaction().add(
             SystemProgram.transfer({
               fromPubkey: receiverKeypair.publicKey,
               toPubkey: new PublicKey(wallet.publicKey),
               lamports: amountPerWallet
             })
           );
-        });
 
-        await this.sendBatchTransactions(transactions, receiverKeypair);
+          await this.limiter.removeTokens(1); // Apply rate limiting
+          await this.sendAndConfirmTransaction(transaction, receiverKeypair);
+        }));
       }
 
       // Send 25% to KOYNLABS_WALLET
@@ -94,18 +95,6 @@ class Solana {
       console.log('Airdrop completed successfully');
     } catch (error) {
       console.error('Error during airdrop:', error);
-    }
-  }
-
-  async sendBatchTransactions(transactions, signer) {
-    try {
-        await Promise.all(transactions.map(async (transaction) => {
-            await this.limiter.removeTokens(1); // Apply rate limiting
-            await this.sendAndConfirmTransaction(transaction, signer);
-        }));
-    } catch (error) {
-        console.error('Error sending batch transactions:', error);
-        throw error;
     }
   }
 
