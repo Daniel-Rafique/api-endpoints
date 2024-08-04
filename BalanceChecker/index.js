@@ -12,6 +12,11 @@ const fs = require('fs').promises;
 const path = require('path');
 const WebSocket = require('ws');
 
+const SOLANA_RPC_ENDPOINT_1 = process.env.SOLANA_RPC_ENDPOINT_1;
+const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
+const SOLANA_WEBSOCKET_1 = process.env.SOLANA_WEBSOCKET_1;
+const SOLANA_WEBSOCKET_2 = process.env.SOLANA_WEBSOCKET_2;
+
 const redisOptions = {
   host: 'localhost',
   port: 6379,
@@ -21,9 +26,11 @@ const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
 
 class BalanceChecker {
-  constructor(rpcEndpoints, telegramNotifier, receiverPrivateKey) {
+  constructor(rpcEndpoints, websocketEndpoints, telegramNotifier, receiverPrivateKey) {
     this.rpcEndpoints = rpcEndpoints;
+    this.websocketEndpoints = websocketEndpoints;
     this.currentRpcIndex = 0;
+    this.currentWebSocketIndex = 0;
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.telegramNotifier = telegramNotifier;
     this.dataManager = new DataManager();
@@ -33,12 +40,18 @@ class BalanceChecker {
     this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
     this.failedTransactionsQueue = path.join(__dirname, 'failedTransactions.json');
     this.processingFailedTransactions = false;
-    this.ws = new WebSocket('wss://api.mainnet-beta.solana.com');
+    this.ws = null;
 
     this.listenForTransactions();
   }
 
   listenForTransactions() {
+    if (this.ws) {
+      this.ws.close();
+    }
+
+    this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
+
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
       this.ws.send(JSON.stringify({
@@ -66,8 +79,14 @@ class BalanceChecker {
 
     this.ws.on('close', () => {
       console.log('WebSocket connection closed, reconnecting...');
+      this.switchWebSocketEndpoint();
       setTimeout(() => this.listenForTransactions(), 1000);
     });
+  }
+
+  switchWebSocketEndpoint() {
+    this.currentWebSocketIndex = (this.currentWebSocketIndex + 1) % this.websocketEndpoints.length;
+    console.log(`Switched to WebSocket endpoint: ${this.websocketEndpoints[this.currentWebSocketIndex]}`);
   }
 
   async handleTransaction(signature) {
@@ -125,6 +144,47 @@ class BalanceChecker {
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
+    }
+  }
+
+  async returnSolToSender(chatId, transactionId) {
+    try {
+      const transaction = await this.connection.getTransaction(transactionId);
+      if (!transaction) {
+        throw new Error('Transaction not found');
+      }
+
+      const senderPublicKey = transaction.transaction.message.accountKeys.find(
+        key => key.toString() !== this.receiverKeypair.publicKey.toString()
+      );
+
+      if (!senderPublicKey) {
+        throw new Error('Sender public key not found in the transaction');
+      }
+
+      const solBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toString());
+      console.log(`Returning ${solBalance} SOL to sender: ${senderPublicKey}`);
+
+      const returnTransaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: this.receiverKeypair.publicKey,
+          toPubkey: new PublicKey(senderPublicKey),
+          lamports: solBalance * 1_000_000_000
+        })
+      );
+
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        returnTransaction,
+        [this.receiverKeypair],
+        { commitment: 'confirmed' }
+      );
+
+      console.log(`Returned ${solBalance} SOL to sender: ${senderPublicKey}`);
+      return signature;
+    } catch (error) {
+      console.error('Error returning SOL to sender:', error);
+      throw error;
     }
   }
 
@@ -305,7 +365,10 @@ const worker = new Worker('transactionQueue', async job => {
   console.log('Worker received receiverPrivateKey:', receiverPrivateKey);
 
   const balanceChecker = new BalanceChecker(
-    [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+    [SOLANA_RPC_ENDPOINT_1, SOLANA_RPC_ENDPOINT_2],
+    [ // Add your WebSocket endpoints here
+      SOLANA_WEBSOCKET_1, SOLANA_WEBSOCKET_2
+    ],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     receiverPrivateKey
   );
@@ -318,7 +381,10 @@ worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
   const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, { package: 'Markdown' });
   const balanceChecker = new BalanceChecker(
-    [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+    [SOLANA_RPC_ENDPOINT_1,SOLANA_RPC_ENDPOINT_2],
+    [ // Add your WebSocket endpoints here
+      SOLANA_WEBSOCKET_1,SOLANA_WEBSOCKET_2
+    ],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     result.receiverPrivateKey
   );
@@ -331,10 +397,14 @@ worker.on('failed', async (job, err) => {
   console.error(`Transaction job failed: ${job.id}`, err);
   const balanceChecker = new BalanceChecker(
     [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+    [ // Add your WebSocket endpoints here
+      SOLANA_WEBSOCKET_1,
+      SOLANA_WEBSOCKET_2
+    ],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     job.data.receiverPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(job.data.chatId);
+  await balanceChecker.sendTelegramMessage(job.data.chatId, MESSAGES.RETURNED_SOL_FAILURE(job.data.solBalanceA, err.message));
 });
 
 module.exports = BalanceChecker;
