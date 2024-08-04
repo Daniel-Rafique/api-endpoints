@@ -70,7 +70,7 @@ app.post('/api/create', async (req, res) => {
             return res.status(404).send('User data not found');
         }
 
-        const minimumSolBalance = 0.1; 
+        const minimumSolBalance = 0.05; 
         const receiverPublicKey = userData.wallet;
         const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
 
