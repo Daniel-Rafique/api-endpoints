@@ -1,14 +1,16 @@
-const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmRawTransaction } = require('@solana/web3.js');
+const { Connection, PublicKey, Keypair } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const fs = require('fs').promises;
 const path = require('path');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
 const { RateLimiter } = require('limiter');
+const { Helius } = require('helius-sdk'); // Import Helius SDK
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const ENV_PATH = process.env.ENV;
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY; // Your Helius API key
 
 class Solana {
   constructor() {
@@ -19,6 +21,7 @@ class Solana {
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
     this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' }); // Limiting to 10 transactions per second
+    this.helius = new Helius(HELIUS_API_KEY); // Initialize Helius
   }
 
   async airDropSolana(chatId) {
@@ -64,31 +67,20 @@ class Solana {
 
       for (let i = 0; i < newWallets.length; i += batchSize) {
         const batch = newWallets.slice(i, i + batchSize);
-        const transaction = new Transaction();
 
         await Promise.all(batch.map(async (wallet) => {
-          const instruction = SystemProgram.transfer({
-            fromPubkey: receiverKeypair.publicKey,
-            toPubkey: new PublicKey(wallet.publicKey),
-            lamports: amountPerWallet
+          await this.helius.rpc.airdrop(new PublicKey(wallet.publicKey), amountPerWallet);
+          await new Promise((resolve, reject) => {
+            this.limiter.removeTokens(1, (err, remainingRequests) => {
+              if (err) reject(err);
+              else resolve(remainingRequests);
+            });
           });
-
-          transaction.add(instruction);
         }));
-
-        await this.sendAndRetryTransaction(transaction, receiverKeypair);
       }
 
       // Send 25% to KOYNLABS_WALLET
-      const koynlabsTransaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: receiverKeypair.publicKey,
-          toPubkey: new PublicKey(KOYNLABS_WALLET),
-          lamports: amountForKoynlabs
-        })
-      );
-
-      await this.sendAndRetryTransaction(koynlabsTransaction, receiverKeypair);
+      await this.helius.rpc.airdrop(new PublicKey(KOYNLABS_WALLET), amountForKoynlabs);
 
       // Update the database flag after successful completion
       await userDocRef.update({
@@ -100,38 +92,6 @@ class Solana {
       console.error('Error during airdrop:', error);
       throw error;  // Ensure any error is propagated so it can be handled appropriately
     }
-  }
-
-  async sendAndRetryTransaction(transaction, signer) {
-    let retries = 5;
-    while (retries > 0) {
-      try {
-        await this.sendAndConfirmTransaction(transaction, signer);
-        return;
-      } catch (error) {
-        if (error.message.includes('block height exceeded')) {
-          console.log('Transaction expired, retrying with updated block height');
-          retries -= 1;
-          if (retries === 0) throw error; // Rethrow if retries exhausted
-          const { blockhash } = await this.connection.getRecentBlockhash();
-          transaction.recentBlockhash = blockhash;
-          transaction.sign(signer);
-        } else {
-          throw error;
-        }
-      }
-    }
-  }
-
-  async sendAndConfirmTransaction(transaction, signer) {
-    const rawTransaction = transaction.serialize();
-    const signature = await sendAndConfirmRawTransaction(
-      this.connection,
-      rawTransaction,
-      { commitment: 'confirmed' }
-    );
-
-    console.log('Transaction confirmed:', signature);
   }
 }
 
