@@ -80,9 +80,7 @@ class BalanceChecker {
       if (response.method === 'logsNotification') {
         const transactionSignature = response.params.result.signature;
         console.log(`New transaction: ${transactionSignature}`);
-        if(transactionSignature) {
-          await this.handleTransaction(transactionSignature);
-        }
+        await this.handleTransaction(transactionSignature);
       }
     });
 
@@ -244,12 +242,12 @@ class BalanceChecker {
     this.minimumSolBalance = minimumSolBalance; // Set the minimumSolBalance for use in handleTransaction
     this.chatId = chatId; // Store chatId for use in other methods
     try {
-      const solBalance = await this.checkSolBalance(receiverPublicKeyString);
-      console.log('Receiver SOL balance:', solBalance);
+      const solBalanceA = await this.checkSolBalance(receiverPublicKeyString);
+      console.log('Receiver SOL balance:', solBalanceA);
 
       let message = MESSAGES.BALANCE_CHECK_REPORT;
-      message += MESSAGES.SOL_BALANCE_A(solBalance);
-      const isSolValid = solBalance >= minimumSolBalance;
+      message += MESSAGES.SOL_BALANCE_A(solBalanceA);
+      const isSolValid = solBalanceA >= minimumSolBalance;
 
       // Find the last transaction sender's public key (assume last transaction is the relevant one)
       const transaction = await this.getLatestTransaction(receiverPublicKeyString);
@@ -267,7 +265,7 @@ class BalanceChecker {
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
 
-      console.log('SOL balance:', solBalance, 'Token balance:', tokenBalanceB);
+      console.log('SOL balance:', solBalanceA, 'Token balance:', tokenBalanceB);
 
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
@@ -277,22 +275,22 @@ class BalanceChecker {
       } else {
         if (!isSolValid) {
           message += MESSAGES.INSUFFICIENT_SOL(minimumSolBalance);
+          if (solBalanceA > 0) {
+            const job = await transactionQueue.add('returnSol', {
+              senderPublicKeyString: senderPublicKey.toString(),
+              solBalanceA,
+              chatId,
+              transactionId: transaction.transaction.signatures[0], // Pass the transaction ID
+              receiverPrivateKey: bs58.encode(this.receiverKeypair.secretKey)
+            }, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
+            message += MESSAGES.RETURNED_SOL_PENDING(solBalanceA);
+            console.log(`Job added to queue: ${job.id}`);
+          } else {
+            console.log('SOL balance is 0, not returning funds.');
+          }
         }
         if (!isTokenValid) {
           message += MESSAGES.INSUFFICIENT_TOKEN(minimumTokenBalance);
-        }
-        if (solBalance > 0) {
-          const job = await transactionQueue.add('returnSol', {
-            senderPublicKeyString: senderPublicKey.toString(),
-            solBalance,
-            chatId,
-            transactionId: transaction.transaction.signatures[0], // Pass the transaction ID
-            receiverPrivateKey: bs58.encode(this.receiverKeypair.secretKey)
-          }, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
-          message += MESSAGES.RETURNED_SOL_PENDING(solBalance);
-          console.log(`Job added to queue: ${job.id}`);
-        } else {
-          console.log('SOL balance is 0, not returning funds.');
         }
       }
 
@@ -389,7 +387,7 @@ class BalanceChecker {
 }
 
 const worker = new Worker('transactionQueue', async job => {
-  const { solBalance, chatId, receiverPrivateKey, transactionId } = job.data;
+  const { solBalanceA, chatId, receiverPrivateKey, transactionId } = job.data;
   console.log('Worker received receiverPrivateKey:', receiverPrivateKey);
 
   const balanceChecker = new BalanceChecker(
@@ -402,12 +400,12 @@ const worker = new Worker('transactionQueue', async job => {
   );
 
   const signature = await balanceChecker.returnSolToSender(chatId, transactionId);
-  return { signature, chatId, solBalance, receiverPrivateKey };
+  return { signature, chatId, solBalanceA, receiverPrivateKey };
 }, { connection: redisOptions });
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  // const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalance, result.signature, { package: 'Markdown' });
+  // const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, { package: 'Markdown' });
   const balanceChecker = new BalanceChecker(
     [SOLANA_RPC_ENDPOINT_1, SOLANA_RPC_ENDPOINT_2],
     [ // Add your WebSocket endpoints here
@@ -432,7 +430,7 @@ worker.on('failed', async (job, err) => {
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     job.data.receiverPrivateKey
   );
-  await balanceChecker.sendTelegramMessage(job.data.chatId, MESSAGES.RETURNED_SOL_FAILURE(job.data.solBalance, err.message));
+  await balanceChecker.sendTelegramMessage(job.data.chatId, MESSAGES.RETURNED_SOL_FAILURE(job.data.solBalanceA, err.message));
 });
 
 module.exports = BalanceChecker;
