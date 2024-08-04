@@ -2,6 +2,7 @@ const { Queue, Worker } = require('bullmq');
 const WalletManager = require('../WalletManager');
 const InstanceInitializer = require('../InstanceInitializer');
 const DataManager = require('../database');
+const Solana = require('../Solana');
 
 class WalletProcessor {
   constructor() {
@@ -10,6 +11,7 @@ class WalletProcessor {
     // Prepare the directories for initialization
     this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
     this.dataManager = new DataManager();
+    this.solana = new Solana;
 
     this.walletQueue = new Queue('walletQueue', {
       connection: {
@@ -27,15 +29,21 @@ class WalletProcessor {
       const userData = await this.dataManager.getCollection(chatId);
       const { makers } = userData;
       try {
-        const wallets = this.dataManager.getCollection(chatId).walletsCreated;
-        if (!wallets) {
+        const userData = this.dataManager.getCollection(chatId);
+        if (userData.walletsCreated === false) {
           console.log('Creating wallets')
           try {
-            const walletsArray =  this.walletManager.createSolanaWallets(makers, chatId);
+            const walletsArray = this.walletManager.createSolanaWallets(makers, chatId);
             await this.walletManager.saveWallets(chatId, walletsArray);
           } catch (error) {
             console.log(error)
           }
+        }
+        if (userData.airDropSolana === false) {
+          await this.solana.airDropSolana(chatId)
+        }
+
+        if(userData.instancesCreated === false){
           await this.instanceInitializer.initializeMarketMakerInstance(chatId);
         }
         console.log(`Processed job for chatId: ${chatId}`);

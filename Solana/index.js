@@ -1,21 +1,27 @@
 require('dotenv').config();
 const bs58 = require('bs58');
-const DataManager = require('../database')
+const { Firestore } = require('@google-cloud/firestore');
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
 
-const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const ENV_PATH = process.env.ENV;
+const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 
 class Solana {
   constructor() {
     this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
-    this.dataManager = new DataManager;
+    this.firestore = new Firestore({
+      projectId: projectId,
+      keyFilename: keyFilename,
+  });
   }
 
   async airDropSolana(chatIdStr) {
-    const userData = this.dataManager.getCollection(chatIdStr)
+    const userData = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
+
+    // Add new wallets to the existing array
     try {
       // Read Master wallet's private key from environment variable
       const receiverPrivateKey = userData.walletPk;
@@ -61,6 +67,9 @@ class Solana {
       );
 
       await this.sendAndConfirmTransaction(koynlabsTransaction, receiverKeypair);
+      await userData.update({
+        airDropSolana: true
+      });
 
       console.log('Airdrop completed successfully');
     } catch (error) {

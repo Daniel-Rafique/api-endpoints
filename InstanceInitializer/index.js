@@ -4,12 +4,17 @@ const path = require('path');
 const { exec } = require('child_process');
 const Docker = require('dockerode');
 const DataManager = require('../database');
+const { Firestore } = require('@google-cloud/firestore');
+const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 
 class InstanceInitializer {
   constructor(basePath, instancePath, receiverKeypair) {
 
     console.log(receiverKeypair)
-    
+    this.firestore = new Firestore({
+      projectId: projectId,
+      keyFilename: keyFilename,
+  });
     this.basePath = basePath;
     this.instancePath = instancePath;
     this.dataManager = new DataManager();
@@ -92,6 +97,11 @@ class InstanceInitializer {
 
       await container.start();
       console.log(`Docker container ${containerName} started successfully`);
+      const userData = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
+      await userData.update({
+        instancesCreated: true
+      });
+      
     } catch (error) {
       console.error('Failed to build or run Docker container:', error);
     }

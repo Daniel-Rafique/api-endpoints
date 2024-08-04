@@ -7,8 +7,8 @@ const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
 const Solana = require('../Solana');
 
-const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const ENV_PATH = process.env.ENV;
+const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 class WalletManager {
     constructor(projectId, keyFilename) {
         this.firestore = new Firestore({
@@ -44,7 +44,7 @@ class WalletManager {
             // Add new wallets to the existing array
             await docRef.update({
                 wallets: Firestore.FieldValue.arrayUnion(...newWallets),
-                instancesCreated: true
+                walletsCreated: true
             });
 
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
