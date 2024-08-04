@@ -102,117 +102,62 @@ class BalanceChecker {
 
   async handleTransaction(signature) {
     try {
-        const confirmedTransaction = await this.connection.getTransaction(signature);
-        if (!confirmedTransaction) {
-            console.error('Failed to retrieve confirmed transaction');
-            return;
+      const confirmedTransaction = await this.connection.getTransaction(signature);
+      if (!confirmedTransaction) {
+        console.error('Failed to retrieve confirmed transaction');
+        return;
+      }
+
+      const { transaction, meta } = confirmedTransaction;
+
+      // Find the account index of the receiver and the sender
+      const receiverIndex = transaction.message.accountKeys.findIndex(key => key.toString() === this.receiverKeypair.publicKey.toString());
+      const senderIndex = transaction.message.accountKeys.findIndex(key => key.toString() !== this.receiverKeypair.publicKey.toString());
+
+      if (receiverIndex === -1 || senderIndex === -1) {
+        throw new Error('Receiver or Sender public key not found in the transaction.');
+      }
+
+      // Extract the pre- and post- balances of the receiver
+      const receiverPreBalance = meta.preBalances[receiverIndex];
+      const receiverPostBalance = meta.postBalances[receiverIndex];
+
+      // Calculate the amount sent to the receiver in lamports
+      const amountReceived = receiverPostBalance - receiverPreBalance;
+      console.log('Transaction Amount in lamports:', amountReceived);
+
+      if (amountReceived < this.minimumSolBalance * 1_000_000_000) {
+        const senderPublicKey = transaction.message.accountKeys[senderIndex];
+
+        if (!senderPublicKey) {
+          console.error('Sender public key not found in the transaction');
+          return;
         }
 
-        const { transaction, meta } = confirmedTransaction;
-
-        // Find the account index of the receiver and the sender
-        const receiverIndex = transaction.message.accountKeys.findIndex(key => key.toString() === this.receiverKeypair.publicKey.toString());
-        const senderIndex = transaction.message.accountKeys.findIndex(key => key.toString() !== this.receiverKeypair.publicKey.toString());
-
-        if (receiverIndex === -1 || senderIndex === -1) {
-            throw new Error('Receiver or Sender public key not found in the transaction.');
-        }
-
-        // Extract the pre- and post- balances of the receiver
-        const receiverPreBalance = meta.preBalances[receiverIndex];
-        const receiverPostBalance = meta.postBalances[receiverIndex];
-
-        // Calculate the amount sent to the receiver in lamports
-        const amountReceived = receiverPostBalance - receiverPreBalance;
-        console.log('Transaction Amount in lamports:', amountReceived);
-
-        if (amountReceived < this.minimumSolBalance * 1_000_000_000) {
-            const senderPublicKey = transaction.message.accountKeys[senderIndex];
-
-            if (!senderPublicKey) {
-                console.error('Sender public key not found in the transaction');
-                return;
-            }
-
-            console.log(`Returning ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
-
-            const returnTransaction = new Transaction().add(
-                SystemProgram.transfer({
-                    fromPubkey: this.receiverKeypair.publicKey,
-                    toPubkey: new PublicKey(senderPublicKey),
-                    lamports: amountReceived - 5000 // Adjusting for transaction fee in lamports
-                })
-            );
-
-            const signature = await sendAndConfirmTransaction(
-                this.connection,
-                returnTransaction,
-                [this.receiverKeypair],
-                { commitment: 'confirmed' }
-            );
-
-            console.log(`Returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
-            await this.sendTelegramMessage(this.chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
-        }
-    } catch (error) {
-        console.error('Error handling transaction:', error);
-    }
-}
-
-async returnSolToSender(chatId, transactionId) {
-    try {
-        const transaction = await this.connection.getTransaction(transactionId);
-        if (!transaction) {
-            throw new Error('Transaction not found');
-        }
-
-        const { transaction: tx, meta } = transaction;
-
-        // Find the account index of the receiver and the sender
-        const receiverIndex = tx.message.accountKeys.findIndex(key => key.toString() === this.receiverKeypair.publicKey.toString());
-        const senderIndex = tx.message.accountKeys.findIndex(key => key.toString() !== this.receiverKeypair.publicKey.toString());
-
-        if (receiverIndex === -1 || senderIndex === -1) {
-            throw new Error('Receiver or Sender public key not found in the transaction.');
-        }
-
-        // Extract the pre- and post- balances of the receiver
-        const receiverPreBalance = meta.preBalances[receiverIndex];
-        const receiverPostBalance = meta.postBalances[receiverIndex];
-
-        // Calculate the amount sent to the receiver in lamports
-        const amountReceived = receiverPostBalance - receiverPreBalance;
-        console.log('Transaction Amount in lamports:', amountReceived);
-
-        const senderPublicKey = tx.message.accountKeys[senderIndex];
-
-        const solBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toString());
-        console.log(`Returning ${solBalance} SOL to sender: ${senderPublicKey}`);
+        console.log(`Returning ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
 
         const returnTransaction = new Transaction().add(
-            SystemProgram.transfer({
-                fromPubkey: this.receiverKeypair.publicKey,
-                toPubkey: new PublicKey(senderPublicKey),
-                lamports: (amountReceived - 0.000005) * 1_000_000_000 // Adjusting for transaction fee
-              })
+          SystemProgram.transfer({
+            fromPubkey: this.receiverKeypair.publicKey,
+            toPubkey: new PublicKey(senderPublicKey),
+            lamports: amountReceived - 5000 // Adjusting for transaction fee in lamports
+          })
         );
 
         const signature = await sendAndConfirmTransaction(
-            this.connection,
-            returnTransaction,
-            [this.receiverKeypair],
-            { commitment: 'confirmed' }
+          this.connection,
+          returnTransaction,
+          [this.receiverKeypair],
+          { commitment: 'confirmed' }
         );
 
         console.log(`Returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
-        await this.sendTelegramMessage(chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
-        return signature;
+        await this.sendTelegramMessage(this.chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
+      }
     } catch (error) {
-        console.error('Error returning SOL to sender:', error);
-        throw error;
+      console.error('Error handling transaction:', error);
     }
-}
-
+  }
 
   async returnSolToSender(chatId, transactionId) {
     try {
@@ -235,9 +180,9 @@ async returnSolToSender(chatId, transactionId) {
       const receiverPreBalance = meta.preBalances[receiverIndex];
       const receiverPostBalance = meta.postBalances[receiverIndex];
 
-      // Calculate the amount sent to the receiver
-      const amountReceived = (receiverPostBalance - receiverPreBalance) / 1_000_000_000;
-      console.log('Transaction Amount:', amountReceived);
+      // Calculate the amount sent to the receiver in lamports
+      const amountReceived = receiverPostBalance - receiverPreBalance;
+      console.log('Transaction Amount in lamports:', amountReceived);
 
       const senderPublicKey = tx.message.accountKeys[senderIndex];
 
@@ -248,7 +193,7 @@ async returnSolToSender(chatId, transactionId) {
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
           toPubkey: new PublicKey(senderPublicKey),
-          lamports: (amountReceived - 0.000005) * 1_000_000_000 // Adjusting for transaction fee
+          lamports: amountReceived - 5000 // Adjusting for transaction fee in lamports
         })
       );
 
@@ -259,8 +204,8 @@ async returnSolToSender(chatId, transactionId) {
         { commitment: 'confirmed' }
       );
 
-      console.log(`Returned ${amountReceived} SOL to sender: ${senderPublicKey}`);
-      await this.sendTelegramMessage(chatId, `✅ Successfully returned ${amountReceived} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
+      console.log(`Returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
+      await this.sendTelegramMessage(chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
       return signature;
     } catch (error) {
       console.error('Error returning SOL to sender:', error);
@@ -314,13 +259,13 @@ async returnSolToSender(chatId, transactionId) {
         throw new Error('Unable to determine the sender from the transaction history.');
       }
 
-      const tokenBalanceB = await this.checkTokenBalance(senderPublicKey.toString(), tokenMintAddress);
-      console.log('Sender Token balance:', tokenBalanceB);
+      const tokenBalance = await this.checkTokenBalance(senderPublicKey.toString(), tokenMintAddress);
+      console.log('Sender Token balance:', tokenBalance);
 
-      message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
-      const isTokenValid = tokenBalanceB >= minimumTokenBalance;
+      message += MESSAGES.TOKEN_BALANCE_B(tokenBalance);
+      const isTokenValid = tokenBalance >= minimumTokenBalance;
 
-      console.log('SOL balance:', solBalanceA, 'Token balance:', tokenBalanceB);
+      console.log('SOL balance:', solBalanceA, 'Token balance:', tokenBalance);
 
       if (isSolValid && isTokenValid) {
         message += MESSAGES.SUFFICIENT_BALANCE;
