@@ -11,13 +11,14 @@ const ENV_PATH = process.env.ENV;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 class WalletManager {
 
-    constructor(projectId, keyFilename) {
+    constructor() {
 
         this.dataManager = new DataManager;
         this.solana = new Solana;
+        
         this.firestore = new Firestore({
-            projectId: projectId,
-            keyFilename: keyFilename,
+            projectId: 'koynlabs-2f749', 
+            keyFilename: '.config/firebaseServiceAccountKey.json',
         });
     }
 

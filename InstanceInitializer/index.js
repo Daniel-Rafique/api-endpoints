@@ -14,10 +14,11 @@ class InstanceInitializer {
     this.instancePath = instancePath;
     this.dataManager = new DataManager();
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
+    
     this.firestore = new Firestore({
-      projectId: projectId,
-      keyFilename: keyFilename,
-    });
+      projectId: 'koynlabs-2f749', 
+      keyFilename: '.config/firebaseServiceAccountKey.json',
+  });
   }
 
   // Function to initialize a market maker instance
