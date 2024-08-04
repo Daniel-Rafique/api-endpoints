@@ -5,7 +5,6 @@ const path = require('path');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
 const { RateLimiter } = require('limiter');
-const TransactionManager = require('./TransactionManager'); // Assuming the TransactionManager is in the same directory
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
@@ -20,7 +19,6 @@ class Solana {
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
     this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' }); // Limiting to 10 transactions per second
-    this.transactionManager = new TransactionManager(); // Initialize TransactionManager
   }
 
   async airDropSolana(chatId) {
@@ -115,7 +113,7 @@ class Solana {
           console.log('Transaction expired, retrying with updated block height');
           retries -= 1;
           if (retries === 0) throw error; // Rethrow if retries exhausted
-          const { blockhash } = await this.transactionManager.getRecentBlockhash(this.connection);
+          const { blockhash } = await this.connection.getRecentBlockhash();
           transaction.recentBlockhash = blockhash;
           transaction.sign(signer);
         } else {
