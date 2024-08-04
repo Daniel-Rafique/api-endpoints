@@ -25,18 +25,18 @@ class WalletProcessor {
     new Worker('walletQueue', async job => {
       const { chatId } = job.data;
       const userData = await this.dataManager.getCollection(chatId);
-      const { contractAddress, batchSize, makers } = userData;
+      const { makers } = userData;
       try {
         const wallets = this.dataManager.getCollection(chatId).walletsCreated;
         if (!wallets) {
           console.log('Creating wallets')
           try {
-            this.walletManager.createSolanaWallets(makers, chatId);
-            await this.walletManager.saveWallets(chatId, wallets);
+            const walletsArray =  this.walletManager.createSolanaWallets(makers, chatId);
+            await this.walletManager.saveWallets(chatId, walletsArray);
           } catch (error) {
             console.log(error)
           }
-          await this.instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, wallets, batchSize);
+          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
         }
         console.log(`Processed job for chatId: ${chatId}`);
       } catch (error) {
