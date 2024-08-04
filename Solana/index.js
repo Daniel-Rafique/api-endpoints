@@ -9,11 +9,11 @@ const axios = require('axios'); // For making HTTP requests
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const ENV_PATH = process.env.ENV;
-const JITO_RPC_ENDPOINT = 'https://api.jito-labs.io'; // Replace with the actual Jito Labs RPC endpoint
+const JITO_RPC_ENDPOINT = JITO_API_URL; // Replace with the actual Jito Labs RPC endpoint
 
 class Solana {
   constructor() {
-    this.connection = new Connection(process.env.JITO_API_URL, 'confirmed');
+    this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
