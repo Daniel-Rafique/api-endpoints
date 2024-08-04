@@ -101,16 +101,15 @@ app.post('/api/create', async (req, res) => {
             telegramNotifier,
             receiverPrivateKey
         );
-        if(!userData?.walletsCreated) {
-        balanceChecker.startPeriodicCheck(chatId, receiverPublicKey.toString(), minimumSolBalance, minimumTokenBalance, tokenMintAddress);
-        telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
-        res.status(200).send('Checking balance...');
-        }
-        if(!userData?.airDropSolana) {
+
+        if (!userData?.walletsCreated) {
+            balanceChecker.startPeriodicCheck(chatId, receiverPublicKey.toString(), minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+            telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
+            res.status(200).send('Checking balance...');
+        } else if (userData?.walletsCreated && !userData.airDropSolana) {
             await solana.airDropSolana(chatId);
             res.status(200).send('Airdropping SOL...');
-        }
-        if(!userData.instancesCreated) {
+        } else if (userData.airDropSolana) {
             await instanceInitializer.initializeMarketMakerInstance(chatId);
             res.status(200).send('Instances created...');
         }

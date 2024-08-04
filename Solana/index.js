@@ -21,7 +21,6 @@ class Solana {
   }
 
   async airDropSolana(chatId) {
-
     const chatIdStr = chatId.toString();
 
     if (!chatIdStr || typeof chatIdStr !== 'string') {
@@ -108,5 +107,8 @@ class Solana {
     console.log('Transaction confirmed:', signature);
   }
 }
+
+module.exports = Solana;
+
 
 module.exports = Solana;
