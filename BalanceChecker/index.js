@@ -10,14 +10,17 @@ const WalletProcessor = require('../WalletProcessor');
 const { RateLimiter } = require('limiter');
 const fs = require('fs').promises;
 const path = require('path');
+const WebSocket = require('ws');
 
 const redisOptions = {
   host: 'localhost',
   port: 6379,
 };
-const PROGRAM_ID = process.env.PROGRAM_ID
+const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
+const REQUIRED_AMOUNT = 1; // Required amount in SOL (adjust as needed)
+
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, receiverPrivateKey) {
     this.rpcEndpoints = rpcEndpoints;
@@ -31,305 +34,122 @@ class BalanceChecker {
     this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
     this.failedTransactionsQueue = path.join(__dirname, 'failedTransactions.json');
     this.processingFailedTransactions = false;
+    this.ws = new WebSocket('wss://api.mainnet-beta.solana.com');
+
+    this.listenForTransactions();
   }
 
-  switchRpcEndpoint() {
-    this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
-    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
-  }
+  listenForTransactions() {
+    this.ws.on('open', () => {
+      console.log('WebSocket connection opened');
+      this.ws.send(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "logsSubscribe",
+        params: [{
+          mentions: [this.receiverKeypair.publicKey.toString()]
+        }]
+      }));
+    });
 
-  async retryOperation(operation, maxRetries = 3) {
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        await new Promise((resolve, reject) => {
-          this.limiter.removeTokens(1, (err, remainingRequests) => {
-            if (err) reject(err);
-            else resolve(remainingRequests);
-          });
-        });
-        return await operation();
-      } catch (error) {
-        if (attempt === maxRetries - 1) throw error;
-        console.log(`Attempt ${attempt + 1} failed, retrying...`);
-        this.switchRpcEndpoint();
-        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+    this.ws.on('message', async (data) => {
+      const response = JSON.parse(data);
+      if (response.method === 'logsNotification') {
+        const transactionSignature = response.params.result.signature;
+        console.log(`New transaction: ${transactionSignature}`);
+        await this.handleTransaction(transactionSignature);
       }
-    }
-  }
+    });
 
-  async checkSolBalance(publicKeyString) {
-    return this.retryOperation(async () => {
-      const publicKey = new PublicKey(publicKeyString);
-      const balance = await this.connection.getBalance(publicKey);
-      console.log(balance)
-      return balance / 1_000_000_000;
+    this.ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+    });
+
+    this.ws.on('close', () => {
+      console.log('WebSocket connection closed, reconnecting...');
+      setTimeout(() => this.listenForTransactions(), 1000);
     });
   }
 
-  async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
-    return this.retryOperation(async () => {
-      console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
-      const walletPublicKey = new PublicKey(walletPublicKeyString);
-      const tokenMintPublicKey = new PublicKey(tokenMintAddress);
-
-      console.log('Validated Wallet Public Key:', walletPublicKey.toString());
-      console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
-
-      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
-        programId: TOKEN_PROGRAM_ID,
-      });
-
-      console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
-
-      if (!tokenAccounts) {
-        console.warn('No token accounts found.');
-        return 0;
-      }
-
-      const tokenAccount = tokenAccounts.value.find(
-        account => account.account.data.parsed.info.owner === walletPublicKey.toString()
-      );
-
-      if (!tokenAccount) {
-        console.warn('No token account matching the mint address found.');
-        return 0;
-      }
-
-      const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
-      console.log('Token Balance: ', tokenBalance);
-
-      return tokenBalance;
-    });
-  }
-
-  async getTransactionHistory(chatId, receiverPublicKeyString) {
-    console.log('Chat ID:', chatId);
-    return this.retryOperation(async () => {
-      const receiverPublicKey = new PublicKey(receiverPublicKeyString);
-      const signatures = await this.connection.getSignaturesForAddress(receiverPublicKey, { limit: 1 });
-      console.log('Signatures:', signatures);
-
-      if (signatures.length === 0) {
-        throw new Error('No transaction signatures found for the given public key.');
-      }
-
-      const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
-      console.log('Confirmed Transaction:', confirmedTransaction);
-
+  async handleTransaction(signature) {
+    try {
+      const confirmedTransaction = await this.connection.getTransaction(signature);
       if (!confirmedTransaction) {
-        throw new Error('Failed to retrieve confirmed transaction.');
-      }
-
-      // Log the entire confirmedTransaction for debugging
-      console.log('Confirmed Transaction:', JSON.stringify(confirmedTransaction, null, 2));
-
-      // Extract and log the details of the transaction
-      const { transaction, meta } = confirmedTransaction;
-      console.log('Transaction Details:', transaction);
-      console.log('Transaction Meta:', meta);
-
-      // Identify the sender
-      const senderPublicKey = transaction.message.accountKeys.find(key => key.toString() !== receiverPublicKeyString && key.toString() !== this.receiverKeypair.publicKey.toString());
-      console.log('Sender PublicKey:', senderPublicKey);
-
-      if (!senderPublicKey) {
-        throw new Error('Unable to determine the sender from the transaction history.');
-      }
-
-      // Find the account index of the receiver and the sender
-      const receiverIndex = transaction.message.accountKeys.findIndex(key => key.toString() === receiverPublicKeyString);
-      const senderIndex = transaction.message.accountKeys.findIndex(key => key.toString() === senderPublicKey.toString());
-
-      if (receiverIndex === -1 || senderIndex === -1) {
-        throw new Error('Receiver or Sender public key not found in the transaction.');
-      }
-
-      // Extract the pre- and post- balances of the receiver
-      const receiverPreBalance = meta.preBalances[receiverIndex];
-      const receiverPostBalance = meta.postBalances[receiverIndex];
-
-      // Calculate the amount sent to the receiver
-      const amount = (receiverPostBalance - receiverPreBalance) / 1_000_000_000;
-      console.log('Transaction Amount:', amount);
-
-      try {
-        await this.dataManager.saveTransaction(chatId.toString(), transaction.signatures[0], senderPublicKey.toString(), amount);
-        console.log('Transaction saved successfully.');
-      } catch (error) {
-        console.log('Error saving transaction:', error.message);
-      }
-
-      return confirmedTransaction;
-    });
-  }
-
-  async returnSolToSender(chatId, transactionId, retryCount = 0) {
-    try {
-      const depositInfo = await this.dataManager.getTransaction(chatId.toString());
-
-      if (!depositInfo?.signature) {
-
-        await this.getTransactionHistory(chatId, this.receiverKeypair.publicKey.toString());
-      }
-
-      const { senderPublicKey, amount } = depositInfo;
-      console.log('DEposit info', depositInfo)
-
-      const senderPublicKeyInstance = new PublicKey(senderPublicKey);
-      const receiverBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toBase58());
-
-      console.log('Receiver balance', receiverBalance)
-
-      if (receiverBalance < amount) {
-        console.log('Insufficient balance to return SOL');
-        return null;
-      }
-
-      const lamportsToSend = amount * 1_000_000_000 - 20000;;
-
-      if (lamportsToSend <= 0) {
-        console.log('Not enough balance to cover transaction fees');
-        return null;
-      }
-
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: this.receiverKeypair.publicKey,
-          toPubkey: senderPublicKeyInstance,
-          lamports: lamportsToSend
-        })
-      );
-
-      const { blockhash } = await this.connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = this.receiverKeypair.publicKey;
-
-      const signature = await sendAndConfirmTransaction(
-        this.connection,
-        transaction,
-        [this.receiverKeypair],
-        {
-          maxRetries: 5,
-          commitment: 'confirmed',
-        }
-      );
-
-      console.log('Transaction signature:', signature);
-      return signature;
-    } catch (error) {
-      console.error('Error returning SOL to Wallet B:', error);
-      if (error.message.includes('block height exceeded')) {
-        console.error('Block height exceeded error. Retrying with new blockhash...');
-        return this.returnSolToSender(chatId, transactionId, retryCount);
-      } else if (retryCount < 3) {
-        console.error('Error returning SOL to Wallet B:', error);
-        console.log(`Retrying (${retryCount + 1}/3)...`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-        return this.returnSolToSender(chatId, transactionId, retryCount + 1);
-      } else {
-        console.error('Max retries reached. Adding to failed transactions queue.');
-        await this.addToFailedTransactionsQueue(chatId, transactionId);
-        throw error;
-      }
-    }
-  }
-
-  async addToFailedTransactionsQueue(chatId, transactionId) {
-    const failedTransaction = {
-      chatId,
-      transactionId,
-      timestamp: Date.now(),
-      attempts: 0
-    };
-
-    try {
-      let queue = [];
-      try {
-        const data = await fs.readFile(this.failedTransactionsQueue, 'utf8');
-        queue = JSON.parse(data);
-      } catch (err) {
-        // File doesn't exist or is empty, start with an empty queue
-      }
-
-      queue.push(failedTransaction);
-      await fs.writeFile(this.failedTransactionsQueue, JSON.stringify(queue, null, 2));
-
-      this.processFailedTransactions();
-    } catch (err) {
-      console.error('Error adding to failed transactions queue:', err);
-    }
-  }
-
-  async processFailedTransactions() {
-    if (this.processingFailedTransactions) return;
-    this.processingFailedTransactions = true;
-
-    try {
-      let queue = [];
-      try {
-        const data = await fs.readFile(this.failedTransactionsQueue, 'utf8');
-        queue = JSON.parse(data);
-      } catch (err) {
-        this.processingFailedTransactions = false;
+        console.error('Failed to retrieve confirmed transaction');
         return;
       }
 
-      for (let i = 0; i < queue.length; i++) {
-        const transaction = queue[i];
-        try {
-          await this.returnSolToSender(transaction.chatId, transaction.transactionId);
-          queue.splice(i, 1);
-          i--;
-        } catch (error) {
-          console.error('Error processing failed transaction:', error);
-          transaction.attempts++;
-          if (transaction.attempts >= 5) {
-            transaction.requiresManualIntervention = true;
-            await this.notifyAdminForManualIntervention(transaction);
-          }
-        }
+      const { transaction, meta } = confirmedTransaction;
+      const receiverIndex = transaction.message.accountKeys.findIndex(
+        key => key.toString() === this.receiverKeypair.publicKey.toString()
+      );
+
+      if (receiverIndex === -1) {
+        console.error('Receiver public key not found in the transaction');
+        return;
       }
 
-      await fs.writeFile(this.failedTransactionsQueue, JSON.stringify(queue, null, 2));
-    } catch (err) {
-      console.error('Error processing failed transactions:', err);
-    } finally {
-      this.processingFailedTransactions = false;
+      const receiverPreBalance = meta.preBalances[receiverIndex];
+      const receiverPostBalance = meta.postBalances[receiverIndex];
+      const amountReceived = (receiverPostBalance - receiverPreBalance) / 1_000_000_000;
+
+      console.log(`Amount received: ${amountReceived} SOL`);
+
+      if (amountReceived < REQUIRED_AMOUNT) {
+        const senderPublicKey = transaction.message.accountKeys.find(
+          key => key.toString() !== this.receiverKeypair.publicKey.toString()
+        );
+
+        if (!senderPublicKey) {
+          console.error('Sender public key not found in the transaction');
+          return;
+        }
+
+        console.log(`Returning ${amountReceived} SOL to sender: ${senderPublicKey}`);
+
+        const returnTransaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: this.receiverKeypair.publicKey,
+            toPubkey: new PublicKey(senderPublicKey),
+            lamports: amountReceived * 1_000_000_000
+          })
+        );
+
+        await sendAndConfirmTransaction(
+          this.connection,
+          returnTransaction,
+          [this.receiverKeypair],
+          { commitment: 'confirmed' }
+        );
+
+        console.log(`Returned ${amountReceived} SOL to sender: ${senderPublicKey}`);
+      }
+    } catch (error) {
+      console.error('Error handling transaction:', error);
     }
-  }
-
-  async notifyAdminForManualIntervention(transaction) {
-    const message = `URGENT: Manual intervention required for failed transaction.\n` +
-      `Transaction ID: ${transaction.transactionId}\n` +
-      `Attempts: ${transaction.attempts}\n` +
-      `First attempt: ${new Date(transaction.timestamp).toISOString()}`;
-
-    await this.telegramNotifier.sendTelegramMessage(process.env.ADMIN_CHAT_ID, message);
   }
 
   async runBalanceCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     try {
-      const transaction = await this.getTransactionHistory(chatId, receiverPublicKeyString);
-      console.log('Transaction:', transaction);
-
-      const senderPublicKey = transaction.transaction.message.accountKeys.find(
-        key => key.toString() !== receiverPublicKeyString && key.toString() !== this.receiverKeypair.publicKey.toString()
-      );
-
-      if (!senderPublicKey) {
-        throw new Error('Unable to determine the sender (Wallet B) from the transaction history.');
-      }
-
       const solBalanceA = await this.checkSolBalance(receiverPublicKeyString);
-
       console.log('Receiver SOL balance:', solBalanceA);
 
       let message = MESSAGES.BALANCE_CHECK_REPORT;
       message += MESSAGES.SOL_BALANCE_A(solBalanceA);
       const isSolValid = solBalanceA >= minimumSolBalance;
 
+      // Find the last transaction sender's public key (assume last transaction is the relevant one)
+      const transaction = await this.getLatestTransaction(receiverPublicKeyString);
+      const senderPublicKey = transaction?.transaction.message.accountKeys.find(
+        key => key.toString() !== receiverPublicKeyString && key.toString() !== this.receiverKeypair.publicKey.toString()
+      );
+
+      if (!senderPublicKey) {
+        throw new Error('Unable to determine the sender from the transaction history.');
+      }
+
       const tokenBalanceB = await this.checkTokenBalance(senderPublicKey.toString(), tokenMintAddress);
-      console.log('Wallet B Token balance:', tokenBalanceB);
+      console.log('Sender Token balance:', tokenBalanceB);
 
       message += MESSAGES.TOKEN_BALANCE_B(tokenBalanceB);
       const isTokenValid = tokenBalanceB >= minimumTokenBalance;
@@ -368,6 +188,62 @@ class BalanceChecker {
       console.error('Error during balance check:', error);
       await this.sendTelegramMessage(chatId, MESSAGES.ERROR_DURING_CHECK(error.message));
     }
+  }
+
+  async getLatestTransaction(receiverPublicKeyString) {
+    const receiverPublicKey = new PublicKey(receiverPublicKeyString);
+    const signatures = await this.connection.getSignaturesForAddress(receiverPublicKey, { limit: 1 });
+    if (signatures.length === 0) {
+      throw new Error('No transaction signatures found for the given public key.');
+    }
+
+    const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
+    return confirmedTransaction;
+  }
+
+  async checkSolBalance(publicKeyString) {
+    return this.retryOperation(async () => {
+      const publicKey = new PublicKey(publicKeyString);
+      const balance = await this.connection.getBalance(publicKey);
+      console.log(balance);
+      return balance / 1_000_000_000;
+    });
+  }
+
+  async checkTokenBalance(walletPublicKeyString, tokenMintAddress) {
+    return this.retryOperation(async () => {
+      console.log('Checking token balance for wallet:', walletPublicKeyString, 'with mint:', tokenMintAddress);
+      const walletPublicKey = new PublicKey(walletPublicKeyString);
+      const tokenMintPublicKey = new PublicKey(tokenMintAddress);
+
+      console.log('Validated Wallet Public Key:', walletPublicKey.toString());
+      console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
+
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
+        programId: TOKEN_PROGRAM_ID,
+      });
+
+      console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
+
+      if (!tokenAccounts) {
+        console.warn('No token accounts found.');
+        return 0;
+      }
+
+      const tokenAccount = tokenAccounts.value.find(
+        account => account.account.data.parsed.info.owner === walletPublicKey.toString()
+      );
+
+      if (!tokenAccount) {
+        console.warn('No token account matching the mint address found.');
+        return 0;
+      }
+
+      const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
+      console.log('Token Balance:', tokenBalance);
+
+      return tokenBalance;
+    });
   }
 
   async sendTelegramMessage(chatId, text) {
