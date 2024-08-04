@@ -6,12 +6,12 @@ const Solana = require('../Solana');
 
 class WalletProcessor {
   constructor() {
-    this.walletManager = new WalletManager();
+    this.walletManager = new WalletManager(process.env.GCLOUD_PROJECT_ID, process.env.GCLOUD_KEY_FILE);
 
     // Prepare the directories for initialization
     this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
     this.dataManager = new DataManager();
-    this.solana = new Solana;
+    this.solana = new Solana();
 
     this.walletQueue = new Queue('walletQueue', {
       connection: {
@@ -26,25 +26,26 @@ class WalletProcessor {
   initializeWorker() {
     new Worker('walletQueue', async job => {
       const { chatId } = job.data;
+      console.log('Processing job for chatId:', chatId); // Log chatId
       const userData = await this.dataManager.getCollection(chatId);
       const { makers } = userData;
       try {
         if (!userData.walletsCreated) {
-          console.log('Creating wallets')
+          console.log('Creating wallets for chatId:', chatId);
           try {
-            const walletsArray = this.walletManager.createSolanaWallets(makers, chatId);
+            const walletsArray = this.walletManager.createSolanaWallets(makers);
             await this.walletManager.saveWallets(chatId, walletsArray);
           } catch (error) {
-            console.log(error)
+            console.log(error);
           }
         }
         if (!userData.airDropSolana) {
-          console.log('Airdropping Solona')
-          await this.solana.airDropSolana(chatId)
+          console.log('Airdrop Solana for chatId:', chatId);
+          await this.solana.airDropSolana(chatId);
         }
 
-        if(!userData.instancesCreated){
-          console.log('Airdropping Solona')
+        if (!userData.instancesCreated) {
+          console.log('Initializing market maker instance for chatId:', chatId);
           await this.instanceInitializer.initializeMarketMakerInstance(chatId);
         }
         console.log(`Processed job for chatId: ${chatId}`);
