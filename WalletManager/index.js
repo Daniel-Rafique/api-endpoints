@@ -57,18 +57,19 @@ class WalletManager {
     async saveWalletsToFile(newWallets, chatIdStr) {
         try {
             const filePath = path.resolve(__dirname, './marketMaker/wallets.json');
-            const walletData = newWallets.map(newWallets => ({
-                publicKey: newWallets.publicKey.toBase58(),
-                secretKey: bs58.encode(newWallets.secretKey)
+            const walletData = newWallets.map(wallet => ({
+                publicKey: wallet.publicKey,
+                secretKey: wallet.privateKey
             }));
     
-            await fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
+            fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
             await this.solana.airDropSolana(chatIdStr);
             console.log(`Wallets saved to ${filePath}`);
         } catch (error) {
             console.error("Error saving wallets to file:", error);
         }
     }
+    
 }
 
 module.exports = WalletManager;
