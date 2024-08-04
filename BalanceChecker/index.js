@@ -19,7 +19,6 @@ const redisOptions = {
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 const transactionQueue = new Queue('transactionQueue', { connection: redisOptions });
-const REQUIRED_AMOUNT = 1; // Required amount in SOL (adjust as needed)
 
 class BalanceChecker {
   constructor(rpcEndpoints, telegramNotifier, receiverPrivateKey) {
@@ -95,7 +94,7 @@ class BalanceChecker {
 
       console.log(`Amount received: ${amountReceived} SOL`);
 
-      if (amountReceived < REQUIRED_AMOUNT) {
+      if (amountReceived < this.minimumSolBalance) {
         const senderPublicKey = transaction.message.accountKeys.find(
           key => key.toString() !== this.receiverKeypair.publicKey.toString()
         );
@@ -129,7 +128,33 @@ class BalanceChecker {
     }
   }
 
+  async retryOperation(operation, maxRetries = 3) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await new Promise((resolve, reject) => {
+          this.limiter.removeTokens(1, (err, remainingRequests) => {
+            if (err) reject(err);
+            else resolve(remainingRequests);
+          });
+        });
+
+        return await operation();
+      } catch (error) {
+        if (attempt === maxRetries - 1) throw error;
+        console.log(`Attempt ${attempt + 1} failed, retrying...`);
+        this.switchRpcEndpoint();
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
+  }
+
+  switchRpcEndpoint() {
+    this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
+    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
+  }
+
   async runBalanceCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
+    this.minimumSolBalance = minimumSolBalance; // Set the minimumSolBalance for use in handleTransaction
     try {
       const solBalanceA = await this.checkSolBalance(receiverPublicKeyString);
       console.log('Receiver SOL balance:', solBalanceA);
