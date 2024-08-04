@@ -44,7 +44,7 @@ class WalletProcessor {
           await this.solana.airDropSolana(chatId);
         }
 
-        if (userData.airDropSolana) {
+        if (userData.distributeSolana) {
           console.log('Initializing market maker instance for chatId:', chatId);
           await this.instanceInitializer.initializeMarketMakerInstance(chatId);
         }
