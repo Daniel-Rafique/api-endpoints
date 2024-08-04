@@ -98,7 +98,7 @@ class Solana {
         );
         console.log(`Airdropped ${amountForKoynlabs} lamports to KOYNLABS_WALLET:`, response);
       } catch (error) {
-        console.error(`Error airdropping to KOYNLABS_WALLET:`, error);
+        console.error(`Error airdropping to KOYNLABS_WALLET:`, error.message);
       }
 
       // Update the database flag after successful completion
