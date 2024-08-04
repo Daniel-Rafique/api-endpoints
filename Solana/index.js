@@ -13,7 +13,7 @@ const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 class Solana {
   constructor() {
     this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
-    this.dataManager = DataManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
+    this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749', 
       keyFilename: '.config/firebaseServiceAccountKey.json',
