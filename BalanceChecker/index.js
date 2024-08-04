@@ -144,7 +144,7 @@ class BalanceChecker {
           })
         );
 
-        await sendAndConfirmTransaction(
+        const signature = await sendAndConfirmTransaction(
           this.connection,
           returnTransaction,
           [this.receiverKeypair],
@@ -152,6 +152,7 @@ class BalanceChecker {
         );
 
         console.log(`Returned ${amountReceived} SOL to sender: ${senderPublicKey}`);
+        await this.sendTelegramMessage(this.chatId, `✅ Successfully returned ${amountReceived} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
@@ -192,6 +193,7 @@ class BalanceChecker {
       );
 
       console.log(`Returned ${solBalance} SOL to sender: ${senderPublicKey}`);
+      await this.sendTelegramMessage(chatId, `✅ Successfully returned ${solBalance} SOL to sender: ${senderPublicKey.toString()}. Transaction signature: ${signature}`);
       return signature;
     } catch (error) {
       console.error('Error returning SOL to sender:', error);
@@ -226,6 +228,7 @@ class BalanceChecker {
 
   async runBalanceCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
     this.minimumSolBalance = minimumSolBalance; // Set the minimumSolBalance for use in handleTransaction
+    this.chatId = chatId; // Store chatId for use in other methods
     try {
       const solBalanceA = await this.checkSolBalance(receiverPublicKeyString);
       console.log('Receiver SOL balance:', solBalanceA);
