@@ -407,7 +407,7 @@ const worker = new Worker('transactionQueue', async job => {
 
 worker.on('completed', async (job, result) => {
   console.log(`Transaction job completed: ${job.id}, signature: ${result.signature}`);
-  const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalance, result.signature, { package: 'Markdown' });
+  // const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalance, result.signature, { package: 'Markdown' });
   const balanceChecker = new BalanceChecker(
     [SOLANA_RPC_ENDPOINT_1, SOLANA_RPC_ENDPOINT_2],
     [ // Add your WebSocket endpoints here
