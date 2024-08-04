@@ -63,6 +63,10 @@ class Solana {
       // Calculate 25% for KOYNLABS_WALLET
       const amountForKoynlabs = Math.floor(receiverBalance * 0.25);
 
+      console.log(`Amount to distribute: ${amountToDistribute}`);
+      console.log(`Amount per wallet: ${amountPerWallet}`);
+      console.log(`Amount for KOYNLABS_WALLET: ${amountForKoynlabs}`);
+
       const batchSize = parseInt(process.env.BATCH_SIZE, 10); // Number of wallets to process in parallel
 
       for (let i = 0; i < newWallets.length; i += batchSize) {
@@ -71,11 +75,11 @@ class Solana {
         await Promise.all(batch.map(async (wallet) => {
           try {
             const response = await this.helius.rpc.airdrop(
-              new PublicKey(wallet.publicKey.toString()),
+              new PublicKey(wallet.publicKey),
               amountPerWallet,
               'confirmed'
             );
-            console.log(`Airdropped ${amountPerWallet} lamports to ${wallet.publicKey}:`, response);
+            console.log(`Airdropped ${amountPerWallet} lamports to ${wallet.publicKey}:`, response.items);
 
             await new Promise((resolve, reject) => {
               this.limiter.removeTokens(1, (err, remainingRequests) => {
@@ -84,22 +88,22 @@ class Solana {
               });
             });
           } catch (error) {
-            console.error(`Error airdropping to ${wallet.publicKey}:`, error);
+            console.error(`Error airdropping to ${wallet.publicKey}:`, error.message);
           }
         }));
       }
 
       // Send 25% to KOYNLABS_WALLET
-      // try {
-      //   const response = await this.helius.rpc.airdrop(
-      //     new PublicKey(KOYNLABS_WALLET.toString()),
-      //     amountForKoynlabs,
-      //     'confirmed'
-      //   );
-      //   console.log(`Airdropped ${amountForKoynlabs} lamports to KOYNLABS_WALLET:`, response);
-      // } catch (error) {
-      //   console.error(`Error airdropping to KOYNLABS_WALLET:`, error.message);
-      // }
+      try {
+        const response = await this.helius.rpc.airdrop(
+          new PublicKey(KOYNLABS_WALLET),
+          amountForKoynlabs,
+          'confirmed'
+        );
+        console.log(`Airdropped ${amountForKoynlabs} lamports to KOYNLABS_WALLET:`, response.items);
+      } catch (error) {
+        console.error(`Error airdropping to KOYNLABS_WALLET:`, error.message);
+      }
 
       // Update the database flag after successful completion
       await userDocRef.update({
@@ -108,7 +112,7 @@ class Solana {
 
       console.log('Airdrop completed successfully');
     } catch (error) {
-      console.error('Error during airdrop:', error);
+      console.error('Error during airdrop:', error.message);
       throw error;  // Ensure any error is propagated so it can be handled appropriately
     }
   }
