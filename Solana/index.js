@@ -25,14 +25,14 @@ class Solana {
 
     // Add new wallets to the existing array
     try {
-      console.log(' Airdrop Solana')
+      console.log(' Airdrop Solana', userData)
       // Read Master wallet's private key from environment variable
-      const receiverPrivateKey = userData.walletPk;
-      if (!receiverPrivateKey) {
-        throw new Error('Wallet A private key not found in environment variables');
+      const senderPrivateKey = userData.walletPk;
+      if (!senderPrivateKey) {
+        throw new Error('Wallet private key not found in environment variables');
       }
 
-      const receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey));
+      const receiverKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const receiverBalance = await this.connection.getBalance(receiverKeypair.publicKey);
       console.log(' Airdrop Solana', receiverBalance)
 
