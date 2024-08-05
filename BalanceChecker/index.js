@@ -23,10 +23,10 @@ class BalanceChecker {
 
     this.messageQueue = [];
     this.ws = null;
-    this.listenForTransactions(chatId, receiverPrivateKey);
+    this.listenForTransactions(chatId);
   }
 
-  listenForTransactions(chatId, receiverPrivateKey) {
+  listenForTransactions(chatId) {
     this.ws = new WebSocket(SOLANA_WEBSOCKET);
 
     this.ws.on('open', () => {
@@ -124,7 +124,7 @@ class BalanceChecker {
 
         const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         if(amountReceived < this.minimumSolBalance * 1e9) {
-          await this.sendTelegramMessage(chatId, message);
+          await this.telegramNotifier.sendTelegramMessage(chatId, message);
         }
 
         await this.returnSol(senderPublicKey, amountReceived);
@@ -165,7 +165,7 @@ class BalanceChecker {
 
     if(tokenBalance < this.minimumTokenBalance) {
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-      await this.sendTelegramMessage(chatId, message);
+      await this.telegramNotifier.sendTelegramMessage(chatId, message);
     }
 
     return tokenBalance;
