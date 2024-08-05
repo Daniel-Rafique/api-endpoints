@@ -162,11 +162,16 @@ class BalanceChecker {
       const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
       const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
 
+      console.log('Token balance', tokenBalance)
+      console.log('Minimum token balance', this.minimumTokenBalance)
+      console.log('Sol balance', solBalance)
+      console.log('Minimum Sol balance', this.minimumSolBalance)
+
       let message = null;
       if (amountReceived < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
-        
+
          message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         if (amountReceived < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
