@@ -13,8 +13,9 @@ const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
+    this.receiverKeypairString = receiverPrivateKey.toString() 
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
-    this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey));
+    this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.tokenMintAddress = new PublicKey(tokenMintAddress);
