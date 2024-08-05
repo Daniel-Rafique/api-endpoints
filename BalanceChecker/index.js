@@ -81,7 +81,7 @@ class BalanceChecker {
         const response = JSON.parse(data);
         if (response.method === 'logsNotification') {
           const transactionSignature = response.params.result.signature;
-          console.log(response)
+          console.log(response.params)
           console.log(`New transaction: ${transactionSignature}`);
           if (transactionSignature) {
             await this.handleTransaction(transactionSignature);
