@@ -173,7 +173,7 @@ class BalanceChecker {
       SystemProgram.transfer({
         fromPubkey: this.receiverKeypair.publicKey,
         toPubkey: senderPublicKey,
-        lamports: amountToReturn
+        lamports: amountToReturn - estimatedFee
       })
     );
 
