@@ -78,11 +78,12 @@ app.post('/api/create', async (req, res) => {
         const minimumSolBalance = 0.05; 
         const receiverPublicKey = userData.wallet;
         const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
+        const contractAddress = userData.contractAddress;
 
         if(userData.boostType === 'ultra_boost') {
-            contractAddress = userData.contractAddress;
+            const contractAddress = userData.contractAddress;
         } else {
-            tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
+            const tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
         }
 
         // Start the periodic check
