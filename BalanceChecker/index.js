@@ -5,7 +5,6 @@ const WebSocket = require('ws');
 const TelegramNotifier = require('../Telegram');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
-const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
@@ -22,11 +21,20 @@ class BalanceChecker {
     this.telegramNotifier = new TelegramNotifier();
 
     this.ws = null;
-    this.listenForTransactions(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance);
+    this.listenForTransactions(chatId);
+  }
+
+  switchRpcEndpoint() {
+    this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
+    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
   }
 
   listenForTransactions(chatId) {
-    this.ws = new WebSocket(SOLANA_WEBSOCKET);
+    if (this.ws) {
+      this.ws.close();
+    }
+
+    this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
@@ -44,6 +52,7 @@ class BalanceChecker {
       const response = JSON.parse(data);
       if (response.method === 'logsNotification') {
         const transactionSignature = response.params.result.signature;
+        console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
           await this.handleTransaction(chatId, transactionSignature);
         }
@@ -55,8 +64,9 @@ class BalanceChecker {
     });
 
     this.ws.on('close', () => {
-      console.log('WebSocket connection closed, attempting to reconnect...');
-      setTimeout(() => this.listenForTransactions(), 5000);
+      console.log('WebSocket connection closed, reconnecting...');
+      this.switchWebSocketEndpoint();
+      setTimeout(() => this.listenForTransactions(), 1000);
     });
   }
 
@@ -88,7 +98,7 @@ class BalanceChecker {
         return;
       }
 
-      const tokenBalance = await this.checkTokenBalance(chatId, senderPublicKey);
+      const tokenBalance = await this.checkTokenBalance();
 
       if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
         await this.returnSol(senderPublicKey, amountReceived);
@@ -98,20 +108,42 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance(chatId, senderPublicKey) {
-    const ownerPublicKey = new PublicKey(senderPublicKey);
-    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(MINT_ADDRESS, {
-      mint: this.tokenMintAddress,
-      programId: TOKEN_PROGRAM_ID
+  async checkTokenBalance() {
+    
+    return this.retryOperation(async () => {
+      console.log('Checking token balance for wallet:', this.receiverKeypair.publicKey.toString(),
+       'with mint:', MINT_ADDRESS);
+      const walletPublicKey = new PublicKey(walletPublicKeyString);
+      const tokenMintPublicKey = new PublicKey(tokenMintAddress);
+
+      console.log('Validated Wallet Public Key:', walletPublicKey.toString());
+      console.log('Validated Token Mint Address:', tokenMintPublicKey.toString());
+
+      const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(walletPublicKey, {
+        programId: TOKEN_PROGRAM_ID,
+      });
+
+      console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
+
+      if (!tokenAccounts) {
+        console.warn('No token accounts found.');
+        return 0;
+      }
+
+      const tokenAccount = tokenAccounts.value.find(
+        account => account.account.data.parsed.info.owner === walletPublicKey.toString()
+      );
+
+      if (!tokenAccount) {
+        console.warn('No token account matching the mint address found.');
+        return 0;
+      }
+
+      const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
+      console.log('Token Balance:', tokenBalance);
+
+      return tokenBalance;
     });
-
-    console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
-
-    if (tokenAccounts.value.length === 0) {
-      return 0;
-    }
-
-    return parseFloat(tokenAccounts.value[0].account.data.parsed.info.tokenAmount.uiAmount);
   }
 
   async returnSol(senderPublicKey, amountReceived) {
@@ -146,6 +178,26 @@ class BalanceChecker {
       chatId,
       `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}. TX signature: ${signature}`
     );
+  }
+
+  async retryOperation(operation, maxRetries = 3) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await new Promise((resolve, reject) => {
+          this.limiter.removeTokens(1, (err, remainingRequests) => {
+            if (err) reject(err);
+            else resolve(remainingRequests);
+          });
+        });
+
+        return await operation();
+      } catch (error) {
+        if (attempt === maxRetries - 1) throw error;
+        console.log(`Attempt ${attempt + 1} failed, retrying...`);
+        this.switchRpcEndpoint();
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
   }
 
   async getEstimatedFee() {
