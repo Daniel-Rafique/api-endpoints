@@ -141,6 +141,11 @@ class BalanceChecker {
           return;
         }
 
+        if(amountReceived === 0.000001 ) {
+          console.error('Spam transaction detected');
+          return;
+        }
+
         console.log(`Returning ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
 
         const returnTransaction = new Transaction().add(
@@ -190,6 +195,11 @@ class BalanceChecker {
       // Calculate the amount sent to the receiver in lamports
       const amountReceived = receiverPostBalance - receiverPreBalance;
       console.log('Transaction Amount in lamports:', amountReceived);
+
+      if(amountReceived === 0.000001 ) {
+        console.error('Spam transaction detected');
+        return;
+      }
 
       const senderPublicKey = tx.message.accountKeys[senderIndex];
 
