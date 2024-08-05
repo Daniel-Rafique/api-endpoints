@@ -97,7 +97,7 @@ class Solana {
 
       // Update the database flag after successful completion
       await userDocRef.update({
-        airDropSolana: true,
+        distributeSolana: true,
       });
 
       console.log('Airdrop completed successfully');
