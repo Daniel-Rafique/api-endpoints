@@ -3,7 +3,7 @@ const bs58 = require('bs58');
 const WebSocket = require('ws');
 const TelegramNotifier = require('../Telegram');
 
-const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1 || 'ws://localhost:8080';
+const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1 || 'ws://localhost:8080'; // Default to the mock server
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
@@ -44,7 +44,7 @@ class BalanceChecker {
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
       console.log('Received WebSocket message:', JSON.stringify(response, null, 2));
-      if (response.method === 'logsNotification') {
+      if (response.method === 'logsNotification' && response.params && response.params.result && response.params.result.value) {
         console.log('logsNotification response:', JSON.stringify(response, null, 2));
         const transactionSignature = response.params.result.value.signature;
         console.log(`New transaction: ${transactionSignature}`);
@@ -66,10 +66,10 @@ class BalanceChecker {
 
   sendMessage(message) {
     if (this.ws.readyState === WebSocket.OPEN) {
-      console.log('Sending message:', message);
+      console.log('Sending message:', JSON.stringify(message, null, 2));
       this.ws.send(JSON.stringify(message));
     } else {
-      console.log('WebSocket not open, queueing message:', message);
+      console.log('WebSocket not open, queueing message:', JSON.stringify(message, null, 2));
       this.messageQueue.push(message);
     }
   }
@@ -84,7 +84,9 @@ class BalanceChecker {
   async handleTransaction(chatId, signature) {
     try {
       console.log('Handling transaction:', signature);
-      const transaction = await this.connection.getTransaction(signature);
+      const transaction = await this.connection.getTransaction(signature, {
+        maxSupportedTransactionVersion: 0,
+      });
       if (!transaction) {
         console.error('Failed to retrieve transaction');
         return;
