@@ -138,7 +138,7 @@ class BalanceChecker {
 
         const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         if (amountReceived < this.minimumSolBalance * 1e9) {
-          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
 
         await this.returnSol(senderPublicKey, amountReceived);
@@ -147,7 +147,7 @@ class BalanceChecker {
         await this.telegramNotifier.sendTelegramMessage(
           this.chatId, `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKey.toString()} token balance is ${tokenBalance}`
         );
-        await this.walletProcessor.addJob({ chatId: this.chatId });
+        await this.walletProcessor.addJob(`${this.chatId }`);
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
@@ -233,7 +233,7 @@ class BalanceChecker {
 
     console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}`);
     await this.telegramNotifier.sendTelegramMessage(
-      chatId,
+      this.chatId,
       `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}. TX signature: ${signature}`
     );
   }
