@@ -452,6 +452,7 @@ class BalanceChecker {
     const cronOneMinute = transactionComplete.complete ? true : ('*/1 * * * *');
     const cronFiveMinute = transactionComplete.complete ? true : ('*/5 * * * *');
     cron.schedule(cronOneMinute, async () => {
+      console.log(transactionComplete)
       if (!transactionComplete.complete) {
         console.log('Running periodic balance check...');
         await this.runBalanceCheck(chatId, receiverPublicKeyString, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
