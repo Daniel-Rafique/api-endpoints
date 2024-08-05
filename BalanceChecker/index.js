@@ -217,7 +217,7 @@ class BalanceChecker {
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
       const estimatedFee = await this.getEstimatedFee();
-      const amountToReturn = amountReceived - (estimatedFee * 2); // Double the estimated fee
+      const amountToReturn = await this.connection.getBalance(senderPublicKeyString);// Double the estimated fee
 
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
@@ -228,7 +228,7 @@ class BalanceChecker {
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
           toPubkey: senderPublicKeyString,
-          lamports: amountToReturn
+          lamports: amountToReturn - estimatedFee
         })
       );
 
