@@ -194,7 +194,7 @@ class BalanceChecker {
       const senderPublicKey = tx.message.accountKeys[senderIndex];
 
       const solBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toString());
-      console.log(`Returning ${solBalance} SOL to sender: ${senderPublicKey}`);
+      console.log(`Returning ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
 
       const returnTransaction = new Transaction().add(
         SystemProgram.transfer({
