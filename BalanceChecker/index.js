@@ -56,50 +56,69 @@ class BalanceChecker {
     this.listenForTransactions();
   }
 
+
+  listenForTransactions() {
+    const connectWebSocket = () => {
+      if (this.ws) {
+        this.ws.close();
+      }
+
+      this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
+
+      this.ws.on('open', () => {
+        console.log('WebSocket connection opened');
+        this.ws.send(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "logsSubscribe",
+          params: [{
+            mentions: [this.receiverKeypair.publicKey.toString()]
+          }]
+        }));
+      });
+
+      this.ws.on('message', async (data) => {
+        const response = JSON.parse(data);
+        if (response.method === 'logsNotification') {
+          const transactionSignature = response.params.result.signature;
+          console.log(`New transaction: ${transactionSignature}`);
+          if (transactionSignature) {
+            await this.handleTransaction(transactionSignature);
+          }
+        }
+      });
+
+      this.ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+      });
+
+      this.ws.on('close', () => {
+        console.log('WebSocket connection closed, attempting to reconnect...');
+        this.reconnectWebSocket(0); // Initial retry count
+      });
+    };
+
+    connectWebSocket();
+  }
+
   switchWebSocketEndpoint() {
     this.currentWebSocketIndex = (this.currentWebSocketIndex + 1) % this.websocketEndpoints.length;
     console.log(`Switched to WebSocket endpoint: ${this.websocketEndpoints[this.currentWebSocketIndex]}`);
   }
 
-  listenForTransactions() {
-    if (this.ws) {
-      this.ws.close();
+  reconnectWebSocket(retryCount) {
+    const maxRetries = 10;
+    const retryDelay = Math.min(1000 * (2 ** retryCount), 30000); // Exponential backoff with a max delay of 30 seconds
+
+    if (retryCount < maxRetries) {
+      setTimeout(() => {
+        console.log(`Reconnecting... Attempt ${retryCount + 1}`);
+        this.switchWebSocketEndpoint();
+        this.listenForTransactions();
+      }, retryDelay);
+    } else {
+      console.error('Max retries reached. Unable to reconnect to WebSocket.');
     }
-
-    this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
-
-    this.ws.on('open', () => {
-      console.log('WebSocket connection opened');
-      this.ws.send(JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "logsSubscribe",
-        params: [{
-          mentions: [this.receiverKeypair.publicKey.toString()]
-        }]
-      }));
-    });
-
-    this.ws.on('message', async (data) => {
-      const response = JSON.parse(data);
-      if (response.method === 'logsNotification') {
-        const transactionSignature = response.params.result.signature;
-        console.log(`New transaction: ${transactionSignature}`);
-        if (transactionSignature) {
-          await this.handleTransaction(transactionSignature);
-        }
-      }
-    });
-
-    this.ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-    });
-
-    this.ws.on('close', () => {
-      console.log('WebSocket connection closed, reconnecting...');
-      this.switchWebSocketEndpoint();
-      setTimeout(() => this.listenForTransactions(), 1000);
-    });
   }
 
   switchRpcEndpoint() {
