@@ -149,26 +149,25 @@ class BalanceChecker {
         if (amountReceived <= 0) {
             console.error('Invalid transaction amount');
             return;
-        }
+        }s
 
         const senderPublicKeyString = new PublicKey(senderPublicKey);
 
-        const tokenBalance = await this.checkTokenBalance(senderPublicKeyString);
+        const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
 
         if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
+          console.log('Returning SOL to sender.');
+            await this.returnSol(senderPublicKeyString, amountReceived);
             const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
             if (amountReceived < this.minimumSolBalance * 1e9) {
                 console.log('Sending insufficient SOL balance message.');
                 await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
             }
-
-            console.log('Returning SOL to sender.');
-            await this.returnSol(senderPublicKey, amountReceived);
         } else {
             console.log(`Transaction is valid. Amount received: ${amountReceived / 1e9} SOL`);
             await this.telegramNotifier.sendTelegramMessage(
                 this.chatId,
-                `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKey.toString()} token balance is ${tokenBalance}`
+                `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
             );
             await this.walletProcessor.addJob(`${this.chatId}`);
         }
@@ -178,7 +177,7 @@ class BalanceChecker {
 }
 
 
-  async checkTokenBalance(senderPublicKeyString) {
+  async checkTokenBalance(senderPublicKeyString, amountReceived) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
 
     const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, {
@@ -203,6 +202,7 @@ class BalanceChecker {
     console.log('Token Balance:', tokenBalance);
 
     if (tokenBalance < this.minimumTokenBalance) {
+      await this.returnSol(senderPublicKeyString, amountReceived);
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
       await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
     }
@@ -221,7 +221,7 @@ class BalanceChecker {
     return fee;
   }
 
-  async returnSol(senderPublicKey, amountReceived) {
+  async returnSol(senderPublicKeyString, amountReceived) {
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: this.receiverKeypair.publicKey,
@@ -245,7 +245,7 @@ class BalanceChecker {
     // Adjust the transaction for the actual return amount
     transaction.instructions[0] = SystemProgram.transfer({
       fromPubkey: this.receiverKeypair.publicKey,
-      toPubkey: senderPublicKey,
+      toPubkey: senderPublicKeyString,
       lamports: amountToReturn
     });
 
@@ -255,10 +255,10 @@ class BalanceChecker {
       [this.receiverKeypair]
     );
 
-    console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}`);
+    console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}`);
     await this.telegramNotifier.sendTelegramMessage(
       this.chatId,
-      `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}. TX signature: ${signature}`
+      `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
     );
   }
 }
