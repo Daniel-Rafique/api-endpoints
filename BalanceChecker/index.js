@@ -13,6 +13,7 @@ const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
+    console.log(receiverPrivateKey)
     this.receiverKeypairString = receiverPrivateKey.toString() 
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
@@ -22,7 +23,7 @@ class BalanceChecker {
     this.telegramNotifier = new TelegramNotifier();
 
     this.ws = null;
-    this.listenForTransactions(chatId);
+    this.listenForTransactions(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance);
   }
 
   listenForTransactions(chatId) {
