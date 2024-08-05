@@ -4,7 +4,7 @@ const TelegramNotifier = require('../Telegram');
 const WalletProcessor = require('../WalletProcessor');
 const WebSocket = require('ws');
 
-const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_2;
+const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
@@ -16,9 +16,9 @@ const telegramToken = process.env.TELEGRAM_TOKEN;
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
-    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     console.log('Receiver Private Key:', receiverPrivateKey);
     this.receiverKeypairString = receiverPrivateKey.toString();
+    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
@@ -213,9 +213,7 @@ class BalanceChecker {
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
       const estimatedFee = await this.getEstimatedFee();
-      const amountToReturn = amountReceived - estimatedFee * 2; // Double the estimated fee
-      const remainingBalance = await this.connection.getBalance(senderPublicKeyString);
-
+      const amountToReturn = amountReceived - BigInt(estimatedFee * 2); // Double the estimated fee
 
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
@@ -226,7 +224,7 @@ class BalanceChecker {
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
           toPubkey: senderPublicKeyString,
-          lamports: remainingBalance - this.getEstimatedFee(senderPublicKeyString)
+          lamports: amountToReturn
         })
       );
 
@@ -236,10 +234,10 @@ class BalanceChecker {
 
       const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
 
-      console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}`);
+      console.log(`Returned ${amountToReturn / BigInt(1e9)} SOL to sender: ${senderPublicKeyString}`);
       await this.telegramNotifier.sendTelegramMessage(
         this.chatId,
-        `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
+        `✅ Returned ${amountToReturn / BigInt(1e9)} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
       );
     } catch (error) {
       console.error('Error returning SOL to sender:', error);
@@ -259,7 +257,6 @@ class BalanceChecker {
       })
     ).compileMessage();
     const { value } = await this.connection.getFeeForMessage(message);
-    console.log(value);
     return value;
   }
 }
