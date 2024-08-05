@@ -151,7 +151,9 @@ class BalanceChecker {
             return;
         }
 
-        const tokenBalance = await this.checkTokenBalance(senderPublicKey.toString());
+        const senderPublicKeyString = new PublicKey(senderPublicKey);
+
+        const tokenBalance = await this.checkTokenBalance(senderPublicKeyString);
 
         if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
             const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
