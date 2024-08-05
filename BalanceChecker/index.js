@@ -171,7 +171,7 @@ class BalanceChecker {
           console.log('Sending insufficient SOL balance message.');
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
-         message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
+         message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         if (tokenBalance < this.minimumTokenBalance ) {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
