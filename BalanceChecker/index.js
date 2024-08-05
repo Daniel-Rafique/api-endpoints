@@ -218,7 +218,7 @@ class BalanceChecker {
       throw new Error('Failed to retrieve fee');
     }
 
-    return fee;
+    return fee * 2;
   }
 
   async returnSol(senderPublicKeyString, amountReceived) {
