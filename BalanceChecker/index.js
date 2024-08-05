@@ -213,7 +213,7 @@ class BalanceChecker {
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
       const estimatedFee = await this.getEstimatedFee();
-      const amountToReturn = amountReceived - BigInt(estimatedFee * 2); // Double the estimated fee
+      const amountToReturn = amountReceived - estimatedFee; // Double the estimated fee
 
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
@@ -234,10 +234,10 @@ class BalanceChecker {
 
       const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
 
-      console.log(`Returned ${amountToReturn / BigInt(1e9)} SOL to sender: ${senderPublicKeyString}`);
+      console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
       await this.telegramNotifier.sendTelegramMessage(
         this.chatId,
-        `✅ Returned ${amountToReturn / BigInt(1e9)} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
+        `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
       );
     } catch (error) {
       console.error('Error returning SOL to sender:', error);
