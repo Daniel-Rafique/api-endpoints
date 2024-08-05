@@ -55,10 +55,10 @@ class BalanceChecker {
     this.messageQueue = [];
     this.ws = null;
 
-    this.listenForTransactions(this.chatId);
+    this.listenForTransactions();
   }
 
-  listenForTransactions(chatId) {
+  listenForTransactions() {
     this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
 
     this.ws.on('open', () => {
@@ -81,7 +81,7 @@ class BalanceChecker {
         const transactionSignature = response.params.result.value.signature;
         console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
-          await this.handleTransaction(chatId, transactionSignature);
+          await this.handleTransaction(transactionSignature);
         }
       }
     });
