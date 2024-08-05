@@ -14,16 +14,16 @@ const Firestore = require('@google-cloud/firestore');
 require('dotenv').config();
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
-const QUICKNODE_RPC_ENDPOINT = process.env.QUICKNODE_RPC_ENDPOINT;
+const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const ENV_PATH = process.env.ENV;
 const TX_INTERVAL = 1000;
 
-const SOLANA_CONNECTION = new Connection(QUICKNODE_RPC_ENDPOINT);
+const SOLANA_CONNECTION = new Connection(SOLANA_RPC_ENDPOINT_2);
 
 class Solana {
   constructor() {
-    this.connection = new Connection(QUICKNODE_RPC_ENDPOINT, 'confirmed');
+    this.connection = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -40,7 +40,7 @@ class Solana {
 
     const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
     const userDoc = await userDocRef.get();
-    const NUM_DROPS_PER_TX = 10; // Can be customized or read from the document as in your provided code
+    const NUM_DROPS_PER_TX = userDocRef.batchSize; // Can be customized or read from the document as in your provided code
 
     if (!userDoc.exists) {
       throw new Error('User document does not exist');
