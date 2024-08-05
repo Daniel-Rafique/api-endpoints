@@ -14,15 +14,16 @@ const Firestore = require('@google-cloud/firestore');
 require('dotenv').config();
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
-const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
+const QUICKNODE_RPC_ENDPOINT = process.env.QUICKNODE_RPC_ENDPOINT;
+const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const ENV_PATH = process.env.ENV;
 const TX_INTERVAL = 1000;
 
-const SOLANA_CONNECTION = new Connection(SOLANA_RPC_ENDPOINT_2);
+const SOLANA_CONNECTION = new Connection(QUICKNODE_RPC_ENDPOINT);
 
 class Solana {
   constructor() {
-    this.connection = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
+    this.connection = new Connection(QUICKNODE_RPC_ENDPOINT, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -39,7 +40,7 @@ class Solana {
 
     const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
     const userDoc = await userDocRef.get();
-    const NUM_DROPS_PER_TX = userDocRef.batchSize || 10;
+    const NUM_DROPS_PER_TX = 10; // Can be customized or read from the document as in your provided code
 
     if (!userDoc.exists) {
       throw new Error('User document does not exist');
@@ -67,6 +68,9 @@ class Solana {
       const amountToDistribute = Math.floor(senderBalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
 
+      // Calculate 25% for KOYNLABS_WALLET
+      const amountForKoynlabs = Math.floor(senderBalance * 0.25);
+
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
         numLamports: amountPerWallet,
@@ -76,6 +80,20 @@ class Solana {
       const txResults = await this.executeTransactions(SOLANA_CONNECTION, transactionList, senderKeypair);
 
       console.log(txResults);
+
+      // Send the remaining 25% to KOYNLABS_WALLET
+      const koynlabsTransaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: senderKeypair.publicKey,
+          toPubkey: new PublicKey(KOYNLABS_WALLET),
+          lamports: amountForKoynlabs,
+        })
+      );
+      s
+      koynlabsTransaction.feePayer = senderKeypair.publicKey;
+      koynlabsTransaction.recentBlockhash = (await this.connection.getRecentBlockhash()).blockhash;
+      koynlabsTransaction.sign(senderKeypair);
+      await sendAndConfirmTransaction(this.connection, koynlabsTransaction, [senderKeypair]);
 
       // Update the database flag after successful completion
       await userDocRef.update({
@@ -91,7 +109,7 @@ class Solana {
 
   generateTransactions(batchSize, dropList, fromWallet) {
     const transactions = [];
-    const txInstructions = dropList.map(drop => 
+    const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
         fromPubkey: fromWallet,
         toPubkey: new PublicKey(drop.walletAddress),
