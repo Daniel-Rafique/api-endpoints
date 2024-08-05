@@ -222,7 +222,7 @@ class BalanceChecker {
   }
 
   async returnSol(senderPublicKeyString, amountReceived) {
-    const transaction = new Transaction().add(
+    let transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: this.receiverKeypair.publicKey,
         toPubkey: senderPublicKeyString,
@@ -230,12 +230,12 @@ class BalanceChecker {
       })
     );
 
-    const { blockhash } = await this.connection.getLatestBlockhash();
-    transaction.recentBlockhash = blockhash;
+    let blockhashInfo = await this.connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhashInfo.blockhash;
     transaction.feePayer = this.receiverKeypair.publicKey;
 
-    const estimatedFee = await this.getEstimatedFee(transaction);
-    const amountToReturn = amountReceived - estimatedFee;
+    let estimatedFee = await this.getEstimatedFee(transaction);
+    let amountToReturn = amountReceived - estimatedFee;
 
     if (amountToReturn <= 0) {
       console.error('Amount to return is less than or equal to the transaction fee');
@@ -249,17 +249,45 @@ class BalanceChecker {
       lamports: amountToReturn
     });
 
-    const signature = await sendAndConfirmTransaction(
-      this.connection,
-      transaction,
-      [this.receiverKeypair]
-    );
+    try {
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        transaction,
+        [this.receiverKeypair]
+      );
 
-    console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}`);
-    await this.telegramNotifier.sendTelegramMessage(
-      this.chatId,
-      `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
-    );
+      console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}`);
+      await this.telegramNotifier.sendTelegramMessage(
+        this.chatId,
+        `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
+      );
+    } catch (error) {
+      if (error instanceof TransactionExpiredBlockheightExceededError) {
+        console.log('Transaction expired, retrying with updated blockhash');
+
+        // Retry with a new blockhash
+        blockhashInfo = await this.connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhashInfo.blockhash;
+
+        try {
+          const signature = await sendAndConfirmTransaction(
+            this.connection,
+            transaction,
+            [this.receiverKeypair]
+          );
+
+          console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}`);
+          await this.telegramNotifier.sendTelegramMessage(
+            this.chatId,
+            `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
+          );
+        } catch (retryError) {
+          console.error('Retry failed:', retryError);
+        }
+      } else {
+        console.error('Failed to return SOL:', error);
+      }
+    }
   }
 }
 
