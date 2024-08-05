@@ -14,7 +14,6 @@ const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 class BalanceChecker {
   constructor(receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
-    this.telegramNotifier = telegramNotifier;
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
