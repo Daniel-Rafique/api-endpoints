@@ -4,7 +4,7 @@ const TelegramNotifier = require('../Telegram');
 const WalletProcessor = require('../WalletProcessor');
 const WebSocket = require('ws');
 
-const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1;
+const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_2;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
@@ -16,9 +16,9 @@ const telegramToken = process.env.TELEGRAM_TOKEN;
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
+    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     console.log('Receiver Private Key:', receiverPrivateKey);
     this.receiverKeypairString = receiverPrivateKey.toString();
-    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;

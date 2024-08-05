@@ -157,7 +157,7 @@ class Solana {
       SystemProgram.transfer({
         fromPubkey: senderKeypair.publicKey,
         toPubkey: new PublicKey(KOYNLABS_WALLET),
-        lamports: remainingBalance - getEstimatedFee(senderKeypair)
+        lamports: remainingBalance - this.getEstimatedFee(senderKeypair)
       })
     );
 
