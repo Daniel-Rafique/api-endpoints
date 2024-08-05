@@ -297,7 +297,6 @@ class BalanceChecker {
     }
   }
 
-
   async retryOperation(operation, maxRetries = 3) {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -478,7 +477,7 @@ const worker = new Worker('transactionQueue', async job => {
     receiverPrivateKey
   );
 
-  const signature = await balanceChecker.returnSolToSender(chatId, transactionId);
+  const signature = await balanceChecker.handleTransaction(chatId, transactionId);
   return { signature, chatId, solBalance, receiverPrivateKey };
 }, { connection: redisOptions });
 
