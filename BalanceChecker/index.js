@@ -240,7 +240,7 @@ class BalanceChecker {
     }
 
     console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
-    const tokenBalance = parseFloat(tokenAccount.tokenAmount.uiAmount);
+    const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
 
     if (tokenBalance < this.minimumTokenBalance) {
       await this.returnSol(senderPublicKeyString, amountReceived);
