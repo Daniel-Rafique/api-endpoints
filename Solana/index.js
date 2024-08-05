@@ -89,7 +89,7 @@ class Solana {
           lamports: amountForKoynlabs,
         })
       );
-      s
+      
       koynlabsTransaction.feePayer = senderKeypair.publicKey;
       koynlabsTransaction.recentBlockhash = (await this.connection.getRecentBlockhash()).blockhash;
       koynlabsTransaction.sign(senderKeypair);
