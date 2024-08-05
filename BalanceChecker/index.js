@@ -125,6 +125,18 @@ class BalanceChecker {
     this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
   }
+
+  async getEstimatedFee() {
+    const message = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: this.receiverKeypair.publicKey,
+        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
+        lamports: 1
+      })
+    ).compileMessage();
+    const { value } = await this.connection.getFeeForMessage(message);
+    return value;
+  }
   
   async handleTransaction(signature) {
     try {
@@ -167,11 +179,12 @@ class BalanceChecker {
 
         console.log(`Returning ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
 
+        const estimatedFee = await this.getEstimatedFee();
         const returnTransaction = new Transaction().add(
           SystemProgram.transfer({
             fromPubkey: this.receiverKeypair.publicKey,
             toPubkey: new PublicKey(senderPublicKey),
-            lamports: amountReceived - 5000 // Adjusting for transaction fee in lamports
+            lamports: amountReceived - estimatedFee
           })
         );
 
@@ -225,11 +238,12 @@ class BalanceChecker {
       const solBalance = await this.checkSolBalance(this.receiverKeypair.publicKey.toString());
       console.log(`Returning ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
 
+      const estimatedFee = await this.getEstimatedFee();
       const returnTransaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
           toPubkey: new PublicKey(senderPublicKey),
-          lamports: amountReceived - 5000 // Adjusting for transaction fee in lamports
+          lamports: amountReceived - estimatedFee
         })
       );
 
@@ -295,7 +309,7 @@ class BalanceChecker {
       console.log('Receiver SOL balance:', solBalance);
 
       let message = MESSAGES.BALANCE_CHECK_REPORT;
-      message += MESSAGES.SOL_BALANCE_A(solBalance);
+      message += MESSAGES.SOL_BALANCE(solBalance);
       const isSolValid = solBalance >= minimumSolBalance;
 
       // Find the last transaction sender's public key (assume last transaction is the relevant one)
@@ -311,7 +325,7 @@ class BalanceChecker {
       const tokenBalance = await this.checkTokenBalance(senderPublicKey.toString(), tokenMintAddress);
       console.log('Sender Token balance:', tokenBalance);
 
-      message += MESSAGES.TOKEN_BALANCE_B(tokenBalance);
+      message += MESSAGES.TOKEN_BALANCE(tokenBalance);
       const isTokenValid = tokenBalance >= minimumTokenBalance;
 
       console.log('SOL balance:', solBalance, 'Token balance:', tokenBalance);

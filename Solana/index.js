@@ -157,7 +157,7 @@ class Solana {
       SystemProgram.transfer({
         fromPubkey: senderKeypair.publicKey,
         toPubkey: new PublicKey(KOYNLABS_WALLET),
-        lamports: remainingBalance - 5000, // Adjust for transaction fee
+        lamports: remainingBalance - getEstimatedFee(senderKeypair)
       })
     );
 
@@ -165,6 +165,18 @@ class Solana {
     koynlabsTransaction.recentBlockhash = (await this.connection.getRecentBlockhash()).blockhash;
     koynlabsTransaction.sign(senderKeypair);
     await sendAndConfirmTransaction(this.connection, koynlabsTransaction, [senderKeypair]);
+  }
+
+  async getEstimatedFee(senderKeypair) {
+    const message = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: senderKeypair.publicKey,
+        toPubkey: senderKeypair.publicKey, // Dummy transfer to self
+        lamports: 1
+      })
+    ).compileMessage();
+    const { value } = await this.connection.getFeeForMessage(message);
+    return value;
   }
 }
 
