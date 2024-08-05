@@ -59,7 +59,7 @@ class BalanceChecker {
   }
 
   listenForTransactions(chatId) {
-    this.ws = new WebSocket(SOLANA_WEBSOCKET);
+    this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
