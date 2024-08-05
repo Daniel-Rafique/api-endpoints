@@ -217,6 +217,7 @@ class BalanceChecker {
       return 0;
     }
 
+    console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
     const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
     console.log('Token Balance:', tokenBalance);
 
