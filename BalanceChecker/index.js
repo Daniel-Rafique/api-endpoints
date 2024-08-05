@@ -212,7 +212,7 @@ class BalanceChecker {
 
   async returnSol(senderPublicKeyString) {
     try {
-      const estimatedFee = await this.getEstimatedFee();
+      const estimatedFee = await this.getEstimatedFee() * 2;
       const amountToReturn = await this.connection.getBalance(senderKeypair.publicKey);// Double the estimated fee
 
       if (amountToReturn <= 0) {
