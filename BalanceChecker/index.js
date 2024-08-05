@@ -62,7 +62,7 @@ class BalanceChecker {
         const transactionSignature = response.params.result.value.signature;
         console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
-          await this.handleTransaction(chatId, transactionSignature);
+          await this.handleTransaction(transactionSignature);
         }
       }
     });
