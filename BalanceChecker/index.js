@@ -135,6 +135,7 @@ class BalanceChecker {
       })
     ).compileMessage();
     const { value } = await this.connection.getFeeForMessage(message);
+    console.log(value)
     return value;
   }
   
