@@ -147,7 +147,6 @@ class BalanceChecker {
 
   async handleTransaction(signature) {
     try {
-      const chatId = this.chatId;
 
       console.log('Handling transaction:', signature);
   
@@ -212,6 +211,7 @@ class BalanceChecker {
           this.chatId,
           `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
         );
+        const chatId = this.chatId;
         await this.walletProcessor.addJob(chatId);
       }
     } catch (error) {
