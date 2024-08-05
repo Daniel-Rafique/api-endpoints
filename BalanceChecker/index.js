@@ -12,33 +12,38 @@ const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
+    console.log(receiverPrivateKey);
     this.receiverKeypairString = receiverPrivateKey.toString();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.telegramNotifier = new TelegramNotifier();
+
+    this.messageQueue = [];
+    this.ws = null;
     this.listenForTransactions(chatId);
   }
 
   listenForTransactions(chatId) {
     this.ws = new WebSocket(SOLANA_WEBSOCKET);
+
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
-      this.ws.send(JSON.stringify({
+      this.processMessageQueue();
+      this.sendMessage({
         jsonrpc: "2.0",
         id: 1,
         method: "logsSubscribe",
         params: [{
           mentions: [this.receiverKeypair.publicKey.toString()]
         }]
-      }));
+      });
     });
 
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
       if (response.method === 'logsNotification') {
-        console.log('Received logsNotification:', JSON.stringify(response.params.result, null, 2));
         const transactionSignature = response.params.result.signature;
         console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
@@ -55,6 +60,21 @@ class BalanceChecker {
       console.log('WebSocket connection closed, reconnecting...');
       setTimeout(() => this.listenForTransactions(chatId), 1000);
     });
+  }
+
+  sendMessage(message) {
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+    } else {
+      this.messageQueue.push(message);
+    }
+  }
+
+  processMessageQueue() {
+    while (this.messageQueue.length > 0) {
+      const message = this.messageQueue.shift();
+      this.sendMessage(message);
+    }
   }
 
   async handleTransaction(chatId, signature) {
@@ -104,8 +124,7 @@ class BalanceChecker {
   }
 
   async checkTokenBalance() {
-    console.log('Checking token balance for wallet:', this.receiverKeypair.publicKey.toString(),
-      'with mint:', MINT_ADDRESS);
+    console.log('Checking token balance for wallet:', this.receiverKeypair.publicKey.toString(), 'with mint:', MINT_ADDRESS);
 
     const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(this.receiverKeypair.publicKey, {
       programId: TOKEN_PROGRAM_ID,
