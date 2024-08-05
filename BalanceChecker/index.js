@@ -127,7 +127,11 @@ class BalanceChecker {
   }
 
   async getEstimatedFee() {
-    const message = new Transaction().add(
+    const { blockhash } = await this.connection.getLatestBlockhash();
+    const message = new Transaction({
+      recentBlockhash: blockhash,
+      feePayer: this.receiverKeypair.publicKey
+    }).add(
       SystemProgram.transfer({
         fromPubkey: this.receiverKeypair.publicKey,
         toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
@@ -135,9 +139,10 @@ class BalanceChecker {
       })
     ).compileMessage();
     const { value } = await this.connection.getFeeForMessage(message);
-    console.log(value)
+    console.log(value);
     return value;
-  }
+}
+
   
   async handleTransaction(signature) {
     try {
@@ -190,7 +195,7 @@ class BalanceChecker {
             );
 
             // Get the latest blockhash and set it on the transaction
-            const { blockhash } = await this.connection.getRecentBlockhash();
+            const { blockhash } = await this.connection.getLatestBlockhash();
             returnTransaction.recentBlockhash = blockhash;
 
             const newSignature = await sendAndConfirmTransaction(
@@ -254,7 +259,7 @@ class BalanceChecker {
         );
 
         // Get the latest blockhash and set it on the transaction
-        const { blockhash } = await this.connection.getRecentBlockhash();
+        const { blockhash } = await this.connection.getLatestBlockhash();
         returnTransaction.recentBlockhash = blockhash;
 
         let signature;

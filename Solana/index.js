@@ -162,22 +162,27 @@ class Solana {
     );
 
     koynlabsTransaction.feePayer = senderKeypair.publicKey;
-    koynlabsTransaction.recentBlockhash = (await this.connection.getRecentBlockhash()).blockhash;
+    koynlabsTransaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
     koynlabsTransaction.sign(senderKeypair);
     await sendAndConfirmTransaction(this.connection, koynlabsTransaction, [senderKeypair]);
   }
 
-  async getEstimatedFee(senderKeypair) {
-    const message = new Transaction().add(
+  async getEstimatedFee() {
+    const { blockhash } = await this.connection.getLatestBlockhash();
+    const message = new Transaction({
+      recentBlockhash: blockhash,
+      feePayer: this.receiverKeypair.publicKey
+    }).add(
       SystemProgram.transfer({
-        fromPubkey: senderKeypair.publicKey,
-        toPubkey: senderKeypair.publicKey, // Dummy transfer to self
+        fromPubkey: this.receiverKeypair.publicKey,
+        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
         lamports: 1
       })
     ).compileMessage();
     const { value } = await this.connection.getFeeForMessage(message);
+    console.log(value);
     return value;
-  }
+}
 }
 
 module.exports = Solana;
