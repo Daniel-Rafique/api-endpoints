@@ -13,14 +13,14 @@ const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 const { MESSAGES } = require('../constants');
 
 class BalanceChecker {
-  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
+  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, telegramToken) {
     console.log('Receiver Private Key:', receiverPrivateKey);
     this.receiverKeypairString = receiverPrivateKey.toString();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
-    this.telegramNotifier = new TelegramNotifier();
+    this.telegramNotifier = new TelegramNotifier(telegramToken);
     this.walletProcessor = new WalletProcessor();
 
     this.messageQueue = [];

@@ -100,6 +100,7 @@ app.post('/api/create', async (req, res) => {
             receiverPrivateKey,
             minimumSolBalance,
             minimumTokenBalance,
+            telegramToken
         );
 
         if (!userData?.walletsCreated) {
