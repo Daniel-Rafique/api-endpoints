@@ -160,44 +160,58 @@ class BalanceChecker {
     return tokenBalance;
   }
 
-  async getEstimatedFee() {
-    const { value: { feeCalculator } } = await this.connection.getLatestBlockhash();
-    return feeCalculator.lamportsPerSignature * 2; // Multiply by 2 for safety
-  }  
-
-  async returnSol(senderPublicKey, amountReceived) {
-    const estimatedFee = await this.getEstimatedFee();
-    const amountToReturn = amountReceived - estimatedFee;
-
-    if (amountToReturn <= 0) {
-      console.error('Amount to return is less than or equal to the transaction fee');
-      return;
+  async getEstimatedFee(transaction) {
+    const versionedMessage = transaction.compileMessage();
+    const { value: fee } = await this.connection.getFeeForMessage(versionedMessage);
+    
+    if (fee === null) {
+      throw new Error('Failed to retrieve fee');
     }
-
+  
+    return fee;
+  }
+  
+  async returnSol(senderPublicKey, amountReceived) {
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: this.receiverKeypair.publicKey,
         toPubkey: senderPublicKey,
-        lamports: amountToReturn - estimatedFee
+        lamports: amountReceived
       })
     );
-
+  
     const { blockhash } = await this.connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = this.receiverKeypair.publicKey;
-
+  
+    const estimatedFee = await this.getEstimatedFee(transaction);
+    const amountToReturn = amountReceived - estimatedFee;
+  
+    if (amountToReturn <= 0) {
+      console.error('Amount to return is less than or equal to the transaction fee');
+      return;
+    }
+  
+    // Adjust the transaction for the actual return amount
+    transaction.instructions[0] = SystemProgram.transfer({
+      fromPubkey: this.receiverKeypair.publicKey,
+      toPubkey: senderPublicKey,
+      lamports: amountToReturn
+    });
+  
     const signature = await sendAndConfirmTransaction(
       this.connection,
       transaction,
       [this.receiverKeypair]
     );
-
+  
     console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}`);
     await this.telegramNotifier.sendTelegramMessage(
       chatId,
       `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}. TX signature: ${signature}`
     );
   }
+  
 }
 
 module.exports = BalanceChecker;
