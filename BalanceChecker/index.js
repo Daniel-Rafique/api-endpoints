@@ -160,6 +160,11 @@ class BalanceChecker {
     return tokenBalance;
   }
 
+  async getEstimatedFee() {
+    const { value: { feeCalculator } } = await this.connection.getLatestBlockhash();
+    return feeCalculator.lamportsPerSignature * 2; // Multiply by 2 for safety
+  }  
+
   async returnSol(senderPublicKey, amountReceived) {
     const estimatedFee = await this.getEstimatedFee();
     const amountToReturn = amountReceived - estimatedFee;
@@ -192,11 +197,6 @@ class BalanceChecker {
       chatId,
       `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}. TX signature: ${signature}`
     );
-  }
-
-  async getEstimatedFee() {
-    const { feeCalculator } = await this.connection.getRecentBlockhash();
-    return feeCalculator.lamportsPerSignature * 2; // Multiply by 2 for safety
   }
 }
 
