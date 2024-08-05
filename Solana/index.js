@@ -40,7 +40,7 @@ class Solana {
 
     const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
     const userDoc = await userDocRef.get();
-    const NUM_DROPS_PER_TX = userDocRef.batchSize; // Can be customized or read from the document as in your provided code
+    const NUM_DROPS_PER_TX = userDoc.data().batchSize; // Ensure the batch size is fetched from the document
 
     if (!userDoc.exists) {
       throw new Error('User document does not exist');
@@ -81,26 +81,23 @@ class Solana {
 
       console.log(txResults);
 
-      // Send the remaining 25% to KOYNLABS_WALLET
-      const koynlabsTransaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: senderKeypair.publicKey,
-          toPubkey: new PublicKey(KOYNLABS_WALLET),
-          lamports: amountForKoynlabs,
-        })
-      );
-      
-      koynlabsTransaction.feePayer = senderKeypair.publicKey;
-      koynlabsTransaction.recentBlockhash = (await this.connection.getRecentBlockhash()).blockhash;
-      koynlabsTransaction.sign(senderKeypair);
-      await sendAndConfirmTransaction(this.connection, koynlabsTransaction, [senderKeypair]);
+      // Check if all transactions were successful
+      const allSuccessful = txResults.every(result => result.status === 'fulfilled');
 
-      // Update the database flag after successful completion
-      await userDocRef.update({
-        distributeSolana: true,
-      });
+      if (allSuccessful) {
+        // Send the remaining 25% to KOYNLABS_WALLET
+        await this.sendToKoynlabsWallet(senderKeypair, amountForKoynlabs);
 
-      console.log('Airdrop completed successfully');
+        // Update the database flag after successful completion
+        await userDocRef.update({
+          distributeSolana: true,
+        });
+
+        console.log('Airdrop completed successfully');
+      } else {
+        console.error('Some transactions failed:', txResults);
+        throw new Error('Bulk transactions failed');
+      }
     } catch (error) {
       console.error('Error during airdrop:', error);
       throw error; // Ensure any error is propagated so it can be handled appropriately
@@ -146,6 +143,21 @@ class Solana {
 
     results.push(...await Promise.allSettled(staggeredTransactions));
     return results;
+  }
+
+  async sendToKoynlabsWallet(senderKeypair, amountForKoynlabs) {
+    const koynlabsTransaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: senderKeypair.publicKey,
+        toPubkey: new PublicKey(KOYNLABS_WALLET),
+        lamports: amountForKoynlabs,
+      })
+    );
+
+    koynlabsTransaction.feePayer = senderKeypair.publicKey;
+    koynlabsTransaction.recentBlockhash = (await this.connection.getRecentBlockhash()).blockhash;
+    koynlabsTransaction.sign(senderKeypair);
+    await sendAndConfirmTransaction(this.connection, koynlabsTransaction, [senderKeypair]);
   }
 }
 
