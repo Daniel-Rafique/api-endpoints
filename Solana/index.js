@@ -57,6 +57,11 @@ class Solana {
       console.log(`Amount per wallet: ${amountPerWallet}`);
       console.log(`Amount for KOYNLABS_WALLET: ${amountForKoynlabs}`);
 
+      // Send to KOYNLABS_WALLET
+      console.log(`Sending to KOYNLABS_WALLET: ${KOYNLABS_WALLET}`);
+      const koynlabsResult = await this.sendSol(senderKeypair, new PublicKey(KOYNLABS_WALLET), amountForKoynlabs);
+      results.push(koynlabsResult);
+
       const batchSize = 5; // Reduced batch size for better manageable
       const results = [];
 
@@ -65,23 +70,18 @@ class Solana {
         const batch = recipientWallets.slice(i, i + batchSize);
         const batchResults = await this.processBatch(senderKeypair, batch, amountPerWallet);
         results.push(...batchResults);
-        
+
         console.log(`Batch ${i / batchSize + 1} results:`, batchResults);
-        
+
         // Add a delay between batches to avoid overwhelming the network
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
-
-      // Send to KOYNLABS_WALLET
-      console.log(`Sending to KOYNLABS_WALLET: ${KOYNLABS_WALLET}`);
-      const koynlabsResult = await this.sendSol(senderKeypair, new PublicKey(KOYNLABS_WALLET), amountForKoynlabs);
-      results.push(koynlabsResult);
 
       const successfulTransactions = results.filter(r => r.success).length;
       console.log(`Successfully sent to ${successfulTransactions} out of ${results.length} wallets`);
 
       await userDocRef.update({ distributeSolana: true });
-      
+
       return results;
     } catch (error) {
       console.error('Error during distribution:', error.message);
@@ -90,7 +90,7 @@ class Solana {
   }
 
   async processBatch(senderKeypair, batch, amountPerWallet) {
-    return Promise.all(batch.map(wallet => 
+    return Promise.all(batch.map(wallet =>
       this.sendSol(senderKeypair, new PublicKey(wallet.publicKey), amountPerWallet)
     ));
   }
@@ -99,7 +99,7 @@ class Solana {
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
         console.log(`Attempt ${attempt + 1} to send ${amount} lamports to ${recipientPublicKey.toBase58()}`);
-        
+
         const transaction = new Transaction().add(
           SystemProgram.transfer({
             fromPubkey: senderKeypair.publicKey,
