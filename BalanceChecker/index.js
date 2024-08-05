@@ -45,7 +45,7 @@ class BalanceChecker {
       const response = JSON.parse(data);
       console.log('Received WebSocket message:', response);
       if (response.method === 'logsNotification') {
-        const transactionSignature = response.params.result.signature;
+        const transactionSignature = response.params.result.value.signature;
         console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
           await this.handleTransaction(chatId, transactionSignature);
