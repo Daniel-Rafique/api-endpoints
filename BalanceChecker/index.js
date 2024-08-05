@@ -131,7 +131,7 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance() {
+  async checkTokenBalance(senderPublicKey) {
     console.log('Checking token balance for wallet:', senderPublicKey.toString(), 'with mint:', MINT_ADDRESS);
 
     const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKey.toString(), {
