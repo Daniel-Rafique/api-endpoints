@@ -51,28 +51,28 @@ class BalanceChecker {
     this.limiter = new RateLimiter({ tokensPerInterval: 10, interval: 'second' });
     this.failedTransactionsQueue = path.join(__dirname, 'failedTransactions.json');
     this.processingFailedTransactions = false;
+
+    this.messageQueue = [];
     this.ws = null;
 
     this.listenForTransactions();
   }
 
   listenForTransactions() {
-    if (this.ws) {
-      this.ws.close();
-    }
 
     this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
 
     this.ws.on('open', () => {
-      console.log('WebSocket connection opened');
-      this.ws.send(JSON.stringify({
+      logger.info('WebSocket connection opened');
+      this.processMessageQueue();
+      this.sendMessage({
         jsonrpc: "2.0",
         id: 1,
         method: "logsSubscribe",
         params: [{
           mentions: [this.receiverKeypair.publicKey.toString()]
         }]
-      }));
+      });
     });
 
     this.ws.on('message', async (data) => {
@@ -108,7 +108,7 @@ class BalanceChecker {
     this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
   }
-  
+
   async handleTransaction(signature) {
     try {
       const confirmedTransaction = await this.connection.getTransaction(signature, {
