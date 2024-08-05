@@ -58,7 +58,7 @@ class BalanceChecker {
     this.listenForTransactions();
   }
 
-  listenForTransactions() {
+  listenForTransactions(chatId) {
     this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
 
     this.ws.on('open', () => {
@@ -81,7 +81,7 @@ class BalanceChecker {
         const transactionSignature = response.params.result.value.signature;
         console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
-          await this.handleTransaction(transactionSignature);
+          await this.handleTransaction(chatId, transactionSignature);
         }
       }
     });
@@ -123,7 +123,7 @@ class BalanceChecker {
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
   }
 
-  async handleTransaction(signature) {
+  async handleTransaction(chatId, signature) {
     try {
       const confirmedTransaction = await this.connection.getTransaction(signature, {
         maxSupportedTransactionVersion: 0,
@@ -151,8 +151,11 @@ class BalanceChecker {
       const amountReceived = receiverPostBalance - receiverPreBalance;
       console.log('Transaction Amount in lamports:', amountReceived);
 
-      if (amountReceived < this.minimumSolBalance * 1_000_000_000) {
-        const senderPublicKey = transaction.message.accountKeys[senderIndex];
+      const senderPublicKey = transaction.message.accountKeys[senderIndex];
+      const tokenBalance = await this.checkTokenBalance(chatId, senderPublicKey.toString(), process.env.TOKEN_MINT_ADDRESS);
+
+
+      if (amountReceived < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
 
         if (!senderPublicKey) {
           console.error('Sender public key not found in the transaction');
@@ -177,7 +180,7 @@ class BalanceChecker {
         );
 
         console.log(`Returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey}`);
-        await this.sendTelegramMessage(this.chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. \nTX signature: ${signature}`);
+        await this.sendTelegramMessage(chatId, `✅ Successfully returned ${amountReceived / 1_000_000_000} SOL to sender: ${senderPublicKey.toString()}. \nTX signature: ${signature}`);
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
