@@ -3,6 +3,7 @@ const bs58 = require('bs58');
 const TelegramNotifier = require('../Telegram');
 const WalletProcessor = require('../WalletProcessor');
 const WebSocket = require('ws');
+const WEBSOCKET_ENDPOINTS = [process.env.SOLANA_WEBSOCKET_1, process.env.SOLANA_WEBSOCKET_2];
 
 const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_2;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
@@ -14,6 +15,12 @@ const { MESSAGES } = require('../constants');
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
+let currentEndpointIndex = 0;
+
+function getNextWebSocketEndpoint() {
+  currentEndpointIndex = (currentEndpointIndex + 1) % WEBSOCKET_ENDPOINTS.length;
+  return WEBSOCKET_ENDPOINTS[currentEndpointIndex];
+}
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
@@ -34,9 +41,11 @@ class BalanceChecker {
     this.reconnectInterval = null;
     this.listenForTransactions();
   }
+  
 
   listenForTransactions() {
-    this.ws = new WebSocket(SOLANA_WEBSOCKET);
+    const endpoint = getNextWebSocketEndpoint();
+    this.ws = new WebSocket(endpoint);
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
@@ -71,6 +80,10 @@ class BalanceChecker {
 
     this.ws.on('error', (error) => {
       console.error('WebSocket error:', error);
+      if (error.message.includes('429')) {
+        console.log('Received 429 error, switching WebSocket endpoint...');
+        this.switchWebSocketEndpoint();
+      }
     });
 
     this.ws.on('close', () => {
@@ -83,6 +96,15 @@ class BalanceChecker {
         }, 1000); // Adjust the interval as needed
       }
     });
+  }
+
+  switchWebSocketEndpoint() {
+    console.log('Switching WebSocket endpoint...');
+    clearInterval(this.pingInterval);
+    if (this.ws) {
+      this.ws.close();
+    }
+    this.listenForTransactions();
   }
 
   sendMessage(message) {
