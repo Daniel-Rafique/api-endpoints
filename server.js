@@ -12,13 +12,18 @@ const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
-const DataManager = require('./Database');
+const DataManager = require('./database');
 const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./Telegram');
+const Solana = require('./Solana');
+const InstanceInitializer = require('./InstanceInitializer');
 
 const dataManager = new DataManager();
+const solana = new Solana();
+const instanceInitializer = new InstanceInitializer();
+
 const app = express();
-const port = process.env.PORT;
+const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
 
 // Load environment variables for SSL
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
@@ -65,13 +70,13 @@ app.post('/api/create', async (req, res) => {
     }
 
     try {
-        const userData = await dataManager.getCollection(chatId);
+        const userData = await dataManager.getCollection(chatId.toString());    
         if (!userData) {
             return res.status(404).send('User data not found');
         }
 
-        const minimumSolBalance = userData.boostCost; 
-        const walletAPublicKey = userData.wallet;
+        const minimumSolBalance = 0.05; 
+        const receiverPublicKey = userData.wallet;
         const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
 
         if(userData.boostType === 'ultra_boost') {
@@ -81,15 +86,33 @@ app.post('/api/create', async (req, res) => {
         }
 
         // Start the periodic check
-        const walletASecretKey = userData.walletPk;
+        let receiverPrivateKey = userData.walletPk;
+        console.log('Type of receiverPrivateKey before conversion:', typeof receiverPrivateKey);
+        receiverPrivateKey = receiverPrivateKey.toString();
+        console.log('Type of receiverPrivateKey after conversion:', typeof receiverPrivateKey);
+        console.log('Value of receiverPrivateKey:', receiverPrivateKey);
+
+        if (typeof receiverPrivateKey !== 'string') {
+            throw new TypeError('Receiver private key must be a string');
+        }
         const balanceChecker = new BalanceChecker(
             [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+            [process.env.SOLANA_WEBSOCKET_1, process.env.SOLANA_WEBSOCKET_2],
             telegramNotifier,
-            walletASecretKey
+            receiverPrivateKey
         );
-        balanceChecker.startPeriodicCheck(chatId, walletAPublicKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress);
-        telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
-        res.status(200).send('Checking balance...');
+
+        if (!userData?.walletsCreated) {
+            balanceChecker.startPeriodicCheck(chatId, receiverPublicKey.toString(), minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+            telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
+            res.status(200).send('Checking balance...');
+        } else if (userData?.walletsCreated && !userData.distributeSolana) {
+            await solana.distributeSolana(chatId);
+            res.status(200).send('Airdropping SOL...');
+        } else if (userData.distributeSolana) {
+            await instanceInitializer.initializeMarketMakerInstance(chatId);
+            res.status(200).send('Instances created...');
+        }
     } catch (error) {
         console.error('Error processing request:', error);
         res.status(500).send('Internal Server Error');

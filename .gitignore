@@ -8,4 +8,5 @@ marketMaker/
 instances/
 tests/checkBalance.js
 tests/tokenBalance.js
+tests/dockerTest.js
 utils/clearQeue.js

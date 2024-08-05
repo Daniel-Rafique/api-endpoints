@@ -1,13 +1,17 @@
 const { Queue, Worker } = require('bullmq');
+const DataManager = require('../database');
 const WalletManager = require('../WalletManager');
 const InstanceInitializer = require('../InstanceInitializer');
-const DataManager = require('../Database');
+const Solana = require('../Solana');
 
 class WalletProcessor {
   constructor() {
-    this.walletManager = new WalletManager('koynlabs-2f749', '.config/firebaseServiceAccountKey.json');
+    this.walletManager = new WalletManager(process.env.GCLOUD_PROJECT_ID, process.env.GCLOUD_KEY_FILE);
+
+    // Prepare the directories for initialization
     this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
     this.dataManager = new DataManager();
+    this.solana = new Solana();
 
     this.walletQueue = new Queue('walletQueue', {
       connection: {
@@ -22,18 +26,28 @@ class WalletProcessor {
   initializeWorker() {
     new Worker('walletQueue', async job => {
       const { chatId } = job.data;
+      console.log('Processing job for chatId:', chatId); // Log chatId
       const userData = await this.dataManager.getCollection(chatId);
-      const { contractAddress, batchSize, makers } = userData;
-
+      const { makers } = userData;
       try {
-        const wallets = this.walletManager.createSolanaWallets(makers);
-        
-        await this.walletManager.saveWallets(chatId, wallets);
-
-        if(wallets){
-        await this.instanceInitializer.initializeMarketMakerInstance(chatId, contractAddress, batchSize);
+        if (!userData.walletsCreated) {
+          console.log('Creating wallets for chatId:', chatId);
+          try {
+            const walletsArray = this.walletManager.createSolanaWallets(makers);
+            await this.walletManager.saveWallets(chatId, walletsArray);
+          } catch (error) {
+            console.log(error);
+          }
+        }
+        if (userData.walletsCreated) {
+          console.log('Airdrop Solana for chatId:', chatId);
+          await this.solana.airDropSolana(chatId);
         }
 
+        if (userData.distributeSolana) {
+          console.log('Initializing market maker instance for chatId:', chatId);
+          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        }
         console.log(`Processed job for chatId: ${chatId}`);
       } catch (error) {
         console.error('Error processing job:', error);
