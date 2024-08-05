@@ -4,11 +4,15 @@ const bs58 = require('bs58');
 const WebSocket = require('ws');
 const TelegramNotifier = require('../Telegram');
 
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
+const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET;
+const PROGRAM_ID = process.env.PROGRAM_ID;
+const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
+
 class BalanceChecker {
-  constructor(rpcEndpoint, websocketEndpoint, telegramNotifier, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
-    this.connection = new Connection(rpcEndpoint, 'confirmed');
-    this.websocketEndpoint = websocketEndpoint;
-    this.telegramNotifier = new TelegramNotifier();
+  constructor(telegramNotifier, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, tokenMintAddress) {
+    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
+    this.telegramNotifier = telegramNotifier;
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
@@ -19,7 +23,7 @@ class BalanceChecker {
   }
 
   listenForTransactions() {
-    this.ws = new WebSocket(this.websocketEndpoint);
+    this.ws = new WebSocket(SOLANA_WEBSOCKET);
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
@@ -93,10 +97,9 @@ class BalanceChecker {
 
   async checkTokenBalance(ownerPublicKey) {
     const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(ownerPublicKey, {
-      mint: this.tokenMintAddress
+      mint: this.tokenMintAddress,
+      programId: TOKEN_PROGRAM_ID
     });
-
-    console.log(tokenAccounts)
 
     if (tokenAccounts.value.length === 0) {
       return 0;
