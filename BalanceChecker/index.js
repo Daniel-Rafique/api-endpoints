@@ -122,7 +122,7 @@ class BalanceChecker {
 
       if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
 
-        const message = MESSAGES.INSUFFICIENT_TOKEN(minimumSolBalance);
+        const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         if(amountReceived < this.minimumSolBalance * 1e9) {
           await this.sendTelegramMessage(chatId, message);
         }
@@ -164,7 +164,7 @@ class BalanceChecker {
     console.log('Token Balance:', tokenBalance);
 
     if(tokenBalance < this.minimumTokenBalance) {
-      const message = MESSAGES.INSUFFICIENT_TOKEN(minimumSolBalance);
+      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
       await this.sendTelegramMessage(chatId, message);
     }
 
