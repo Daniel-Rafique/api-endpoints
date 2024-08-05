@@ -99,6 +99,8 @@ class BalanceChecker {
         key => !key.equals(this.receiverKeypair.publicKey)
       );
 
+      const senderPublicKeyString = new PublicKey(senderPublicKey);
+
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
         return;
@@ -115,7 +117,7 @@ class BalanceChecker {
         return;
       }
 
-      const tokenBalance = await this.checkTokenBalance(senderPublicKey);
+      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString);
 
       if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
         await this.returnSol(senderPublicKey, amountReceived);
@@ -131,10 +133,10 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance(senderPublicKey) {
-    console.log('Checking token balance for wallet:', senderPublicKey.toString(), 'with mint:', MINT_ADDRESS);
+  async checkTokenBalance(senderPublicKeyString) {
+    console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
 
-    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKey.toString(), {
+    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, {
       programId: TOKEN_PROGRAM_ID,
     });
 
