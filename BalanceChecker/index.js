@@ -118,63 +118,63 @@ class BalanceChecker {
 
   async handleTransaction(signature) {
     try {
-        console.log('Handling transaction:', signature);
+      console.log('Handling transaction:', signature);
 
-        const transaction = await this.connection.getTransaction(signature, {
-            maxSupportedTransactionVersion: 0,
-        });
+      const transaction = await this.connection.getTransaction(signature, {
+        maxSupportedTransactionVersion: 0,
+      });
 
-        if (!transaction) {
-            console.error('Failed to retrieve transaction');
-            return;
+      if (!transaction) {
+        console.error('Failed to retrieve transaction');
+        return;
+      }
+
+      console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
+
+      const senderPublicKey = transaction.transaction.message.accountKeys.find(
+        key => !key.equals(this.receiverKeypair.publicKey)
+      );
+
+      if (!senderPublicKey) {
+        console.error('Sender public key not found in the transaction');
+        return;
+      }
+
+      const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
+        key => key.equals(this.receiverKeypair.publicKey)
+      );
+
+      const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
+
+      if (amountReceived <= 0) {
+        console.error('Invalid transaction amount');
+        return;
+      }
+
+      const senderPublicKeyString = new PublicKey(senderPublicKey);
+
+      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
+
+      if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
+        console.log('Returning SOL to sender.');
+        await this.returnSol(senderPublicKeyString, amountReceived);
+        const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
+        if (amountReceived < this.minimumSolBalance * 1e9) {
+          console.log('Sending insufficient SOL balance message.');
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
-
-        console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
-
-        const senderPublicKey = transaction.transaction.message.accountKeys.find(
-            key => !key.equals(this.receiverKeypair.publicKey)
+      } else {
+        console.log(`Transaction is valid. Amount received: ${amountReceived / 1e9} SOL`);
+        await this.telegramNotifier.sendTelegramMessage(
+          this.chatId,
+          `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
         );
-
-        if (!senderPublicKey) {
-            console.error('Sender public key not found in the transaction');
-            return;
-        }
-
-        const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
-            key => key.equals(this.receiverKeypair.publicKey)
-        );
-
-        const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
-
-        if (amountReceived <= 0) {
-            console.error('Invalid transaction amount');
-            return;
-        }
-
-        const senderPublicKeyString = new PublicKey(senderPublicKey);
-
-        const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
-
-        if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
-          console.log('Returning SOL to sender.');
-            await this.returnSol(senderPublicKeyString, amountReceived);
-            const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
-            if (amountReceived < this.minimumSolBalance * 1e9) {
-                console.log('Sending insufficient SOL balance message.');
-                await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-            }
-        } else {
-            console.log(`Transaction is valid. Amount received: ${amountReceived / 1e9} SOL`);
-            await this.telegramNotifier.sendTelegramMessage(
-                this.chatId,
-                `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
-            );
-            await this.walletProcessor.addJob(`${this.chatId}`);
-        }
+        await this.walletProcessor.addJob(`${this.chatId}`);
+      }
     } catch (error) {
-        console.error('Error handling transaction:', error);
+      console.error('Error handling transaction:', error);
     }
-}
+  }
 
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
@@ -210,51 +210,29 @@ class BalanceChecker {
     return tokenBalance;
   }
 
-  async getEstimatedFee(transaction) {
-    const versionedMessage = transaction.compileMessage();
-    const { value: fee } = await this.connection.getFeeForMessage(versionedMessage);
-
-    if (fee === null) {
-      throw new Error('Failed to retrieve fee');
-    }
-
-    return fee * 2;
-  }
-
   async returnSol(senderPublicKeyString, amountReceived) {
-    let transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: this.receiverKeypair.publicKey,
-        toPubkey: senderPublicKeyString,
-        lamports: amountReceived
-      })
-    );
-
-    let blockhashInfo = await this.connection.getLatestBlockhash();
-    transaction.recentBlockhash = blockhashInfo.blockhash;
-    transaction.feePayer = this.receiverKeypair.publicKey;
-
-    let estimatedFee = await this.getEstimatedFee(transaction);
-    let amountToReturn = amountReceived - estimatedFee;
-
-    if (amountToReturn <= 0) {
-      console.error('Amount to return is less than or equal to the transaction fee');
-      return;
-    }
-
-    // Adjust the transaction for the actual return amount
-    transaction.instructions[0] = SystemProgram.transfer({
-      fromPubkey: this.receiverKeypair.publicKey,
-      toPubkey: senderPublicKeyString,
-      lamports: amountToReturn
-    });
-
     try {
-      const signature = await sendAndConfirmTransaction(
-        this.connection,
-        transaction,
-        [this.receiverKeypair]
+      const estimatedFee = await this.getEstimatedFee();
+      const amountToReturn = amountReceived - estimatedFee * 2; // Double the estimated fee
+
+      if (amountToReturn <= 0) {
+        console.error('Amount to return is less than or equal to the transaction fee');
+        return;
+      }
+
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: this.receiverKeypair.publicKey,
+          toPubkey: senderPublicKeyString,
+          lamports: amountToReturn
+        })
       );
+
+      transaction.feePayer = this.receiverKeypair.publicKey;
+      transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
+      transaction.sign(this.receiverKeypair);
+
+      const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
 
       console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}`);
       await this.telegramNotifier.sendTelegramMessage(
@@ -262,32 +240,25 @@ class BalanceChecker {
         `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
       );
     } catch (error) {
-      if (error instanceof TransactionExpiredBlockheightExceededError) {
-        console.log('Transaction expired, retrying with updated blockhash');
-
-        // Retry with a new blockhash
-        blockhashInfo = await this.connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhashInfo.blockhash;
-
-        try {
-          const signature = await sendAndConfirmTransaction(
-            this.connection,
-            transaction,
-            [this.receiverKeypair]
-          );
-
-          console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}`);
-          await this.telegramNotifier.sendTelegramMessage(
-            this.chatId,
-            `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
-          );
-        } catch (retryError) {
-          console.error('Retry failed:', retryError);
-        }
-      } else {
-        console.error('Failed to return SOL:', error);
-      }
+      console.error('Error returning SOL to sender:', error);
     }
+  }
+
+  async getEstimatedFee() {
+    const { blockhash } = await this.connection.getLatestBlockhash();
+    const message = new Transaction({
+      recentBlockhash: blockhash,
+      feePayer: this.receiverKeypair.publicKey
+    }).add(
+      SystemProgram.transfer({
+        fromPubkey: this.receiverKeypair.publicKey,
+        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
+        lamports: 1
+      })
+    ).compileMessage();
+    const { value } = await this.connection.getFeeForMessage(message);
+    console.log(value);
+    return value;
   }
 }
 
