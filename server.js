@@ -80,7 +80,7 @@ app.post('/api/create', async (req, res) => {
         const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
 
         if(userData.boostType === 'ultra_boost') {
-            tokenMintAddress = userData.contractAddress;
+            contractAddress = userData.contractAddress;
         } else {
             tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
         }
@@ -100,7 +100,8 @@ app.post('/api/create', async (req, res) => {
             receiverPrivateKey,
             minimumSolBalance,
             minimumTokenBalance,
-            telegramToken
+            telegramToken,
+            contractAddress
         );
 
         if (!userData?.walletsCreated) {

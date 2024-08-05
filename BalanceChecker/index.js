@@ -16,7 +16,7 @@ const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
 
 class BalanceChecker {
-  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
+  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
     console.log('Receiver Private Key:', receiverPrivateKey);
     this.receiverKeypairString = receiverPrivateKey.toString();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
@@ -26,6 +26,7 @@ class BalanceChecker {
     this.telegramNotifier = new TelegramNotifier(telegramToken);
     this.walletProcessor = new WalletProcessor();
     this.chatId = chatId;
+    this.contractAddress = contractAddress;
 
     this.messageQueue = [];
     this.ws = null;
@@ -165,10 +166,10 @@ class BalanceChecker {
       console.log('Token balance', tokenBalance)
       console.log('Minimum token balance', this.minimumTokenBalance)
       console.log('Sol balance', solBalance)
-      console.log('Minimum Sol balance', this.minimumSolBalance)
+      console.log('Minimum Sol balance', this.minimumSolBalance / 1_000_000_000)
 
       let message = null;
-      if (amountReceived < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
+      if (amountReceived < this.minimumSolBalance / 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
 
@@ -185,7 +186,7 @@ class BalanceChecker {
 
       } else {
 
-        if(solBalance >= this.minimumSolBalance * 1_000_000_000 && tokenBalance >= this.minimumTokenBalance){
+        if(solBalance >= this.minimumSolBalance / 1_000_000_000 && tokenBalance >= this.minimumTokenBalance){
           console.log(`Transaction is valid. Amount received: ${amountReceived / 1_000_000_000} SOL & ${TOKEN} Balance is ${tokenBalance}`);
           await this.telegramNotifier.sendTelegramMessage(
             this.chatId,
@@ -213,7 +214,7 @@ class BalanceChecker {
     }
 
     const tokenAccount = tokenAccounts.value.find(
-      account => account.account.data.parsed.info.mint === MINT_ADDRESS.toString()
+      account => account.account.data.parsed.info.mint === this.contractAddress.toString()
     );
 
     if (!tokenAccount) {
