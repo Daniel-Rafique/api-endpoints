@@ -68,9 +68,6 @@ class Solana {
       const amountToDistribute = Math.floor(senderBalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
 
-      // Calculate 25% for KOYNLABS_WALLET
-      const amountForKoynlabs = Math.floor(senderBalance * 0.25);
-
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
         numLamports: amountPerWallet,
@@ -85,8 +82,8 @@ class Solana {
       const allSuccessful = txResults.every(result => result.status === 'fulfilled');
 
       if (allSuccessful) {
-        // Send the remaining 25% to KOYNLABS_WALLET
-        await this.sendToKoynlabsWallet(senderKeypair, amountForKoynlabs);
+        // Send the remaining balance to KOYNLABS_WALLET
+        await this.sendRemainingToKoynlabsWallet(senderKeypair);
 
         // Update the database flag after successful completion
         await userDocRef.update({
@@ -145,12 +142,18 @@ class Solana {
     return results;
   }
 
-  async sendToKoynlabsWallet(senderKeypair, amountForKoynlabs) {
+  async sendRemainingToKoynlabsWallet(senderKeypair) {
+    const remainingBalance = await this.connection.getBalance(senderKeypair.publicKey);
+
+    if (remainingBalance <= 0) {
+      throw new Error('No remaining balance to send to KOYNLABS_WALLET');
+    }
+
     const koynlabsTransaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: senderKeypair.publicKey,
         toPubkey: new PublicKey(KOYNLABS_WALLET),
-        lamports: amountForKoynlabs,
+        lamports: remainingBalance - 5000, // Adjust for transaction fee
       })
     );
 
