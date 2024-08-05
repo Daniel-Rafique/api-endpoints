@@ -4,8 +4,8 @@ const bs58 = require('bs58');
 const WebSocket = require('ws');
 const TelegramNotifier = require('../Telegram');
 
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
-const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET;
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
+const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
@@ -19,13 +19,14 @@ class BalanceChecker {
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.tokenMintAddress = new PublicKey(tokenMintAddress);
+    this.telegramNotifier = new TelegramNotifier();
 
     this.ws = null;
     this.listenForTransactions();
   }
 
   listenForTransactions() {
-    this.ws = new WebSocket(SOLANA_WEBSOCKET_1);
+    this.ws = new WebSocket(SOLANA_WEBSOCKET);
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
