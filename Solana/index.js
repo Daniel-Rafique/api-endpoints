@@ -29,7 +29,7 @@ class Solana {
     });
   }
 
-  async airDropSolana(chatId) {
+  async distributeSolana(chatId) {
     const chatIdStr = chatId.toString();
 
     if (!chatIdStr || typeof chatIdStr !== 'string') {
