@@ -11,6 +11,7 @@ const path = require('path');
 const bs58 = require('bs58');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
+const InstanceInitializer = require('../InstanceInitializer');
 require('dotenv').config();
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
@@ -29,6 +30,7 @@ class Solana {
       projectId: 'koynlabs-2f749',
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
+    this.instanceInitializer = new InstanceInitializer();
   }
 
   async distributeSolana(chatId) {
@@ -85,12 +87,14 @@ class Solana {
         // Send the remaining balance to KOYNLABS_WALLET
         await this.sendRemainingToKoynlabsWallet(senderKeypair);
 
+        console.log('Airdrop completed successfully');
         // Update the database flag after successful completion
         await userDocRef.update({
           distributeSolana: true,
         });
 
-        console.log('Airdrop completed successfully');
+        // Initialize instances.
+        this.instanceInitializer(chatId);
       } else {
         console.error('Some transactions failed:', txResults);
         throw new Error('Bulk transactions failed');
