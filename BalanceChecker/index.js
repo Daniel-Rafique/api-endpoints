@@ -85,7 +85,28 @@ class BalanceChecker {
     } else {
       console.log('WebSocket not open, queueing message:', message);
       this.messageQueue.push(message);
+      this.waitForOpenConnection(() => {
+        this.processMessageQueue();
+      });
     }
+  }
+
+  waitForOpenConnection(callback) {
+    const maxAttempts = 10;
+    let attempts = 0;
+
+    const interval = setInterval(() => {
+      if (this.ws.readyState === WebSocket.OPEN) {
+        clearInterval(interval);
+        callback();
+      } else {
+        attempts++;
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          console.error('Failed to open WebSocket connection.');
+        }
+      }
+    }, 1000); // Check every second
   }
 
   processMessageQueue() {
@@ -97,62 +118,63 @@ class BalanceChecker {
 
   async handleTransaction(signature) {
     try {
-      console.log('Handling transaction:', signature);
+        console.log('Handling transaction:', signature);
 
-      const transaction = await this.connection.getTransaction(signature, {
-        maxSupportedTransactionVersion: 0,
-      });
+        const transaction = await this.connection.getTransaction(signature, {
+            maxSupportedTransactionVersion: 0,
+        });
 
-      if (!transaction) {
-        console.error('Failed to retrieve transaction');
-        return;
-      }
-
-      console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
-
-      const senderPublicKey = transaction.transaction.message.accountKeys.find(
-        key => !key.equals(this.receiverKeypair.publicKey)
-      );
-
-      const senderPublicKeyString = new PublicKey(senderPublicKey);
-
-      if (!senderPublicKey) {
-        console.error('Sender public key not found in the transaction');
-        return;
-      }
-
-      const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
-        key => key.equals(this.receiverKeypair.publicKey)
-      );
-
-      const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
-
-      if (amountReceived <= 0) {
-        console.error('Invalid transaction amount');
-        return;
-      }
-
-      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString);
-
-      if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
-
-        const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
-        if (amountReceived < this.minimumSolBalance * 1e9) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        if (!transaction) {
+            console.error('Failed to retrieve transaction');
+            return;
         }
 
-        await this.returnSol(senderPublicKey, amountReceived);
-      } else {
-        console.log(`Transaction is valid Amount received: ${amountReceived / 1e9} SOL`);
-        await this.telegramNotifier.sendTelegramMessage(
-          this.chatId, `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKey.toString()} token balance is ${tokenBalance}`
+        console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
+
+        const senderPublicKey = transaction.transaction.message.accountKeys.find(
+            key => !key.equals(this.receiverKeypair.publicKey)
         );
-        await this.walletProcessor.addJob(`${this.chatId }`);
-      }
+
+        if (!senderPublicKey) {
+            console.error('Sender public key not found in the transaction');
+            return;
+        }
+
+        const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
+            key => key.equals(this.receiverKeypair.publicKey)
+        );
+
+        const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
+
+        if (amountReceived <= 0) {
+            console.error('Invalid transaction amount');
+            return;
+        }
+
+        const tokenBalance = await this.checkTokenBalance(senderPublicKey.toString());
+
+        if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
+            const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
+            if (amountReceived < this.minimumSolBalance * 1e9) {
+                console.log('Sending insufficient SOL balance message.');
+                await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            }
+
+            console.log('Returning SOL to sender.');
+            await this.returnSol(senderPublicKey, amountReceived);
+        } else {
+            console.log(`Transaction is valid. Amount received: ${amountReceived / 1e9} SOL`);
+            await this.telegramNotifier.sendTelegramMessage(
+                this.chatId,
+                `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKey.toString()} token balance is ${tokenBalance}`
+            );
+            await this.walletProcessor.addJob(`${this.chatId}`);
+        }
     } catch (error) {
-      console.error('Error handling transaction:', error);
+        console.error('Error handling transaction:', error);
     }
-  }
+}
+
 
   async checkTokenBalance(senderPublicKeyString) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
@@ -237,7 +259,6 @@ class BalanceChecker {
       `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}. TX signature: ${signature}`
     );
   }
-
 }
 
 module.exports = BalanceChecker;
