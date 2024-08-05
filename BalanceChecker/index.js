@@ -12,8 +12,10 @@ const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 const { MESSAGES } = require('../constants');
 
+const telegramToken = process.env.TELEGRAM_TOKEN;
+
 class BalanceChecker {
-  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, telegramToken) {
+  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
     console.log('Receiver Private Key:', receiverPrivateKey);
     this.receiverKeypairString = receiverPrivateKey.toString();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
@@ -22,14 +24,15 @@ class BalanceChecker {
     this.minimumTokenBalance = minimumTokenBalance;
     this.telegramNotifier = new TelegramNotifier(telegramToken);
     this.walletProcessor = new WalletProcessor();
+    this.chatId = chatId;
 
     this.messageQueue = [];
     this.ws = null;
     this.pingInterval = null;
-    this.listenForTransactions(chatId);
+    this.listenForTransactions();
   }
 
-  listenForTransactions(chatId) {
+  listenForTransactions() {
     this.ws = new WebSocket(SOLANA_WEBSOCKET);
 
     this.ws.on('open', () => {
@@ -71,7 +74,7 @@ class BalanceChecker {
     this.ws.on('close', () => {
       console.log('WebSocket connection closed, reconnecting...');
       clearInterval(this.pingInterval);
-      setTimeout(() => this.listenForTransactions(chatId), 1000);
+      setTimeout(() => this.listenForTransactions(), 1000);
     });
   }
 
@@ -92,7 +95,7 @@ class BalanceChecker {
     }
   }
 
-  async handleTransaction(chatId, signature) {
+  async handleTransaction(signature) {
     try {
       console.log('Handling transaction:', signature);
 
@@ -142,9 +145,9 @@ class BalanceChecker {
       } else {
         console.log(`Transaction is valid Amount received: ${amountReceived / 1e9} SOL`);
         await this.telegramNotifier.sendTelegramMessage(
-          chatId, `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKey.toString()} token balance is ${tokenBalance}`
+          this.chatId, `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKey.toString()} token balance is ${tokenBalance}`
         );
-        await this.walletProcessor.addJob({ chatId });
+        await this.walletProcessor.addJob({ chatId: this.chatId });
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
@@ -177,7 +180,7 @@ class BalanceChecker {
 
     if (tokenBalance < this.minimumTokenBalance) {
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-      await this.telegramNotifier.sendTelegramMessage(chatId, message);
+      await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
     }
 
     return tokenBalance;
