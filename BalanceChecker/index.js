@@ -41,7 +41,7 @@ class BalanceChecker {
     this.reconnectInterval = null;
     this.listenForTransactions();
   }
-  
+
 
   listenForTransactions() {
     const endpoint = getNextWebSocketEndpoint();
@@ -149,52 +149,52 @@ class BalanceChecker {
     try {
 
       console.log('Handling transaction:', signature);
-  
+
       const transaction = await this.connection.getTransaction(signature, {
         maxSupportedTransactionVersion: 0,
       });
-  
+
       if (!transaction) {
         console.error('Failed to retrieve transaction');
         return;
       }
-  
+
       console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
-  
+
       const senderPublicKey = transaction.transaction.message.accountKeys.find(
         key => !key.equals(this.receiverKeypair.publicKey)
       );
-  
+
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
         return;
       }
-  
+
       const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
         key => key.equals(this.receiverKeypair.publicKey)
       );
-  
+
       const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
-  
+
       if (amountReceived <= 0) {
         console.error('Invalid transaction amount');
         return;
       }
-  
+
       const senderPublicKeyString = new PublicKey(senderPublicKey);
-  
+
       const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
       const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
-  
+
       console.log('Token balance:', tokenBalance);
       console.log('Minimum token balance:', this.minimumTokenBalance);
       console.log('Sol balance:', solBalance);
       console.log('Minimum Sol balance:', this.minimumSolBalance * 1_000_000_000);
-  
+
       if (solBalance < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
-  
+
         let message = '';
         if (solBalance < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
@@ -212,13 +212,13 @@ class BalanceChecker {
           `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
         );
         const chatId = this.chatId;
-        await this.walletProcessor.addJob(chatId);
+        await this.walletProcessor.addJob({ chatId });
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
     }
   }
-  
+
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
@@ -257,12 +257,12 @@ class BalanceChecker {
     try {
       const estimatedFee = await this.getEstimatedFee();
       const amountToReturn = amountReceived - estimatedFee; // Double the estimated fee
-  
+
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
         return;
       }
-  
+
       let transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
@@ -270,14 +270,14 @@ class BalanceChecker {
           lamports: amountToReturn
         })
       );
-  
+
       const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
       transaction.sign(this.receiverKeypair);
-  
+
       let currentBlockHeight = await this.connection.getBlockHeight();
-  
+
       while (currentBlockHeight < lastValidBlockHeight) {
         try {
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
@@ -293,13 +293,13 @@ class BalanceChecker {
         await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
         currentBlockHeight = await this.connection.getBlockHeight();
       }
-  
+
       console.error('Failed to return SOL: transaction expired');
     } catch (error) {
       console.error('Error returning SOL to sender:', error);
     }
   }
-  
+
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
