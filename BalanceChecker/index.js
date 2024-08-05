@@ -4,7 +4,7 @@ const bs58 = require('bs58');
 const WebSocket = require('ws');
 const TelegramNotifier = require('../Telegram');
 
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
+const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
@@ -24,17 +24,12 @@ class BalanceChecker {
     this.listenForTransactions(chatId);
   }
 
-  switchRpcEndpoint() {
-    this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
-    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
-  }
-
   listenForTransactions(chatId) {
     if (this.ws) {
       this.ws.close();
     }
 
-    this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
+    this.ws = new WebSocket(SOLANA_WEBSOCKET);
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
