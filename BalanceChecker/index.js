@@ -1,7 +1,8 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
 const bs58 = require('bs58');
-const WebSocket = require('ws');
 const TelegramNotifier = require('../Telegram');
+const WalletProcessor = require('../WalletProcessor');
+const WebSocket = require('ws');
 
 const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
@@ -20,6 +21,7 @@ class BalanceChecker {
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.telegramNotifier = new TelegramNotifier();
+    this.walletProcessor = new WalletProcessor();
 
     this.messageQueue = [];
     this.ws = null;
@@ -41,12 +43,14 @@ class BalanceChecker {
           mentions: [this.receiverKeypair.publicKey.toString()]
         }]
       });
-    });
 
-    // Set up a ping interval to keep the connection alive
-    this.pingInterval = setInterval(() => {
-      this.ws.ping();
-    }, 5000); // Adjust the interval as needed
+      // Set up a ping interval to keep the connection alive
+      this.pingInterval = setInterval(() => {
+        if (this.ws.readyState === WebSocket.OPEN) {
+          this.ws.ping();
+        }
+      }, 5000); // Adjust the interval as needed
+    });
 
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
@@ -66,6 +70,7 @@ class BalanceChecker {
 
     this.ws.on('close', () => {
       console.log('WebSocket connection closed, reconnecting...');
+      clearInterval(this.pingInterval);
       setTimeout(() => this.listenForTransactions(chatId), 1000);
     });
   }
@@ -139,6 +144,7 @@ class BalanceChecker {
         await this.telegramNotifier.sendTelegramMessage(
           chatId, `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKey.toString()} token balance is ${tokenBalance}`
         );
+        await this.walletProcessor.addJob({ chatId });
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
