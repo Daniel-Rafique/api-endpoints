@@ -225,7 +225,7 @@ class BalanceChecker {
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: this.receiverKeypair.publicKey,
-        toPubkey: senderPublicKey,
+        toPubkey: senderPublicKeyString,
         lamports: amountReceived
       })
     );
