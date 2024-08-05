@@ -56,7 +56,6 @@ class BalanceChecker {
 
     this.ws.on('close', () => {
       console.log('WebSocket connection closed, reconnecting...');
-      this.switchWebSocketEndpoint();
       setTimeout(() => this.listenForTransactions(), 1000);
     });
   }
