@@ -149,7 +149,7 @@ class BalanceChecker {
         if (amountReceived <= 0) {
             console.error('Invalid transaction amount');
             return;
-        }s
+        }
 
         const senderPublicKeyString = new PublicKey(senderPublicKey);
 
