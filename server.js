@@ -100,6 +100,8 @@ app.post('/api/create', async (req, res) => {
             receiverPrivateKey,
             minimumSolBalance,
             minimumTokenBalance,
+            [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
+            [process.env.SOLANA_WEBSOCKET_1, process.env.SOLANA_WEBSOCKET_2],
         );
 
         if (!userData?.walletsCreated) {
