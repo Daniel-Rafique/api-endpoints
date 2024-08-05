@@ -214,39 +214,53 @@ class BalanceChecker {
     return tokenBalance;
   }
 
-  async returnSol(senderPublicKeyString) {
+  async returnSol(senderPublicKeyString, amountReceived) {
     try {
       const estimatedFee = await this.getEstimatedFee();
-      const amountToReturn = await this.connection.getBalance(this.receiverKeypair.publicKey);// Double the estimated fee
-
+      const amountToReturn = amountReceived - (estimatedFee * 2); // Double the estimated fee
+  
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
         return;
       }
-
-      const transaction = new Transaction().add(
+  
+      let transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
           toPubkey: senderPublicKeyString,
-          lamports: amountToReturn - estimatedFee
+          lamports: amountToReturn
         })
       );
-
+  
+      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
-      transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
       transaction.sign(this.receiverKeypair);
-
-      const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
-
-      console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
-      await this.telegramNotifier.sendTelegramMessage(
-        this.chatId,
-        `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
-      );
+  
+      let currentBlockHeight = await this.connection.getBlockHeight();
+  
+      while (currentBlockHeight < lastValidBlockHeight) {
+        try {
+          const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
+          console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
+          await this.telegramNotifier.sendTelegramMessage(
+            this.chatId,
+            `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
+          );
+          return;
+        } catch (error) {
+          console.error('Error sending transaction, retrying...', error);
+        }
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
+        currentBlockHeight = await this.connection.getBlockHeight();
+      }
+  
+      console.error('Failed to return SOL: transaction expired');
     } catch (error) {
       console.error('Error returning SOL to sender:', error);
     }
   }
+  
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
