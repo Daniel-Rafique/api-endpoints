@@ -12,7 +12,7 @@ const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
-    console.log(receiverPrivateKey);
+    console.log('Receiver Private Key:', receiverPrivateKey);
     this.receiverKeypairString = receiverPrivateKey.toString();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
@@ -43,6 +43,7 @@ class BalanceChecker {
 
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
+      console.log('Received WebSocket message:', response);
       if (response.method === 'logsNotification') {
         const transactionSignature = response.params.result.signature;
         console.log(`New transaction: ${transactionSignature}`);
@@ -64,8 +65,10 @@ class BalanceChecker {
 
   sendMessage(message) {
     if (this.ws.readyState === WebSocket.OPEN) {
+      console.log('Sending message:', message);
       this.ws.send(JSON.stringify(message));
     } else {
+      console.log('WebSocket not open, queueing message:', message);
       this.messageQueue.push(message);
     }
   }
@@ -79,6 +82,7 @@ class BalanceChecker {
 
   async handleTransaction(chatId, signature) {
     try {
+      console.log('Handling transaction:', signature);
       const transaction = await this.connection.getTransaction(signature);
       if (!transaction) {
         console.error('Failed to retrieve transaction');
