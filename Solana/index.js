@@ -18,7 +18,6 @@ const ENV_PATH = process.env.ENV;
 const TX_INTERVAL = 1000;
 
 const SOLANA_CONNECTION = new Connection(SOLANA_RPC_ENDPOINT_2);
-const senderSecret = require('./guideSecret.json'); // Replace this with the path to your sender wallet private key JSON
 
 class Solana {
   constructor() {
