@@ -53,10 +53,10 @@ class BalanceChecker {
       console.error('WebSocket error:', error);
     });
 
-    this.ws.on('close', () => {
-      console.log('WebSocket connection closed, reconnecting...');
-      setTimeout(() => this.listenForTransactions(chatId), 1000);
-    });
+    // this.ws.on('close', () => {
+    //   console.log('WebSocket connection closed, reconnecting...');
+    //   setTimeout(() => this.listenForTransactions(chatId), 1000);
+    // });
   }
 
   async handleTransaction(chatId, signature) {
