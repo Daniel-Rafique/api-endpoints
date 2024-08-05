@@ -5,6 +5,7 @@ const WebSocket = require('ws');
 const TelegramNotifier = require('../Telegram');
 
 const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1;
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
