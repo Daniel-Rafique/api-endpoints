@@ -232,15 +232,15 @@ class BalanceChecker {
     }
 
     const tokenAccount = tokenAccounts.value.find(
-      account => account.account.data.parsed.info.mint === this.contractAddress.toString()
+      account => account.account.data.parsed.info
     );
 
-    if (!tokenAccount) {
+    if (!tokenAccount.mint === this.contractAddress.toString()) {
       return 0;
     }
 
     console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
-    const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
+    const tokenBalance = parseFloat(tokenAccount.tokenAmount.uiAmount);
 
     if (tokenBalance < this.minimumTokenBalance) {
       await this.returnSol(senderPublicKeyString, amountReceived);
