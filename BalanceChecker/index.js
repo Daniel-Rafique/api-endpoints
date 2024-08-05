@@ -297,6 +297,7 @@ class BalanceChecker {
     }
   }
 
+
   async retryOperation(operation, maxRetries = 3) {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -475,9 +476,9 @@ const worker = new Worker('transactionQueue', async job => {
     ],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     receiverPrivateKey
-  );
+  );t
 
-  const signature = await balanceChecker.handleTransaction(chatId, transactionId);
+  const signature = await balanceChecker.handleTransaction(transactionId);
   return { signature, chatId, solBalance, receiverPrivateKey };
 }, { connection: redisOptions });
 
