@@ -23,6 +23,7 @@ class BalanceChecker {
 
     this.messageQueue = [];
     this.ws = null;
+    this.pingInterval = null;
     this.listenForTransactions(chatId);
   }
 
@@ -41,6 +42,11 @@ class BalanceChecker {
         }]
       });
     });
+
+    // Set up a ping interval to keep the connection alive
+    this.pingInterval = setInterval(() => {
+      this.ws.ping();
+    }, 5000); // Adjust the interval as needed
 
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
@@ -123,7 +129,7 @@ class BalanceChecker {
       if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
 
         const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
-        if(amountReceived < this.minimumSolBalance * 1e9) {
+        if (amountReceived < this.minimumSolBalance * 1e9) {
           await this.telegramNotifier.sendTelegramMessage(chatId, message);
         }
 
@@ -131,7 +137,7 @@ class BalanceChecker {
       } else {
         console.log(`Transaction is valid Amount received: ${amountReceived / 1e9} SOL`);
         await this.telegramNotifier.sendTelegramMessage(
-          chatId,`✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKey.toString()} token balance is ${tokenBalance}`
+          chatId, `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKey.toString()} token balance is ${tokenBalance}`
         );
       }
     } catch (error) {
@@ -163,7 +169,7 @@ class BalanceChecker {
     const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
     console.log('Token Balance:', tokenBalance);
 
-    if(tokenBalance < this.minimumTokenBalance) {
+    if (tokenBalance < this.minimumTokenBalance) {
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
       await this.telegramNotifier.sendTelegramMessage(chatId, message);
     }
@@ -174,14 +180,14 @@ class BalanceChecker {
   async getEstimatedFee(transaction) {
     const versionedMessage = transaction.compileMessage();
     const { value: fee } = await this.connection.getFeeForMessage(versionedMessage);
-    
+
     if (fee === null) {
       throw new Error('Failed to retrieve fee');
     }
-  
+
     return fee;
   }
-  
+
   async returnSol(senderPublicKey, amountReceived) {
     const transaction = new Transaction().add(
       SystemProgram.transfer({
@@ -190,39 +196,39 @@ class BalanceChecker {
         lamports: amountReceived
       })
     );
-  
+
     const { blockhash } = await this.connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = this.receiverKeypair.publicKey;
-  
+
     const estimatedFee = await this.getEstimatedFee(transaction);
     const amountToReturn = amountReceived - estimatedFee;
-  
+
     if (amountToReturn <= 0) {
       console.error('Amount to return is less than or equal to the transaction fee');
       return;
     }
-  
+
     // Adjust the transaction for the actual return amount
     transaction.instructions[0] = SystemProgram.transfer({
       fromPubkey: this.receiverKeypair.publicKey,
       toPubkey: senderPublicKey,
       lamports: amountToReturn
     });
-  
+
     const signature = await sendAndConfirmTransaction(
       this.connection,
       transaction,
       [this.receiverKeypair]
     );
-  
+
     console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}`);
     await this.telegramNotifier.sendTelegramMessage(
       chatId,
       `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}. TX signature: ${signature}`
     );
   }
-  
+
 }
 
 module.exports = BalanceChecker;
