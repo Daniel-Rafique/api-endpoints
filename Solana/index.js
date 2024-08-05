@@ -94,7 +94,7 @@ class Solana {
         });
 
         // Initialize instances.
-        this.instanceInitializer(chatId);
+        this.instanceInitializer.initializeMarketMakerInstance(chatId);
       } else {
         console.error('Some transactions failed:', txResults);
         throw new Error('Bulk transactions failed');

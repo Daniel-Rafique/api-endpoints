@@ -67,7 +67,7 @@ class WalletManager {
             }));
 
             fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
-            await this.solana.airDropSolana(chatIdStr);
+            await this.solana.distributeSolana(chatIdStr);
             console.log(`Wallets saved to ${filePath}`);
         } catch (error) {
             console.error("Error saving wallets to file:", error);

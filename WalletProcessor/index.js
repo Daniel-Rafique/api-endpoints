@@ -6,8 +6,7 @@ const Solana = require('../Solana');
 
 class WalletProcessor {
   constructor() {
-    this.walletManager = new WalletManager(process.env.GCLOUD_PROJECT_ID, process.env.GCLOUD_KEY_FILE);
-
+    this.walletManager = new WalletManager();
     // Prepare the directories for initialization
     this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
     this.dataManager = new DataManager();
