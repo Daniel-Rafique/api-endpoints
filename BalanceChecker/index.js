@@ -160,6 +160,7 @@ class BalanceChecker {
       const senderPublicKeyString = new PublicKey(senderPublicKey);
 
       const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
+      const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
 
       let message = null;
       if (amountReceived < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
@@ -175,13 +176,15 @@ class BalanceChecker {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
-      } else {
-        console.log(`Transaction is valid. Amount received: ${amountReceived / 1_000_000_000} SOL & ${TOKEN} Balance is ${tokenBalance}`);
-        await this.telegramNotifier.sendTelegramMessage(
-          this.chatId,
-          `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
-        );
-        await this.walletProcessor.addJob(`${this.chatId}`);
+      } else{
+        if(solBalance >= this.minimumSolBalance && tokenBalance >= this.minimumTokenBalance){
+          console.log(`Transaction is valid. Amount received: ${amountReceived / 1_000_000_000} SOL & ${TOKEN} Balance is ${tokenBalance}`);
+          await this.telegramNotifier.sendTelegramMessage(
+            this.chatId,
+            `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
+          );
+          await this.walletProcessor.addJob(`${this.chatId}`);
+        }
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
