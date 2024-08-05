@@ -19,7 +19,6 @@ class BalanceChecker {
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
-    this.tokenMintAddress = new PublicKey(tokenMintAddress);
     this.telegramNotifier = new TelegramNotifier();
 
     this.ws = null;
