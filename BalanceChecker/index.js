@@ -163,16 +163,16 @@ class BalanceChecker {
       const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
 
       let message = null;
-      if (amountReceived < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
+      if (amountReceived < this.minimumSolBalance || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
          message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
-        if (amountReceived < this.minimumSolBalance * 1_000_000_000) {
+        if (amountReceived < this.minimumSolBalance ) {
           console.log('Sending insufficient SOL balance message.');
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
          message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-        if (tokenBalance < this.minimumTokenBalance * 1_000_000_000) {
+        if (tokenBalance < this.minimumTokenBalance ) {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
