@@ -13,6 +13,7 @@ const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 const { MESSAGES } = require('../constants');
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
+const TOKEN = process.env.TOKEN;
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
@@ -160,16 +161,22 @@ class BalanceChecker {
 
       const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
 
+      let message = null;
       if (amountReceived < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
-        const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
+         message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         if (amountReceived < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
+         message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
+        if (tokenBalance < this.minimumTokenBalance * 1_000_000_000) {
+          console.log(`Sending insufficient ${TOKEN} balance message.`);
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        }
       } else {
-        console.log(`Transaction is valid. Amount received: ${amountReceived / 1_000_000_000} SOL`);
+        console.log(`Transaction is valid. Amount received: ${amountReceived / 1_000_000_000} SOL & ${TOKEN} Balance is ${tokenBalance}`);
         await this.telegramNotifier.sendTelegramMessage(
           this.chatId,
           `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
