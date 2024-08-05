@@ -7,6 +7,7 @@ const {
   Transaction,
 } = require('@solana/web3.js');
 const fs = require('fs').promises;
+const path = require('path');
 const bs58 = require('bs58');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
