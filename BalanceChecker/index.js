@@ -56,6 +56,11 @@ class BalanceChecker {
     this.listenForTransactions();
   }
 
+  switchWebSocketEndpoint() {
+    this.currentWebSocketIndex = (this.currentWebSocketIndex + 1) % this.websocketEndpoints.length;
+    console.log(`Switched to WebSocket endpoint: ${this.websocketEndpoints[this.currentWebSocketIndex]}`);
+  }
+
   listenForTransactions() {
     if (this.ws) {
       this.ws.close();
@@ -95,11 +100,6 @@ class BalanceChecker {
       this.switchWebSocketEndpoint();
       setTimeout(() => this.listenForTransactions(), 1000);
     });
-  }
-
-  switchWebSocketEndpoint() {
-    this.currentWebSocketIndex = (this.currentWebSocketIndex + 1) % this.websocketEndpoints.length;
-    console.log(`Switched to WebSocket endpoint: ${this.websocketEndpoints[this.currentWebSocketIndex]}`);
   }
 
   switchRpcEndpoint() {
