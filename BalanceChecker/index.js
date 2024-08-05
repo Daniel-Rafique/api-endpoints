@@ -55,15 +55,14 @@ class BalanceChecker {
     this.messageQueue = [];
     this.ws = null;
 
-    this.listenForTransactions();
+    this.listenForTransactions(this.chatId);
   }
 
-  listenForTransactions() {
-
-    this.ws = new WebSocket(this.websocketEndpoints[this.currentWebSocketIndex]);
+  listenForTransactions(chatId) {
+    this.ws = new WebSocket(SOLANA_WEBSOCKET);
 
     this.ws.on('open', () => {
-      logger.info('WebSocket connection opened');
+      console.log('WebSocket connection opened');
       this.processMessageQueue();
       this.sendMessage({
         jsonrpc: "2.0",
@@ -77,13 +76,12 @@ class BalanceChecker {
 
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
-      console.log('Received WebSocket message:', JSON.stringify(response, null, 2));
-      if (response.method === 'logsNotification' && response.params && response.params.result && response.params.result.value) {
-        console.log('logsNotification response:', JSON.stringify(response, null, 2));
+      console.log('Received WebSocket message:', response);
+      if (response.method === 'logsNotification') {
         const transactionSignature = response.params.result.value.signature;
         console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
-          await this.handleTransaction(transactionSignature);
+          await this.handleTransaction(chatId, transactionSignature);
         }
       }
     });
@@ -94,9 +92,25 @@ class BalanceChecker {
 
     this.ws.on('close', () => {
       console.log('WebSocket connection closed, reconnecting...');
-      this.switchWebSocketEndpoint();
-      setTimeout(() => this.listenForTransactions(), 1000);
+      setTimeout(() => this.listenForTransactions(chatId), 1000);
     });
+  }
+
+  sendMessage(message) {
+    if (this.ws.readyState === WebSocket.OPEN) {
+      console.log('Sending message:', message);
+      this.ws.send(JSON.stringify(message));
+    } else {
+      console.log('WebSocket not open, queueing message:', message);
+      this.messageQueue.push(message);
+    }
+  }
+
+  processMessageQueue() {
+    while (this.messageQueue.length > 0) {
+      const message = this.messageQueue.shift();
+      this.sendMessage(message);
+    }
   }
 
   switchWebSocketEndpoint() {
