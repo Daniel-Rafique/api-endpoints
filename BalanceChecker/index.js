@@ -4,7 +4,7 @@ const TelegramNotifier = require('../Telegram');
 const WalletProcessor = require('../WalletProcessor');
 const WebSocket = require('ws');
 
-const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_1;
+const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_2;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
@@ -29,6 +29,7 @@ class BalanceChecker {
     this.messageQueue = [];
     this.ws = null;
     this.pingInterval = null;
+    this.reconnectInterval = null;
     this.listenForTransactions();
   }
 
@@ -37,7 +38,6 @@ class BalanceChecker {
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
-      this.processMessageQueue();
       this.sendMessage({
         jsonrpc: "2.0",
         id: 1,
@@ -74,7 +74,12 @@ class BalanceChecker {
     this.ws.on('close', () => {
       console.log('WebSocket connection closed, reconnecting...');
       clearInterval(this.pingInterval);
-      setTimeout(() => this.listenForTransactions(), 1000);
+      if (!this.reconnectInterval) {
+        this.reconnectInterval = setInterval(() => {
+          console.log('Attempting to reconnect WebSocket...');
+          this.listenForTransactions();
+        }, 1000); // Adjust the interval as needed
+      }
     });
   }
 
@@ -155,19 +160,19 @@ class BalanceChecker {
 
       const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
 
-      if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
+      if (amountReceived < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
         const message = MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
-        if (amountReceived < this.minimumSolBalance * 1e9) {
+        if (amountReceived < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
       } else {
-        console.log(`Transaction is valid. Amount received: ${amountReceived / 1e9} SOL`);
+        console.log(`Transaction is valid. Amount received: ${amountReceived / 1_000_000_000} SOL`);
         await this.telegramNotifier.sendTelegramMessage(
           this.chatId,
-          `✅ Received ${amountReceived / 1e9} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
+          `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
         );
         await this.walletProcessor.addJob(`${this.chatId}`);
       }
@@ -175,7 +180,6 @@ class BalanceChecker {
       console.error('Error handling transaction:', error);
     }
   }
-
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
@@ -210,10 +214,10 @@ class BalanceChecker {
     return tokenBalance;
   }
 
-  async returnSol(senderPublicKeyString) {
+  async returnSol(senderPublicKeyString, amountReceived) {
     try {
-      const estimatedFee = await this.getEstimatedFee() * 2;
-      const amountToReturn = await this.connection.getBalance(senderKeypair.publicKey);// Double the estimated fee
+      const estimatedFee = await this.getEstimatedFee();
+      const amountToReturn = amountReceived - (estimatedFee * 2); // Double the estimated fee
 
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
@@ -224,7 +228,7 @@ class BalanceChecker {
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
           toPubkey: senderPublicKeyString,
-          lamports: amountToReturn - estimatedFee
+          lamports: amountToReturn
         })
       );
 
