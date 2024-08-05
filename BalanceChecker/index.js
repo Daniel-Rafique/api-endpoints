@@ -12,7 +12,7 @@ const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 
 class BalanceChecker {
-  constructor(receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
+  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(receiverPrivateKey.toString()));
     this.minimumSolBalance = minimumSolBalance;
@@ -21,10 +21,10 @@ class BalanceChecker {
     this.telegramNotifier = new TelegramNotifier();
 
     this.ws = null;
-    this.listenForTransactions();
+    this.listenForTransactions(chatId);
   }
 
-  listenForTransactions() {
+  listenForTransactions(chatId) {
     this.ws = new WebSocket(SOLANA_WEBSOCKET);
 
     this.ws.on('open', () => {
@@ -44,7 +44,7 @@ class BalanceChecker {
       if (response.method === 'logsNotification') {
         const transactionSignature = response.params.result.signature;
         if (transactionSignature) {
-          await this.handleTransaction(transactionSignature);
+          await this.handleTransaction(chatId, transactionSignature);
         }
       }
     });
@@ -59,7 +59,7 @@ class BalanceChecker {
     });
   }
 
-  async handleTransaction(signature) {
+  async handleTransaction(chatId, signature) {
     try {
       const transaction = await this.connection.getTransaction(signature);
       if (!transaction) {
@@ -87,7 +87,7 @@ class BalanceChecker {
         return;
       }
 
-      const tokenBalance = await this.checkTokenBalance(senderPublicKey);
+      const tokenBalance = await this.checkTokenBalance(chatId, senderPublicKey);
 
       if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
         await this.returnSol(senderPublicKey, amountReceived);
@@ -97,7 +97,7 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance(senderPublicKey) {
+  async checkTokenBalance(chatId, senderPublicKey) {
     const ownerPublicKey = new PublicKey(senderPublicKey);
     const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(MINT_ADDRESS, {
       mint: this.tokenMintAddress,
@@ -126,7 +126,7 @@ class BalanceChecker {
       SystemProgram.transfer({
         fromPubkey: this.receiverKeypair.publicKey,
         toPubkey: senderPublicKey,
-        lamports: amountToReturn
+        lamports: amountToReturn - estimatedFee
       })
     );
 
@@ -142,7 +142,7 @@ class BalanceChecker {
 
     console.log(`Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}`);
     await this.telegramNotifier.sendTelegramMessage(
-      process.env.TELEGRAM_CHAT_ID,
+      chatId,
       `✅ Returned ${amountToReturn / 1e9} SOL to sender: ${senderPublicKey.toString()}. TX signature: ${signature}`
     );
   }

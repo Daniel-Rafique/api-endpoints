@@ -103,7 +103,7 @@ app.post('/api/create', async (req, res) => {
         );
 
         if (!userData?.walletsCreated) {
-            websocket.listenForTransactions(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance);
+            websocket.listenForTransactions(chatId, receiverPrivateKey.toString(), minimumSolBalance, minimumTokenBalance);
             telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
             res.status(200).send('Checking balance...');
         } else if (userData?.walletsCreated && !userData.distributeSolana) {
