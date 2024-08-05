@@ -87,6 +87,7 @@ class BalanceChecker {
       const transaction = await this.connection.getTransaction(signature, {
         maxSupportedTransactionVersion: 0,
       });
+
       if (!transaction) {
         console.error('Failed to retrieve transaction');
         return;
@@ -114,10 +115,10 @@ class BalanceChecker {
         return;
       }
 
-      const tokenBalance = await this.checkTokenBalance();
+      const tokenBalance = await this.checkTokenBalance(chatId, senderPublicKey);
 
       if (amountReceived < this.minimumSolBalance * 1e9 || tokenBalance < this.minimumTokenBalance) {
-        await this.returnSol(senderPublicKey, amountReceived);
+        await this.returnSol(chatId, senderPublicKey, amountReceived);
       } else {
         console.log(`Transaction is valid. Amount received: ${amountReceived / 1e9} SOL`);
         await this.telegramNotifier.sendTelegramMessage(
@@ -130,10 +131,10 @@ class BalanceChecker {
     }
   }
 
-  async checkTokenBalance() {
-    console.log('Checking token balance for wallet:', this.receiverKeypair.publicKey.toString(), 'with mint:', MINT_ADDRESS);
+  async checkTokenBalance(senderPublicKey) {
+    console.log('Checking token balance for wallet:', senderPublicKey, 'with mint:', MINT_ADDRESS);
 
-    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(this.receiverKeypair.publicKey, {
+    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKey, {
       programId: TOKEN_PROGRAM_ID,
     });
 
@@ -147,6 +148,8 @@ class BalanceChecker {
       account => account.account.data.parsed.info.mint === MINT_ADDRESS.toString()
     );
 
+    console.log(tokenAccount)
+
     if (!tokenAccount) {
       return 0;
     }
@@ -157,7 +160,7 @@ class BalanceChecker {
     return tokenBalance;
   }
 
-  async returnSol(senderPublicKey, amountReceived) {
+  async returnSol(chatId, senderPublicKey, amountReceived) {
     const estimatedFee = await this.getEstimatedFee();
     const amountToReturn = amountReceived - estimatedFee;
 
