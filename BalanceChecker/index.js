@@ -83,7 +83,7 @@ class BalanceChecker {
         const transactionSignature = response.params.result.value.signature;
         console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
-          await this.handleTransaction(chatId, transactionSignature);
+          await this.handleTransaction(transactionSignature);
         }
       }
     });
@@ -111,7 +111,9 @@ class BalanceChecker {
   
   async handleTransaction(signature) {
     try {
-      const confirmedTransaction = await this.connection.getTransaction(signature);
+      const confirmedTransaction = await this.connection.getTransaction(signature, {
+        maxSupportedTransactionVersion: 0,
+      });
       if (!confirmedTransaction) {
         console.error('Failed to retrieve confirmed transaction');
         return;
@@ -170,7 +172,9 @@ class BalanceChecker {
 
   async returnSolToSender(chatId, transactionId) {
     try {
-      const transaction = await this.connection.getTransaction(transactionId);
+      const transaction = await this.connection.getTransaction(transactionId, {
+        maxSupportedTransactionVersion: 0,
+      });
       if (!transaction) {
         throw new Error('Transaction not found');
       }
@@ -330,7 +334,9 @@ class BalanceChecker {
       throw new Error('No transaction signatures found for the given public key.');
     }
 
-    const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature);
+    const confirmedTransaction = await this.connection.getTransaction(signatures[0].signature, {
+      maxSupportedTransactionVersion: 0,
+    });
     return confirmedTransaction;
   }
 
@@ -414,9 +420,7 @@ const worker = new Worker('transactionQueue', async job => {
 
   const balanceChecker = new BalanceChecker(
     [SOLANA_RPC_ENDPOINT_1, SOLANA_RPC_ENDPOINT_2],
-    [ // Add your WebSocket endpoints here
-      SOLANA_WEBSOCKET_1, SOLANA_WEBSOCKET_2
-    ],
+    [SOLANA_WEBSOCKET_1, SOLANA_WEBSOCKET_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     receiverPrivateKey
   );
@@ -430,9 +434,7 @@ worker.on('completed', async (job, result) => {
   const message = MESSAGES.RETURNED_SOL_SUCCESS(result.solBalanceA, result.signature, { package: 'Markdown' });
   const balanceChecker = new BalanceChecker(
     [SOLANA_RPC_ENDPOINT_1, SOLANA_RPC_ENDPOINT_2],
-    [ // Add your WebSocket endpoints here
-      SOLANA_WEBSOCKET_1, SOLANA_WEBSOCKET_2
-    ],
+    [SOLANA_WEBSOCKET_1, SOLANA_WEBSOCKET_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     result.receiverPrivateKey
   );
@@ -445,10 +447,7 @@ worker.on('failed', async (job, err) => {
   console.error(`Transaction job failed: ${job.id}`, err);
   const balanceChecker = new BalanceChecker(
     [SOLANA_RPC_ENDPOINT_1, SOLANA_RPC_ENDPOINT_2],
-    [ // Add your WebSocket endpoints here
-      SOLANA_WEBSOCKET_1,
-      SOLANA_WEBSOCKET_2
-    ],
+    [SOLANA_WEBSOCKET_1, SOLANA_WEBSOCKET_2],
     new TelegramNotifier(process.env.TELEGRAM_TOKEN),
     job.data.receiverPrivateKey
   );
