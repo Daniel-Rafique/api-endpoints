@@ -12,15 +12,12 @@ const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance) {
-    console.log(receiverPrivateKey);
     this.receiverKeypairString = receiverPrivateKey.toString();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.telegramNotifier = new TelegramNotifier();
-
-    this.ws = null;
     this.listenForTransactions(chatId);
   }
 
@@ -41,6 +38,7 @@ class BalanceChecker {
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
       if (response.method === 'logsNotification') {
+        console.log('Received logsNotification:', JSON.stringify(response.params.result, null, 2));
         const transactionSignature = response.params.result.signature;
         console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
@@ -53,10 +51,10 @@ class BalanceChecker {
       console.error('WebSocket error:', error);
     });
 
-    // this.ws.on('close', () => {
-    //   console.log('WebSocket connection closed, reconnecting...');
-    //   setTimeout(() => this.listenForTransactions(chatId), 1000);
-    // });
+    this.ws.on('close', () => {
+      console.log('WebSocket connection closed, reconnecting...');
+      setTimeout(() => this.listenForTransactions(chatId), 1000);
+    });
   }
 
   async handleTransaction(chatId, signature) {

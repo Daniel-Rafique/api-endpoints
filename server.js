@@ -52,9 +52,6 @@ function generateHash(chatId, timestamp) {
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramNotifier = new TelegramNotifier(telegramToken);
 
-// Initialize BalanceChecker once and reuse it
-let balanceChecker = null;
-
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
     const { chatId, timestamp, hash } = req.body;
@@ -90,23 +87,23 @@ app.post('/api/create', async (req, res) => {
 
         // Start the periodic check
         let receiverPrivateKey = userData.walletPk;
+        console.log('Type of receiverPrivateKey before conversion:', typeof receiverPrivateKey);
         receiverPrivateKey = receiverPrivateKey.toString();
+        console.log('Type of receiverPrivateKey after conversion:', typeof receiverPrivateKey);
+        console.log('Value of receiverPrivateKey:', receiverPrivateKey);
 
         if (typeof receiverPrivateKey !== 'string') {
             throw new TypeError('Receiver private key must be a string');
         }
-
-        if (!balanceChecker) {
-            balanceChecker = new BalanceChecker(
-                chatId,
-                receiverPrivateKey,
-                minimumSolBalance,
-                minimumTokenBalance,
-            );
-            balanceChecker.listenForTransactions(chatId, receiverPublicKey);
-        }
+        const websocket = new BalanceChecker(
+            chatId,
+            receiverPrivateKey,
+            minimumSolBalance,
+            minimumTokenBalance,
+        );
 
         if (!userData?.walletsCreated) {
+            websocket.listenForTransactions(chatId, receiverPublicKey);
             telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
             res.status(200).send('Checking balance...');
         } else if (userData?.walletsCreated && !userData.distributeSolana) {
