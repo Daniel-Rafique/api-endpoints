@@ -1,25 +1,28 @@
 const {
   Connection,
-  PublicKey,
   Keypair,
-  Transaction,
-  SystemProgram,
+  PublicKey,
   sendAndConfirmTransaction,
+  SystemProgram,
+  Transaction,
 } = require('@solana/web3.js');
-const bs58 = require('bs58');
 const fs = require('fs').promises;
-const path = require('path');
+const bs58 = require('bs58');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
+require('dotenv').config();
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
-const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
+const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
 const ENV_PATH = process.env.ENV;
-const BATCH_SIZE = parseInt(process.env.BATCH_SIZE, 10) || 10; // Number of transactions per batch
+const TX_INTERVAL = 1000;
+
+const SOLANA_CONNECTION = new Connection(SOLANA_RPC_ENDPOINT_2);
+const senderSecret = require('./guideSecret.json'); // Replace this with the path to your sender wallet private key JSON
 
 class Solana {
   constructor() {
-    this.connection = new Connection(process.env.SOLANA_RPC_ENDPOINT_1, 'confirmed');
+    this.connection = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -27,7 +30,7 @@ class Solana {
     });
   }
 
-  async distributeSolana(chatId) {
+  async airDropSolana(chatId) {
     const chatIdStr = chatId.toString();
 
     if (!chatIdStr || typeof chatIdStr !== 'string') {
@@ -36,6 +39,7 @@ class Solana {
 
     const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
     const userDoc = await userDocRef.get();
+    const NUM_DROPS_PER_TX = userDocRef.batchSize || 10;
 
     if (!userDoc.exists) {
       throw new Error('User document does not exist');
@@ -59,57 +63,19 @@ class Solana {
       const newWallets = JSON.parse(fileContent);
       console.log(newWallets);
 
-      // Calculate 75% of Wallet A's balance
+      // Calculate the amount to distribute per wallet
       const amountToDistribute = Math.floor(senderBalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
 
-      // Calculate 25% for KOYNLABS_WALLET
-      const amountForKoynlabs = Math.floor(senderBalance * 0.25);
+      const dropList = newWallets.map(wallet => ({
+        walletAddress: wallet.publicKey,
+        numLamports: amountPerWallet,
+      }));
 
-      console.log(`Amount to distribute: ${amountToDistribute}`);
-      console.log(`Amount per wallet: ${amountPerWallet}`);
-      console.log(`Amount for KOYNLABS_WALLET: ${amountForKoynlabs}`);
+      const transactionList = this.generateTransactions(NUM_DROPS_PER_TX, dropList, senderKeypair.publicKey);
+      const txResults = await this.executeTransactions(SOLANA_CONNECTION, transactionList, senderKeypair);
 
-      // Create and send transactions in batches
-      for (let i = 0; i < newWallets.length; i += BATCH_SIZE) {
-        const batch = newWallets.slice(i, i + BATCH_SIZE);
-        const transactions = [];
-
-        for (const wallet of batch) {
-          const transaction = new Transaction().add(
-            SystemProgram.transfer({
-              fromPubkey: senderKeypair.publicKey,
-              toPubkey: new PublicKey(wallet.publicKey),
-              lamports: amountPerWallet,
-            })
-          );
-          transaction.feePayer = senderKeypair.publicKey;
-          transactions.push(transaction);
-        }
-
-        // Sign and send the transactions
-        const { blockhash } = await this.connection.getRecentBlockhash();
-        const signedTransactions = transactions.map(transaction => {
-          transaction.recentBlockhash = blockhash;
-          transaction.sign(senderKeypair);
-          return sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
-        });
-
-        await Promise.all(signedTransactions);
-      }
-
-      // Send 25% to KOYNLABS_WALLET
-      const koynlabsTransaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: senderKeypair.publicKey,
-          toPubkey: new PublicKey(KOYNLABS_WALLET),
-          lamports: amountForKoynlabs,
-        })
-      );
-      koynlabsTransaction.feePayer = senderKeypair.publicKey;
-      koynlabsTransaction.recentBlockhash = (await this.connection.getRecentBlockhash()).blockhash;
-      koynlabsTransaction.sign(senderKeypair);
-      await sendAndConfirmTransaction(this.connection, koynlabsTransaction, [senderKeypair]);
+      console.log(txResults);
 
       // Update the database flag after successful completion
       await userDocRef.update({
@@ -121,6 +87,47 @@ class Solana {
       console.error('Error during airdrop:', error);
       throw error; // Ensure any error is propagated so it can be handled appropriately
     }
+  }
+
+  generateTransactions(batchSize, dropList, fromWallet) {
+    const transactions = [];
+    const txInstructions = dropList.map(drop => 
+      SystemProgram.transfer({
+        fromPubkey: fromWallet,
+        toPubkey: new PublicKey(drop.walletAddress),
+        lamports: drop.numLamports,
+      })
+    );
+
+    const numTransactions = Math.ceil(txInstructions.length / batchSize);
+    for (let i = 0; i < numTransactions; i++) {
+      const transaction = new Transaction();
+      const lowerIndex = i * batchSize;
+      const upperIndex = (i + 1) * batchSize;
+      for (let j = lowerIndex; j < upperIndex; j++) {
+        if (txInstructions[j]) transaction.add(txInstructions[j]);
+      }
+      transactions.push(transaction);
+    }
+    return transactions;
+  }
+
+  async executeTransactions(solanaConnection, transactionList, payer) {
+    const results = [];
+    const staggeredTransactions = transactionList.map((transaction, i, allTx) => {
+      return new Promise((resolve) => {
+        setTimeout(async () => {
+          console.log(`Requesting Transaction ${i + 1}/${allTx.length}`);
+          const { blockhash } = await solanaConnection.getLatestBlockhash();
+          transaction.recentBlockhash = blockhash;
+          const signature = await sendAndConfirmTransaction(solanaConnection, transaction, [payer]);
+          resolve(signature);
+        }, i * TX_INTERVAL);
+      });
+    });
+
+    results.push(...await Promise.allSettled(staggeredTransactions));
+    return results;
   }
 }
 
