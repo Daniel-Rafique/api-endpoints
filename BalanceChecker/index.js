@@ -19,11 +19,13 @@ const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
 let currentEndpointIndex = 0;
 
+// Load balancer
 function getNextWebSocketEndpoint() {
   currentEndpointIndex = (currentEndpointIndex + 1) % WEBSOCKET_ENDPOINTS.length;
   return WEBSOCKET_ENDPOINTS[currentEndpointIndex];
 }
 
+// Cache management
 function createCacheKey(chatId, text) {
   const hash = crypto.createHash('md5').update(text).digest('hex');
   return `${chatId}-${hash}`;
