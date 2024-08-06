@@ -8,6 +8,7 @@ const MESSAGES = {
   TOKEN_BALANCE: (balance) => `\n💸 Senders' ${escapeMarkdown(TOKEN)} balance is: ${balance.toFixed(2)}`,
   SUFFICIENT_BALANCE: '\n✅ Transfer received, starting deployment',
   INSUFFICIENT_SOL: (minBalance) => `\n❌ Insufficient SOL balance. Minimum required: ${minBalance.toFixed(2)} SOL`,
+  TOPUP_SOL: (minBalance) => `\n❌ Your SOL balance is low. Please arrange a topup: ${minBalance.toFixed(2)} SOL`,
   INSUFFICIENT_TOKEN: (minBalance) => `\n❌ Insufficient ${escapeMarkdown(TOKEN)} balance. Minimum required: ${minBalance}`,
   RETURNED_SOL_PENDING: (balance) => `\n⏳ Returning ${balance.toFixed(2)} SOL (pending...)`,
   RETURNED_SOL_SUCCESS: (balance, signature) => `\n🔄 Returned ${balance.toFixed(2)} SOL successfully here is your transaction ID: \n ${signature}`,
