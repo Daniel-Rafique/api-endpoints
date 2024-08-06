@@ -254,14 +254,18 @@ class BalanceChecker {
         if (tokenBalance < this.minimumTokenBalance) {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
+          if(this.shouldSendMessage){
+            await this.sendTelegramMessage(this.chatId, message);
+          }
         }
-        await this.sendTelegramMessage(this.chatId, message);
+
       } else {
-        console.log(`Transaction is valid. Amount received: ${amountReceived / 1_000_000_000} SOL & ${TOKEN} Balance is ${tokenBalance}`);
-        await this.sendTelegramMessage(
-          this.chatId,
-          `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
-        );
+        let message = '';
+        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
+        if(this.shouldSendMessage){
+          await this.sendTelegramMessage(this.chatId, message);
+        }
+
         const chatId = this.chatId;
         await this.walletProcessor.addJob({ chatId });
       }
@@ -270,8 +274,6 @@ class BalanceChecker {
     }
   }
   
-
-
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
 
