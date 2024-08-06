@@ -88,10 +88,7 @@ app.post('/api/create', async (req, res) => {
 
         // Start the periodic check
         let receiverPrivateKey = userData.walletPk;
-        console.log('Type of receiverPrivateKey before conversion:', typeof receiverPrivateKey);
         receiverPrivateKey = receiverPrivateKey.toString();
-        console.log('Type of receiverPrivateKey after conversion:', typeof receiverPrivateKey);
-        console.log('Value of receiverPrivateKey:', receiverPrivateKey);
 
         if (typeof receiverPrivateKey !== 'string') {
             throw new TypeError('Receiver private key must be a string');
