@@ -4,6 +4,7 @@ const path = require('path');
 const bs58 = require('bs58');
 const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
+const { fileURLToPath } = require('url');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const TX_INTERVAL = 1000;
@@ -35,6 +36,7 @@ class Distribute {
       }
 
       const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
+      console.log(filePath)
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
 
