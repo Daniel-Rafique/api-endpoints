@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Connection, Keypair } = require('@solana/web3.js');
+const { Connection } = require('@solana/web3.js');
 const Send = require('./Send');
 const Distribute = require('./Distribute');
 const { MESSAGES } = require('../constants');
@@ -11,13 +11,6 @@ const Telegram = require('../Telegram');
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-
-class InsufficientBalanceError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'InsufficientBalanceError';
-  }
-}
 
 class Solana {
   constructor() {
@@ -40,8 +33,8 @@ class Solana {
         throw new Error('User data or wallet private key not found');
       }
 
-      const sendInstance = new Send();
-      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk);
+      const sendInstance = new Send(this.telegramNotifier, chatId);
+      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
 
       if (updatedBalance > 0) {
         const distributeInstance = new Distribute();

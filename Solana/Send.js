@@ -1,22 +1,34 @@
 require('dotenv').config();
 const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const bs58 = require('bs58');
+const { MESSAGES } = require('../constants'); // Ensure the path is correct
+const Telegram = require('../Telegram');
 
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 
+class InsufficientBalanceError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'InsufficientBalanceError';
+  }
+}
+
 class Send {
-  constructor() {
+  constructor(telegramNotifier, chatId) {
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
+    this.chatId = chatId;
+    this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
+    this.messageCache = {}; // Initialize cache for messages
   }
 
-  async sendToKoynlabsWallet(senderPrivateKey) {
+  async sendToKoynlabsWallet(senderPrivateKey, userData) {
     try {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       
       if (senderBalance <= 0) {
-        throw new Error('Insufficient balance in sender wallet');
+        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
 
       const amountToSend = Math.floor(senderBalance * 0.25);
@@ -39,8 +51,16 @@ class Send {
       const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
       return updatedBalance;
     } catch (error) {
-      console.error('Error sending to KOYNLABS_WALLET:', error);
-      throw error;
+      console.error('Error during airdrop:', error);
+      if (error instanceof InsufficientBalanceError) {
+        console.log('Wallet is empty:', error.message);
+        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
+        if (this.shouldSendMessage(this.chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        }
+      } else {
+        throw error;
+      }
     }
   }
 
@@ -58,6 +78,26 @@ class Send {
     ).compileMessage();
     const { value } = await this.connection.getFeeForMessage(message);
     return value;
+  }
+
+  shouldSendMessage(chatId, message) {
+    const cacheKey = chatId;
+    const currentTime = Date.now();
+    const cacheDuration = 60 * 1000; // 1 minute
+
+    if (!this.messageCache[cacheKey]) {
+      this.messageCache[cacheKey] = { message, timestamp: currentTime };
+      return true;
+    }
+
+    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
+
+    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
+      return false;
+    }
+
+    this.messageCache[cacheKey] = { message, timestamp: currentTime };
+    return true;
   }
 }
 
