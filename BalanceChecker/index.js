@@ -2,6 +2,7 @@ const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfi
 const bs58 = require('bs58');
 const TelegramNotifier = require('../Telegram');
 const WalletProcessor = require('../WalletProcessor');
+const DataManager = require('../database')
 const WebSocket = require('ws');
 const crypto = require('crypto');
 
@@ -12,6 +13,7 @@ const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 const { MESSAGES } = require('../constants');
+const { userInfo } = require('os');
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
@@ -38,6 +40,8 @@ class BalanceChecker {
     this.walletProcessor = new WalletProcessor();
     this.chatId = chatId;
     this.contractAddress = contractAddress;
+    this.dataManager = new DataManager(chatId);
+
 
     this.messageQueue = [];
     this.messageCache = {};
@@ -153,6 +157,7 @@ class BalanceChecker {
 
   async handleTransaction(signature) {
     try {
+      const userData = this.dataManager;
       console.log('Handling transaction:', signature);
   
       const transaction = await this.connection.getTransaction(signature, {
@@ -181,7 +186,7 @@ class BalanceChecker {
   
       const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
   
-      if (amountReceived <= 0) {
+      if (amountReceived <= 0 && userData.walletsCreated === false) {
         console.error('Invalid transaction amount');
         return;
       }
