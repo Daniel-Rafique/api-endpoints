@@ -45,7 +45,7 @@ class Distribute {
         numLamports: amountPerWallet,
       }));
 
-      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
+      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
       const txResults = await this.executeTransactions(transactionList, senderKeypair);
 
       return txResults;
@@ -63,7 +63,7 @@ class Distribute {
     }
   }
 
-  generateTransactions(dropList, fromWallet) {
+  generateTransactions(dropList, fromWallet, userData) {
     const transactions = [];
     const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
