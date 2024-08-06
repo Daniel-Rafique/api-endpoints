@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const bs58 = require('bs58');
-const { MESSAGES } = require('../constants'); // Ensure the path is correct
+const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
 
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
@@ -25,7 +25,7 @@ class Send {
 
   async sendToKoynlabsWallet(senderPrivateKey, userData) {
     try {
-      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey.toString()));
+      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       
       if (senderBalance <= 0) {

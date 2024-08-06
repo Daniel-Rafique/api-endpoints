@@ -12,6 +12,13 @@ const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
+class InsufficientBalanceError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'InsufficientBalanceError';
+  }
+}
+
 class Solana {
   constructor() {
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
@@ -34,11 +41,11 @@ class Solana {
       }
 
       const sendInstance = new Send(chatId);
-      const updatedBalance = await sendInstance.sendToKoynlabsWallet(chatId, userData.walletPk, userData);
+      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
 
       if (updatedBalance > 0) {
         const distributeInstance = new Distribute(chatId);
-        const results = await distributeInstance.distributeSolana(chatId, userData.walletPk, chatId);
+        const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
         console.log('Distribution results:', results);
       } else {
         console.log('No balance left to distribute.');

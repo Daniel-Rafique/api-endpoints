@@ -2,13 +2,13 @@ const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram
 const fs = require('fs').promises;
 const path = require('path');
 const bs58 = require('bs58');
-const { MESSAGES } = require('../constants'); // Ensure the path is correct
+const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TX_INTERVAL = 1000;
 const ENV_PATH = process.env.ENV;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
 class InsufficientBalanceError extends Error {
   constructor(message) {
@@ -18,16 +18,16 @@ class InsufficientBalanceError extends Error {
 }
 
 class Distribute {
-  constructor(telegramNotifier, chatId) {
+  constructor(chatId) {
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.chatId = chatId;
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
     this.messageCache = {}; // Initialize cache for messages
   }
 
-  async distributeSolana(chatId, senderPrivateKey, userData) {
+  async distributeSolana(senderPrivateKey, chatId, userData) {
     try {
-      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey.toString()));
+      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       
       if (senderBalance <= 0) {
