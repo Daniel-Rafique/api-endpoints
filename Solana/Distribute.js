@@ -38,14 +38,17 @@ class Distribute {
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
 
-      const amountPerWallet = Math.floor(senderBalance / newWallets.length); // Distribute the entire remaining balance equally
+      const remainingBalance = senderBalance; // Use the entire balance left in the sender's wallet
+      const amountPerWallet = Math.floor(remainingBalance / newWallets.length); // Distribute the entire remaining balance equally
 
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
         numLamports: amountPerWallet,
       }));
 
-      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
+      console.log(amountPerWallet)
+
+      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
       const txResults = await this.executeTransactions(transactionList, senderKeypair);
 
       return txResults;
@@ -63,7 +66,7 @@ class Distribute {
     }
   }
 
-  generateTransactions(dropList, fromWallet, userData) {
+  generateTransactions(dropList, fromWallet) {
     const transactions = [];
     const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
