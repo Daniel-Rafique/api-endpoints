@@ -10,8 +10,8 @@ const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 
 class InstanceInitializer {
   constructor() {
-    const basePath = `./${ENV_PATH}/marketMaker`;
-    const instancePath = `./${ENV_PATH}/instances`;
+    const basePath = './marketMaker';
+    const instancePath = './instances';
     this.basePath = basePath;
     this.instancePath = instancePath;
     this.dataManager = new DataManager();
