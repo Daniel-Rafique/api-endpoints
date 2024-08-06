@@ -112,7 +112,7 @@ app.post('/api/create', async (req, res) => {
         } else if (userData?.walletsCreated && !userData.distributeSolana) {
             await solana.distributeSolana(chatId);
             res.status(200).send('Airdropping SOL...');
-        } else if (userData.distributeSolana) {
+        } else if (userData?.distributeSolana) {
             await instanceInitializer.initializeMarketMakerInstance(chatId);
             res.status(200).send('Instances created...');
         }
