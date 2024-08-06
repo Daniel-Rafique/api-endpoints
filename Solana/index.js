@@ -1,19 +1,29 @@
+require('dotenv').config();
 const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
 const bs58 = require('bs58');
+const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
 const InstanceInitializer = require('../InstanceInitializer');
-require('dotenv').config();
+const Telegram = require('../Telegram');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const ENV_PATH = process.env.ENV;
 const TX_INTERVAL = 1000;
 
 const SOLANA_CONNECTION = new Connection(SOLANA_RPC_ENDPOINT_2);
+
+class InsufficientBalanceError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'InsufficientBalanceError';
+  }
+}
 
 class Solana {
   constructor() {
@@ -24,6 +34,7 @@ class Solana {
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
     this.instanceInitializer = new InstanceInitializer();
+    this.telegramNotifier = new Telegram(TELEGRAM_TOKEN)
   }
 
   async distributeSolana(chatId) {
@@ -53,7 +64,7 @@ class Solana {
       console.log('Sender balance:', senderBalance);
 
       if (senderBalance <= 0) {
-        throw new Error('Insufficient balance in sender wallet');
+        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
 
       const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
@@ -91,7 +102,17 @@ class Solana {
       }
     } catch (error) {
       console.error('Error during airdrop:', error);
-      throw error;
+      if (error instanceof InsufficientBalanceError) {
+        // Handle insufficient balance error specifically
+        console.log('Wallet is empty:', error.message)
+        // You can notify the user or log it for further analysis
+        this.telegramNotifier.sendTelegramMessage(chatId, MESSAGES.INSUFFICIENT_SOL)
+
+      } else {
+        console.log( error.message)
+
+      }
+      throw error; // Re-throw the error after handling it
     }
   }
 
