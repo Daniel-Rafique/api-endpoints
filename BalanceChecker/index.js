@@ -43,11 +43,11 @@ class BalanceChecker {
     this.dataManager = new DataManager(chatId);
 
     this.messageQueue = [];
-    this.messageCache = {};
     this.ws = null;
     this.pingInterval = null;
     this.reconnectInterval = null;
     this.listenerActive = true; // Flag to control the listener
+    this.messageCache = {};
     this.listenForTransactions();
   }
 
@@ -339,7 +339,7 @@ class BalanceChecker {
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
           const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
-          
+
           if(this.shouldSendMessage){
             await this.sendTelegramMessage(this.chatId, message);
           }
