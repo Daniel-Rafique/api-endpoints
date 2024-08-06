@@ -26,8 +26,7 @@ class InsufficientBalanceError extends Error {
 }
 
 class Solana {
-  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
-    this.balanceChecker = new BalanceChecker(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress); // Initialize BalanceChecker
+  constructor() {
     this.connection = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
@@ -60,8 +59,8 @@ class Solana {
 
     try {
       // Disable BalanceChecker listener
-      this.balanceChecker.disableListener();
-
+      const balanceChecker = new BalanceChecker(); // Initialize BalanceChecker
+      balanceChecker.disableListener();
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Sender balance:', senderBalance);
@@ -115,7 +114,7 @@ class Solana {
       }
     } finally {
       // Re-enable BalanceChecker listener
-      this.balanceChecker.enableListener();
+      balanceChecker.enableListener();
     }
   }
 
