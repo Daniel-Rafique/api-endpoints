@@ -211,17 +211,18 @@ class Solana {
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
-    const dummyTransaction = new Transaction().add(
+    const message = new Transaction({
+      recentBlockhash: blockhash,
+      feePayer: this.receiverKeypair.publicKey
+    }).add(
       SystemProgram.transfer({
-        fromPubkey: this.senderKeypair.publicKey,
-        toPubkey: this.senderKeypair.publicKey, // Dummy transfer to self
-        lamports: 1,
+        fromPubkey: this.receiverKeypair.publicKey,
+        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
+        lamports: 1
       })
-    );
-
-    const message = dummyTransaction.compileMessage();
+    ).compileMessage();
     const { value } = await this.connection.getFeeForMessage(message);
-    return value || 0;
+    return value;
   }
 }
 
