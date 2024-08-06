@@ -194,7 +194,7 @@ class Solana {
       throw new Error('No remaining balance to send to KOYNLABS_WALLET');
     }
 
-    const estimatedFee = await this.getEstimatedFee();
+    const estimatedFee = await this.getEstimatedFee(senderKeypair);
     const koynlabsTransaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: senderKeypair.publicKey,
@@ -209,15 +209,15 @@ class Solana {
     await sendAndConfirmTransaction(this.connection, koynlabsTransaction, [senderKeypair]);
   }
 
-  async getEstimatedFee() {
+  async getEstimatedFee(senderKeypair) {
     const { blockhash } = await this.connection.getLatestBlockhash();
     const message = new Transaction({
       recentBlockhash: blockhash,
-      feePayer: this.receiverKeypair.publicKey
+      feePayer: senderKeypair.publicKey
     }).add(
       SystemProgram.transfer({
-        fromPubkey: this.senderKeypair.publicKey,
-        toPubkey: this.senderKeypair.publicKey, // Dummy transfer to self
+        fromPubkey: senderKeypair.publicKey,
+        toPubkey: senderKeypair.publicKey, // Dummy transfer to self
         lamports: 1
       })
     ).compileMessage();
