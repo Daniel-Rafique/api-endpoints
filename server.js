@@ -109,8 +109,8 @@ app.post('/api/create', async (req, res) => {
         } else if (userData?.walletsCreated && !userData.distributeSolana) {
             websocket.disableListener(); // Disable the listener before distributing Solana
             await solana.distributeSolana(chatId);
-            websocket.enableListener(); // Re-enable the listener after distribution
             res.status(200).send('Airdropping SOL...');
+            websocket.enableListener(); // Re-enable the listener after distribution
         } else if (userData?.distributeSolana) {
             await instanceInitializer.initializeMarketMakerInstance(chatId);
             res.status(200).send('Instances created...');
