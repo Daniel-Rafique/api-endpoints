@@ -38,17 +38,15 @@ class Distribute {
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
 
-      const remainingBalance = senderBalance; // Use the entire balance left in the sender's wallet
-      const amountPerWallet = Math.floor(remainingBalance / newWallets.length); // Distribute the entire remaining balance equally
+      const remainingBalance = senderBalance;
+      const amountPerWallet = Math.floor(remainingBalance / newWallets.length);
 
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
         numLamports: amountPerWallet,
       }));
 
-      console.log(amountPerWallet)
-
-      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
+      const transactionList = this.generateTransactions(10, dropList, senderKeypair.publicKey); // Using batch size of 10
       const txResults = await this.executeTransactions(transactionList, senderKeypair);
 
       return txResults;
@@ -66,7 +64,7 @@ class Distribute {
     }
   }
 
-  generateTransactions(dropList, fromWallet) {
+  generateTransactions(batchSize, dropList, fromWallet) {
     const transactions = [];
     const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
@@ -76,7 +74,6 @@ class Distribute {
       })
     );
 
-    const batchSize = Math.ceil(txInstructions.length / dropList.length);
     const numTransactions = Math.ceil(txInstructions.length / batchSize);
     for (let i = 0; i < numTransactions; i++) {
       const transaction = new Transaction();
@@ -113,7 +110,7 @@ class Distribute {
   }
 
   shouldSendMessage(chatId, message) {
-    const cacheKey = chatId;
+    const cacheKey = `${chatId}-${message}`;
     const currentTime = Date.now();
     const cacheDuration = 60 * 1000; // 1 minute
 
