@@ -40,7 +40,7 @@ class WalletProcessor {
         }
         if (userData.walletsCreated) {
           console.log('Airdrop Solana for chatId:', chatId);
-          await this.solana.airDropSolana(chatId);
+          await this.solana.distributeSolana(chatId);
         }
 
         if (userData.distributeSolana) {
