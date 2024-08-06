@@ -78,38 +78,40 @@ app.post('/api/create', async (req, res) => {
         const minimumSolBalance = 0.05; 
         const receiverPublicKey = userData.wallet;
         const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
+        const contractAddress = userData.contractAddress;
 
         if(userData.boostType === 'ultra_boost') {
-            tokenMintAddress = userData.contractAddress;
+            const contractAddress = userData.contractAddress;
         } else {
-            tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
+            const tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
         }
 
         // Start the periodic check
         let receiverPrivateKey = userData.walletPk;
-        console.log('Type of receiverPrivateKey before conversion:', typeof receiverPrivateKey);
         receiverPrivateKey = receiverPrivateKey.toString();
-        console.log('Type of receiverPrivateKey after conversion:', typeof receiverPrivateKey);
-        console.log('Value of receiverPrivateKey:', receiverPrivateKey);
 
         if (typeof receiverPrivateKey !== 'string') {
             throw new TypeError('Receiver private key must be a string');
         }
-        const balanceChecker = new BalanceChecker(
-            [process.env.SOLANA_RPC_ENDPOINT_1, process.env.SOLANA_RPC_ENDPOINT_2],
-            [process.env.SOLANA_WEBSOCKET_1, process.env.SOLANA_WEBSOCKET_2],
-            telegramNotifier,
-            receiverPrivateKey
+        const websocket = new BalanceChecker(
+            chatId,
+            receiverPrivateKey,
+            minimumSolBalance,
+            minimumTokenBalance,
+            telegramToken,
+            contractAddress
         );
 
         if (!userData?.walletsCreated) {
-            balanceChecker.startPeriodicCheck(chatId, receiverPublicKey.toString(), minimumSolBalance, minimumTokenBalance, tokenMintAddress);
+            websocket.listenForTransactions(chatId, receiverPublicKey);
             telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
             res.status(200).send('Checking balance...');
         } else if (userData?.walletsCreated && !userData.distributeSolana) {
+            websocket.disableListener(); // Disable the listener before distributing Solana
             await solana.distributeSolana(chatId);
+            websocket.enableListener(); // Re-enable the listener after distribution
             res.status(200).send('Airdropping SOL...');
-        } else if (userData.distributeSolana) {
+        } else if (userData?.distributeSolana) {
             await instanceInitializer.initializeMarketMakerInstance(chatId);
             res.status(200).send('Instances created...');
         }

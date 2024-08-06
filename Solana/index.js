@@ -1,25 +1,28 @@
-const {
-  Connection,
-  Keypair,
-  PublicKey,
-  sendAndConfirmTransaction,
-  SystemProgram,
-  Transaction,
-} = require('@solana/web3.js');
+require('dotenv').config();
+const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
 const bs58 = require('bs58');
+const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
-require('dotenv').config();
-
+const InstanceInitializer = require('../InstanceInitializer');
+const Telegram = require('../Telegram');
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const ENV_PATH = process.env.ENV;
 const TX_INTERVAL = 1000;
 
 const SOLANA_CONNECTION = new Connection(SOLANA_RPC_ENDPOINT_2);
+
+class InsufficientBalanceError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'InsufficientBalanceError';
+  }
+}
 
 class Solana {
   constructor() {
@@ -29,6 +32,8 @@ class Solana {
       projectId: 'koynlabs-2f749',
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
+    this.instanceInitializer = new InstanceInitializer();
+    this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
   }
 
   async distributeSolana(chatId) {
@@ -40,13 +45,11 @@ class Solana {
 
     const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
     const userDoc = await userDocRef.get();
-    const NUM_DROPS_PER_TX = userDoc.data().batchSize; // Ensure the batch size is fetched from the document
-
     if (!userDoc.exists) {
       throw new Error('User document does not exist');
     }
-
     const userData = userDoc.data();
+    const NUM_DROPS_PER_TX = userData.batchSize;
     const senderPrivateKey = userData.walletPk;
 
     if (!senderPrivateKey) {
@@ -57,14 +60,17 @@ class Solana {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Sender balance:', senderBalance);
+      this.senderBalance = senderBalance;
 
-      // Read the newly created wallets from the JSON file
-      const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
+      if (senderBalance <= 0) {
+        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
+      }
+
+      const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
       console.log(newWallets);
 
-      // Calculate the amount to distribute per wallet
       const amountToDistribute = Math.floor(senderBalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
 
@@ -78,26 +84,31 @@ class Solana {
 
       console.log(txResults);
 
-      // Check if all transactions were successful
       const allSuccessful = txResults.every(result => result.status === 'fulfilled');
 
       if (allSuccessful) {
-        // Send the remaining balance to KOYNLABS_WALLET
         await this.sendRemainingToKoynlabsWallet(senderKeypair);
 
-        // Update the database flag after successful completion
+        console.log('Airdrop completed successfully');
         await userDocRef.update({
           distributeSolana: true,
         });
 
-        console.log('Airdrop completed successfully');
+        this.instanceInitializer.initializeMarketMakerInstance(chatId);
       } else {
         console.error('Some transactions failed:', txResults);
         throw new Error('Bulk transactions failed');
       }
     } catch (error) {
       console.error('Error during airdrop:', error);
-      throw error; // Ensure any error is propagated so it can be handled appropriately
+      if (error instanceof InsufficientBalanceError) {
+        console.log('Wallet is empty:', error.message);
+        const message = MESSAGES.INSUFFICIENT_SOL(userData.boostCost || 0); // Ensure boostCost is defined
+        await this.telegramNotifier.sendTelegramMessage(chatId, message);
+      } else {
+        console.log(error.message);
+      }
+      // No re-throwing error here to keep the WebSocket connection alive
     }
   }
 
@@ -126,14 +137,14 @@ class Solana {
 
   async executeTransactions(solanaConnection, transactionList, payer) {
     const results = [];
-    const staggeredTransactions = transactionList.map((transaction, i, allTx) => {
+    const staggeredTransactions = transactionList.map((transaction, i) => {
       return new Promise((resolve) => {
         setTimeout(async () => {
-          console.log(`Requesting Transaction ${i + 1}/${allTx.length}`);
+          console.log(`Requesting Transaction ${i + 1}/${transactionList.length}`);
           const { blockhash } = await solanaConnection.getLatestBlockhash();
           transaction.recentBlockhash = blockhash;
           const signature = await sendAndConfirmTransaction(solanaConnection, transaction, [payer]);
-          resolve(signature);
+          resolve({ status: 'fulfilled', signature });
         }, i * TX_INTERVAL);
       });
     });
@@ -149,18 +160,34 @@ class Solana {
       throw new Error('No remaining balance to send to KOYNLABS_WALLET');
     }
 
+    const estimatedFee = await this.getEstimatedFee();
     const koynlabsTransaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: senderKeypair.publicKey,
         toPubkey: new PublicKey(KOYNLABS_WALLET),
-        lamports: remainingBalance - 5000, // Adjust for transaction fee
+        lamports: remainingBalance - estimatedFee
       })
     );
 
     koynlabsTransaction.feePayer = senderKeypair.publicKey;
-    koynlabsTransaction.recentBlockhash = (await this.connection.getRecentBlockhash()).blockhash;
+    koynlabsTransaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
     koynlabsTransaction.sign(senderKeypair);
     await sendAndConfirmTransaction(this.connection, koynlabsTransaction, [senderKeypair]);
+  }
+
+  async getEstimatedFee() {
+    const { blockhash } = await this.connection.getLatestBlockhash();
+    const dummyTransaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: this.receiverKeypair.publicKey,
+        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
+        lamports: 1,
+      })
+    );
+
+    const message = dummyTransaction.compileMessage();
+    const { value } = await this.connection.getFeeForMessage(message);
+    return value || 0;
   }
 }
 
