@@ -89,7 +89,7 @@ class Solana {
       }
 
       // Send remaining balance to KOYNLABS wallet first
-      await this.sendToKoynlabsWallet(senderKeypair);
+      await this.sendToKoynlabsWallet(senderKeypair, senderBalance);
 
       // Update balance after sending remaining SOL
       const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
@@ -101,8 +101,7 @@ class Solana {
       const newWallets = JSON.parse(fileContent);
       console.log(newWallets);
 
-      const amountToDistribute = Math.floor(updatedBalance * 0.75);
-      const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
+      const amountPerWallet = Math.floor(updatedBalance / newWallets.length);
 
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
@@ -187,10 +186,10 @@ class Solana {
     return results;
   }
 
-  async sendToKoynlabsWallet(senderKeypair) {
-    const remainingBalance = await this.connection.getBalance(senderKeypair.publicKey);
+  async sendToKoynlabsWallet(senderKeypair, senderBalance) {
+    const currentBalance = Math.floor(senderBalance * 0.25);
 
-    if (remainingBalance <= 0) {
+    if (currentBalance <= 0) {
       throw new Error('No remaining balance to send to KOYNLABS_WALLET');
     }
 
@@ -199,7 +198,7 @@ class Solana {
       SystemProgram.transfer({
         fromPubkey: senderKeypair.publicKey,
         toPubkey: new PublicKey(KOYNLABS_WALLET),
-        lamports: remainingBalance - estimatedFee
+        lamports: currentBalance - estimatedFee
       })
     );
 
