@@ -1,4 +1,3 @@
-require('dotenv').config();
 const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
@@ -8,6 +7,7 @@ const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
 const InstanceInitializer = require('../InstanceInitializer');
 const Telegram = require('../Telegram');
+require('dotenv').config();
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
@@ -34,7 +34,7 @@ class Solana {
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
     this.instanceInitializer = new InstanceInitializer();
-    this.telegramNotifier = new Telegram(TELEGRAM_TOKEN)
+    this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
   }
 
   async distributeSolana(chatId) {
@@ -51,7 +51,6 @@ class Solana {
     }
     const userData = userDoc.data();
     const NUM_DROPS_PER_TX = userData.batchSize;
-
     const senderPrivateKey = userData.walletPk;
 
     if (!senderPrivateKey) {
@@ -104,15 +103,11 @@ class Solana {
     } catch (error) {
       console.error('Error during airdrop:', error);
       if (error instanceof InsufficientBalanceError) {
-        // Handle insufficient balance error specifically
-        console.log('Wallet is empty:', error.message)
-        // You can notify the user or log it for further analysis
-        const message = MESSAGES.INSUFFICIENT_SOL( userDoc.boostCost);
-        this.telegramNotifier.sendTelegramMessage(chatId, message)
-
+        console.log('Wallet is empty:', error.message);
+        const message = MESSAGES.INSUFFICIENT_SOL(userData.boostCost || 0); // Ensure boostCost is defined
+        this.telegramNotifier.sendTelegramMessage(chatId, message);
       } else {
-        console.log( error.message)
-
+        console.log(error.message);
       }
       throw error; // Re-throw the error after handling it
     }
