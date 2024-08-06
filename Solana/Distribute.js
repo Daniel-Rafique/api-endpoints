@@ -46,7 +46,7 @@ class Distribute {
         numLamports: amountPerWallet,
       }));
 
-      const transactionList = this.generateTransactions(10, dropList, senderKeypair.publicKey); // Using batch size of 10
+      const transactionList = this.generateTransactions(5, dropList, senderKeypair.publicKey); // Using batch size of 10
       const txResults = await this.executeTransactions(transactionList, senderKeypair);
 
       return txResults;
