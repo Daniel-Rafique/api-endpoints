@@ -216,8 +216,8 @@ class Solana {
       feePayer: this.receiverKeypair.publicKey
     }).add(
       SystemProgram.transfer({
-        fromPubkey: this.receiverKeypair.publicKey,
-        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
+        fromPubkey: this.senderKeypair.publicKey,
+        toPubkey: this.senderKeypair.publicKey, // Dummy transfer to self
         lamports: 1
       })
     ).compileMessage();
