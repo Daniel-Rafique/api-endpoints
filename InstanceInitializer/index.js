@@ -5,15 +5,14 @@ const { exec } = require('child_process');
 const Docker = require('dockerode');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
-const ENV_PATH = process.env.ENV;
+
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+const ENV_PATH = process.env.ENV_PATH;
 
 class InstanceInitializer {
   constructor() {
-    const basePath = './marketMaker';
-    const instancePath = './instances';
-    this.basePath = basePath;
-    this.instancePath = instancePath;
+    this.basePath = path.join(ENV_PATH, 'marketMaker'); // Set the base path correctly
+    this.instancePath = path.join(ENV_PATH, 'instances'); // Set the instance path correctly
     this.dataManager = new DataManager();
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
