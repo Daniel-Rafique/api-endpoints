@@ -37,6 +37,7 @@ class Solana {
   }
 
   async distributeSolana(chatId) {
+    let message = null;
     const chatIdStr = chatId.toString();
 
     if (!chatIdStr || typeof chatIdStr !== 'string') {
@@ -66,12 +67,20 @@ class Solana {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
 
+      // Send remaining balance to KOYNLABS wallet first
+      await this.sendToKoynlabsWallet(senderKeypair);
+
+      // Update balance after sending remaining SOL
+      const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
+      console.log('Updated sender balance:', updatedBalance);
+      this.senderBalance = updatedBalance;
+
       const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
       console.log(newWallets);
 
-      const amountToDistribute = Math.floor(senderBalance * 0.75);
+      const amountToDistribute = Math.floor(updatedBalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
 
       const dropList = newWallets.map(wallet => ({
@@ -87,14 +96,14 @@ class Solana {
       const allSuccessful = txResults.every(result => result.status === 'fulfilled');
 
       if (allSuccessful) {
-        await this.sendRemainingToKoynlabsWallet(senderKeypair);
-
         console.log('Airdrop completed successfully');
         await userDocRef.update({
           distributeSolana: true,
         });
 
         this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        message += MESSAGES.DEPLOYMENT;
+        await this.telegramNotifier.sendTelegramMessage(chatId, message);
       } else {
         console.error('Some transactions failed:', txResults);
         throw new Error('Bulk transactions failed');
@@ -103,12 +112,11 @@ class Solana {
       console.error('Error during airdrop:', error);
       if (error instanceof InsufficientBalanceError) {
         console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.INSUFFICIENT_SOL(userData.boostCost || 0); // Ensure boostCost is defined
+        message += MESSAGES.INSUFFICIENT_SOL(userData.boostCost || 0); // Ensure boostCost is defined
         await this.telegramNotifier.sendTelegramMessage(chatId, message);
       } else {
         console.log(error.message);
       }
-      // No re-throwing error here to keep the WebSocket connection alive
     }
   }
 
@@ -153,7 +161,7 @@ class Solana {
     return results;
   }
 
-  async sendRemainingToKoynlabsWallet(senderKeypair) {
+  async sendToKoynlabsWallet(senderKeypair) {
     const remainingBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
     if (remainingBalance <= 0) {
