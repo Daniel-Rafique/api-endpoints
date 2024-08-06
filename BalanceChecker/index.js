@@ -285,7 +285,7 @@ class BalanceChecker {
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
           await this.sendTelegramMessage(
             this.chatId,
-            `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
+            `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`
           );
           return;
         } catch (error) {
