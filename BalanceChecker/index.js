@@ -51,7 +51,6 @@ class BalanceChecker {
     this.listenForTransactions();
   }
 
-
   listenForTransactions() {
     const userData = this.dataManager.getCollection(this.chatId);
     if (!this.listenerActive || userData.walletsCreated) {
@@ -175,9 +174,8 @@ class BalanceChecker {
     }
   }
   
-  // Method to check and update the cache
   shouldSendMessage(chatId, message) {
-    const cacheKey = chatId;
+    const cacheKey = createCacheKey(chatId, message);
     const currentTime = Date.now();
     const cacheDuration = 60 * 1000; // 1 minute
 
@@ -195,7 +193,7 @@ class BalanceChecker {
     this.messageCache[cacheKey] = { message, timestamp: currentTime };
     return true;
   }
-  
+
   async handleTransaction(signature) {
     try {
       const userData = this.dataManager;
@@ -254,15 +252,14 @@ class BalanceChecker {
         if (tokenBalance < this.minimumTokenBalance) {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
-          if(this.shouldSendMessage){
-            await this.sendTelegramMessage(this.chatId, message);
-          }
         }
-
+        if (this.shouldSendMessage(this.chatId, message)) {
+          await this.sendTelegramMessage(this.chatId, message);
+        }
       } else {
         let message = '';
         message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
-        if(this.shouldSendMessage){
+        if (this.shouldSendMessage(this.chatId, message)) {
           await this.sendTelegramMessage(this.chatId, message);
         }
 
@@ -301,7 +298,7 @@ class BalanceChecker {
     if (tokenBalance < this.minimumTokenBalance) {
       await this.returnSol(senderPublicKeyString, amountReceived);
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-      if(this.shouldSendMessage){
+      if (this.shouldSendMessage(this.chatId, message)) {
         await this.sendTelegramMessage(this.chatId, message);
       }
     }
@@ -340,7 +337,7 @@ class BalanceChecker {
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
           const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
 
-          if(this.shouldSendMessage){
+          if (this.shouldSendMessage(this.chatId, message)) {
             await this.sendTelegramMessage(this.chatId, message);
           }
 
@@ -369,8 +366,8 @@ class BalanceChecker {
       await this.telegramNotifier.sendTelegramMessage(chatId, text);
       this.messageCache[cacheKey] = { timestamp: currentTime };
     }
-  }  
-  
+  }
+
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
     const message = new Transaction({
