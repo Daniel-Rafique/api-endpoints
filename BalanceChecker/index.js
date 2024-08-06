@@ -310,14 +310,14 @@ class BalanceChecker {
     const cacheKey = createCacheKey(chatId, text);
     const currentTime = Date.now();
   
-    // Check if the same message was sent in the last 10 seconds
-    if (this.messageCache[cacheKey] && (currentTime - this.messageCache[cacheKey].timestamp < 10000)) {
+    // Check if the same message was sent in the last 60 seconds
+    if (this.messageCache[cacheKey] && (currentTime - this.messageCache[cacheKey].timestamp < 300000)) {
       console.log('Duplicate message detected, skipping send.');
     } else {
       await this.telegramNotifier.sendTelegramMessage(chatId, text);
       this.messageCache[cacheKey] = { timestamp: currentTime };
     }
-  }
+  }  
   
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
