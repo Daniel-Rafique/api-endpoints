@@ -7,7 +7,7 @@ const Telegram = require('../Telegram');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const TX_INTERVAL = 1000;
-const ENV_PATH = process.env.ENV_PATH;
+const ENV_PATH = process.env.ENV;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
 class InsufficientBalanceError extends Error {

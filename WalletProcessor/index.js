@@ -4,7 +4,7 @@ const DataManager = require('../database');
 const WalletManager = require('../WalletManager');
 const InstanceInitializer = require('../InstanceInitializer');
 const Solana = require('../Solana');
-const ENV_PATH = process.env.ENV_PATH;
+const ENV_PATH = process.env.ENV;
 
 class WalletProcessor {
   constructor() {
