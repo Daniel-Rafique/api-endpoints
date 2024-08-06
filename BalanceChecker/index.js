@@ -301,7 +301,9 @@ class BalanceChecker {
     if (tokenBalance < this.minimumTokenBalance) {
       await this.returnSol(senderPublicKeyString, amountReceived);
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-      await this.sendTelegramMessage(this.chatId, message);
+      if(this.shouldSendMessage){
+        await this.sendTelegramMessage(this.chatId, message);
+      }
     }
 
     return tokenBalance;
@@ -336,10 +338,12 @@ class BalanceChecker {
         try {
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
-          await this.sendTelegramMessage(
-            this.chatId,
-            `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`
-          );
+          const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
+          
+          if(this.shouldSendMessage){
+            await this.sendTelegramMessage(this.chatId, message);
+          }
+
           return;
         } catch (error) {
           console.error('Error sending transaction, retrying...', error);
