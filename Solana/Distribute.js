@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
@@ -7,7 +8,7 @@ const Telegram = require('../Telegram');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const TX_INTERVAL = 1000;
-const ENV_PATH = process.env.ENV; // Ensure this is set to 'devnet-api'
+const ENV_PATH = process.env.PATH; // Ensure this is set to 'devnet-api'
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
 class InsufficientBalanceError extends Error {
