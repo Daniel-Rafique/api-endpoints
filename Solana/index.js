@@ -56,7 +56,7 @@ class Solana {
         throw new Error('Insufficient balance in sender wallet');
       }
 
-      const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
+      const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
       console.log(newWallets);
