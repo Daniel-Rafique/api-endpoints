@@ -37,8 +37,8 @@ class Distribute {
       const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
-      
-      const amountPerWallet = Math.floor(senderBalance / newWallets.length);
+
+      const amountPerWallet = Math.floor(senderBalance / newWallets.length); // Distribute the entire remaining balance equally
 
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
