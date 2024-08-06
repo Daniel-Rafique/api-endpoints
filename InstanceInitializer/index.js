@@ -37,18 +37,9 @@ class InstanceInitializer {
       const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
       fs.writeFileSync(envFilePath, envContent);
 
-      this.ensureDockerfile(userDir);
       await this.buildAndRunDockerContainer(chatId, userDir);
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
-    }
-  }
-
-  ensureDockerfile(dest) {
-    const dockerfilePath = path.join(this.basePath, 'Dockerfile');
-    const destDockerfilePath = path.join(dest, 'Dockerfile');
-    if (!fs.existsSync(destDockerfilePath)) {
-      fs.copyFileSync(dockerfilePath, destDockerfilePath);
     }
   }
 
