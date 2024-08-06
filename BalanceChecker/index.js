@@ -3,9 +3,9 @@ const bs58 = require('bs58');
 const TelegramNotifier = require('../Telegram');
 const WalletProcessor = require('../WalletProcessor');
 const WebSocket = require('ws');
-const WEBSOCKET_ENDPOINTS = [process.env.SOLANA_WEBSOCKET_1, process.env.SOLANA_WEBSOCKET_2];
+const crypto = require('crypto');
 
-const SOLANA_WEBSOCKET = process.env.SOLANA_WEBSOCKET_2;
+const WEBSOCKET_ENDPOINTS = [process.env.SOLANA_WEBSOCKET_1, process.env.SOLANA_WEBSOCKET_2];
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
@@ -20,6 +20,11 @@ let currentEndpointIndex = 0;
 function getNextWebSocketEndpoint() {
   currentEndpointIndex = (currentEndpointIndex + 1) % WEBSOCKET_ENDPOINTS.length;
   return WEBSOCKET_ENDPOINTS[currentEndpointIndex];
+}
+
+function createCacheKey(chatId, text) {
+  const hash = crypto.createHash('md5').update(text).digest('hex');
+  return `${chatId}-${hash}`;
 }
 
 class BalanceChecker {
@@ -145,57 +150,57 @@ class BalanceChecker {
       this.sendMessage(message);
     }
   }
+  
 
   async handleTransaction(signature) {
     try {
-
       console.log('Handling transaction:', signature);
-
+  
       const transaction = await this.connection.getTransaction(signature, {
         maxSupportedTransactionVersion: 0,
       });
-
+  
       if (!transaction) {
         console.error('Failed to retrieve transaction');
         return;
       }
-
+  
       console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
-
+  
       const senderPublicKey = transaction.transaction.message.accountKeys.find(
         key => !key.equals(this.receiverKeypair.publicKey)
       );
-
+  
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
         return;
       }
-
+  
       const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
         key => key.equals(this.receiverKeypair.publicKey)
       );
-
+  
       const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
-
+  
       if (amountReceived <= 0) {
         console.error('Invalid transaction amount');
         return;
       }
-
+  
       const senderPublicKeyString = new PublicKey(senderPublicKey);
-
+  
       const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
       const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
-
+  
       console.log('Token balance:', tokenBalance);
       console.log('Minimum token balance:', this.minimumTokenBalance);
       console.log('Sol balance:', solBalance);
       console.log('Minimum Sol balance:', this.minimumSolBalance * 1_000_000_000);
-
+  
       if (solBalance < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
-
+  
         let message = '';
         if (solBalance < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
@@ -219,6 +224,7 @@ class BalanceChecker {
       console.error('Error handling transaction:', error);
     }
   }
+  
 
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
@@ -302,15 +308,18 @@ class BalanceChecker {
   }
 
   async sendTelegramMessage(chatId, text) {
-    const cacheKey = `${chatId}`;
-    if (this.messageCache[cacheKey] !== text) {
-      await this.telegramNotifier.sendTelegramMessage(chatId, text);
-      this.messageCache[cacheKey] = text;
-    } else {
+    const cacheKey = createCacheKey(chatId, text);
+    const currentTime = Date.now();
+  
+    // Check if the same message was sent in the last 10 seconds
+    if (this.messageCache[cacheKey] && (currentTime - this.messageCache[cacheKey].timestamp < 10000)) {
       console.log('Duplicate message detected, skipping send.');
+    } else {
+      await this.telegramNotifier.sendTelegramMessage(chatId, text);
+      this.messageCache[cacheKey] = { timestamp: currentTime };
     }
   }
-
+  
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
     const message = new Transaction({
