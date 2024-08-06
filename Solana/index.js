@@ -60,11 +60,11 @@ class Solana {
 
   async distributeSolana(chatId) {
     const chatIdStr = chatId.toString();
-
+  
     if (!chatIdStr || typeof chatIdStr !== 'string') {
       throw new Error('Invalid chatIdStr');
     }
-
+  
     const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
     const userDoc = await userDocRef.get();
     if (!userDoc.exists) {
@@ -73,56 +73,52 @@ class Solana {
     const userData = userDoc.data();
     const NUM_DROPS_PER_TX = userData.batchSize;
     const senderPrivateKey = userData.walletPk;
-
+  
     if (!senderPrivateKey) {
       throw new Error('Wallet private key not found in user data');
     }
-
+  
     try {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Sender balance:', senderBalance);
       this.senderBalance = senderBalance;
       this.senderKeypair = senderKeypair;
-
+  
       if (senderBalance <= 0) {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
-
-      // Send remaining balance to KOYNLABS wallet first
+  
       await this.sendToKoynlabsWallet(senderKeypair, senderBalance);
-
-      // Update balance after sending remaining SOL
+  
       const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Updated sender balance:', updatedBalance);
       this.senderBalance = updatedBalance;
-
+  
       const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
       console.log(newWallets);
-
+  
       const amountPerWallet = Math.floor(updatedBalance / newWallets.length);
-
+  
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
         numLamports: amountPerWallet,
       }));
-
+  
       const transactionList = this.generateTransactions(NUM_DROPS_PER_TX, dropList, senderKeypair.publicKey);
       const txResults = await this.executeTransactions(SOLANA_CONNECTION, transactionList, senderKeypair);
-
+  
       console.log(txResults);
-
+  
       const allSuccessful = txResults.every(result => result.status === 'fulfilled');
-
+  
       if (allSuccessful) {
         console.log('Airdrop completed successfully');
-        await userDocRef.update({
-          distributeSolana: true,
-        });
-        if(!userDocRef.instancesCreated) {
-          this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        await userDocRef.update({ distributeSolana: true });
+        if (!userData.instancesCreated) {
+          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
           const message = MESSAGES.DEPLOYMENT;
           if (this.shouldSendMessage(chatId, message)) {
             await this.telegramNotifier.sendTelegramMessage(chatId, message);
@@ -136,7 +132,7 @@ class Solana {
       console.error('Error during airdrop:', error);
       if (error instanceof InsufficientBalanceError) {
         console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0); // Ensure boostCost is defined
+        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
         if (this.shouldSendMessage(chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(chatId, message);
         }
@@ -145,6 +141,7 @@ class Solana {
       }
     }
   }
+  
 
   generateTransactions(batchSize, dropList, fromWallet) {
     const transactions = [];
