@@ -83,6 +83,7 @@ class Solana {
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Sender balance:', senderBalance);
       this.senderBalance = senderBalance;
+      this.senderKeypair = senderKeypair;
 
       if (senderBalance <= 0) {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
@@ -212,8 +213,8 @@ class Solana {
     const { blockhash } = await this.connection.getLatestBlockhash();
     const dummyTransaction = new Transaction().add(
       SystemProgram.transfer({
-        fromPubkey: this.receiverKeypair.publicKey,
-        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
+        fromPubkey: this.senderKeypair.publicKey,
+        toPubkey: this.senderKeypair.publicKey, // Dummy transfer to self
         lamports: 1,
       })
     );
