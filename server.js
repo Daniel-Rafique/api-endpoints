@@ -107,7 +107,9 @@ app.post('/api/create', async (req, res) => {
             telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
             res.status(200).send('Checking balance...');
         } else if (userData?.walletsCreated && !userData.distributeSolana) {
+            balanceChecker.disableListener(); // Disable the listener before distributing Solana
             await solana.distributeSolana(chatId);
+            balanceChecker.enableListener(); // Re-enable the listener after distribution
             res.status(200).send('Airdropping SOL...');
         } else if (userData?.distributeSolana) {
             await instanceInitializer.initializeMarketMakerInstance(chatId);

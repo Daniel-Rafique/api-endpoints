@@ -5,10 +5,8 @@ const path = require('path');
 const bs58 = require('bs58');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
-const BalanceChecker = require('../BalanceChecker')
 const Firestore = require('@google-cloud/firestore');
 const InstanceInitializer = require('../InstanceInitializer');
-const StateManager = require('../utils/StateManager'); // Import StateManager
 const Telegram = require('../Telegram');
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
@@ -28,7 +26,6 @@ class InsufficientBalanceError extends Error {
 
 class Solana {
   constructor() {
-    this.balanceChecker = new BalanceChecker();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
@@ -36,9 +33,7 @@ class Solana {
       keyFilename: '.config/firebaseServiceAccountKey.json',
     });
     this.instanceInitializer = new InstanceInitializer();
-    this.stateManager = new StateManager(this.balanceChecker); // Initialize StateManager
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
-
   }
 
   async distributeSolana(chatId) {
@@ -62,7 +57,6 @@ class Solana {
     }
 
     try {
-      this.stateManager.disableListener();
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Sender balance:', senderBalance);
@@ -114,8 +108,7 @@ class Solana {
       } else {
         console.log(error.message);
       }
-    } finally {
-      this.stateManager.enableListener();
+      // No re-throwing error here to keep the WebSocket connection alive
     }
   }
 
