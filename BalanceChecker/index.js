@@ -42,7 +42,6 @@ class BalanceChecker {
     this.contractAddress = contractAddress;
     this.dataManager = new DataManager(chatId);
 
-
     this.messageQueue = [];
     this.messageCache = {};
     this.ws = null;
@@ -54,7 +53,7 @@ class BalanceChecker {
 
 
   listenForTransactions() {
-    const userData = this.dataManager.getUserData();
+    const userData = this.dataManager.getCollection();
     if (!this.listenerActive || userData.walletsCreated) {
       console.log('Transaction listener is inactive or wallets are already created.');
       return;
