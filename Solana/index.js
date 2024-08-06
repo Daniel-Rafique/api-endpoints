@@ -44,6 +44,7 @@ class Solana {
       throw new Error('Invalid chatIdStr');
     }
 
+    const balanceChecker = new BalanceChecker()
     const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
     const userDoc = await userDocRef.get();
     if (!userDoc.exists) {
@@ -59,7 +60,6 @@ class Solana {
 
     try {
       // Disable BalanceChecker listener
-      const balanceChecker = new BalanceChecker(); // Initialize BalanceChecker
       balanceChecker.disableListener();
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
