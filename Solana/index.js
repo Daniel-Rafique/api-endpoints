@@ -1,11 +1,4 @@
-const {
-  Connection,
-  Keypair,
-  PublicKey,
-  sendAndConfirmTransaction,
-  SystemProgram,
-  Transaction,
-} = require('@solana/web3.js');
+const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
 const bs58 = require('bs58');
@@ -42,13 +35,12 @@ class Solana {
 
     const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
     const userDoc = await userDocRef.get();
-    const NUM_DROPS_PER_TX = userDoc.data().batchSize; // Ensure the batch size is fetched from the document
-
     if (!userDoc.exists) {
       throw new Error('User document does not exist');
     }
-
     const userData = userDoc.data();
+    const NUM_DROPS_PER_TX = userData.batchSize;
+
     const senderPrivateKey = userData.walletPk;
 
     if (!senderPrivateKey) {
@@ -60,13 +52,15 @@ class Solana {
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Sender balance:', senderBalance);
 
-      // Read the newly created wallets from the JSON file
+      if (senderBalance <= 0) {
+        throw new Error('Insufficient balance in sender wallet');
+      }
+
       const filePath = path.resolve(__dirname, `../../${ENV_PATH}/marketMaker/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
       console.log(newWallets);
 
-      // Calculate the amount to distribute per wallet
       const amountToDistribute = Math.floor(senderBalance * 0.75);
       const amountPerWallet = Math.floor(amountToDistribute / newWallets.length);
 
@@ -80,20 +74,16 @@ class Solana {
 
       console.log(txResults);
 
-      // Check if all transactions were successful
       const allSuccessful = txResults.every(result => result.status === 'fulfilled');
 
       if (allSuccessful) {
-        // Send the remaining balance to KOYNLABS_WALLET
         await this.sendRemainingToKoynlabsWallet(senderKeypair);
 
         console.log('Airdrop completed successfully');
-        // Update the database flag after successful completion
         await userDocRef.update({
           distributeSolana: true,
         });
 
-        // Initialize instances.
         this.instanceInitializer.initializeMarketMakerInstance(chatId);
       } else {
         console.error('Some transactions failed:', txResults);
@@ -101,7 +91,7 @@ class Solana {
       }
     } catch (error) {
       console.error('Error during airdrop:', error);
-      throw error; // Ensure any error is propagated so it can be handled appropriately
+      throw error;
     }
   }
 
@@ -130,14 +120,14 @@ class Solana {
 
   async executeTransactions(solanaConnection, transactionList, payer) {
     const results = [];
-    const staggeredTransactions = transactionList.map((transaction, i, allTx) => {
+    const staggeredTransactions = transactionList.map((transaction, i) => {
       return new Promise((resolve) => {
         setTimeout(async () => {
-          console.log(`Requesting Transaction ${i + 1}/${allTx.length}`);
+          console.log(`Requesting Transaction ${i + 1}/${transactionList.length}`);
           const { blockhash } = await solanaConnection.getLatestBlockhash();
           transaction.recentBlockhash = blockhash;
           const signature = await sendAndConfirmTransaction(solanaConnection, transaction, [payer]);
-          resolve(signature);
+          resolve({ status: 'fulfilled', signature });
         }, i * TX_INTERVAL);
       });
     });
@@ -153,11 +143,12 @@ class Solana {
       throw new Error('No remaining balance to send to KOYNLABS_WALLET');
     }
 
+    const estimatedFee = await this.getEstimatedFee();
     const koynlabsTransaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: senderKeypair.publicKey,
         toPubkey: new PublicKey(KOYNLABS_WALLET),
-        lamports: remainingBalance - getEstimatedFee(senderKeypair)
+        lamports: remainingBalance - estimatedFee
       })
     );
 
@@ -169,20 +160,18 @@ class Solana {
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
-    const message = new Transaction({
-      recentBlockhash: blockhash,
-      feePayer: this.receiverKeypair.publicKey
-    }).add(
+    const dummyTransaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: this.receiverKeypair.publicKey,
         toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
-        lamports: 1
+        lamports: 1,
       })
-    ).compileMessage();
+    );
+
+    const message = dummyTransaction.compileMessage();
     const { value } = await this.connection.getFeeForMessage(message);
-    console.log(value);
-    return value;
-}
+    return value || 0;
+  }
 }
 
 module.exports = Solana;
