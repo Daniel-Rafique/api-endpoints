@@ -25,7 +25,7 @@ class Distribute {
     this.messageCache = {}; // Initialize cache for messages
   }
 
-  async distributeSolana(senderPrivateKey, chatId) {
+  async distributeSolana(chatId, senderPrivateKey, userData) {
     try {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);

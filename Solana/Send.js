@@ -6,6 +6,7 @@ const Telegram = require('../Telegram');
 
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
 class InsufficientBalanceError extends Error {
   constructor(message) {
@@ -15,7 +16,7 @@ class InsufficientBalanceError extends Error {
 }
 
 class Send {
-  constructor(telegramNotifier, chatId) {
+  constructor(chatId) {
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.chatId = chatId;
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);

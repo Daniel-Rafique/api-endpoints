@@ -33,12 +33,12 @@ class Solana {
         throw new Error('User data or wallet private key not found');
       }
 
-      const sendInstance = new Send(this.telegramNotifier, chatId);
-      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
+      const sendInstance = new Send(chatId);
+      const updatedBalance = await sendInstance.sendToKoynlabsWallet(chatId, userData.walletPk, userData);
 
       if (updatedBalance > 0) {
-        const distributeInstance = new Distribute();
-        const results = await distributeInstance.distributeSolana(userData.walletPk, chatId);
+        const distributeInstance = new Distribute(chatId);
+        const results = await distributeInstance.distributeSolana(chatId, userData.walletPk, chatId);
         console.log('Distribution results:', results);
       } else {
         console.log('No balance left to distribute.');
