@@ -1,32 +1,20 @@
 require('dotenv').config();
-const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
-const fs = require('fs').promises;
-const path = require('path');
-const bs58 = require('bs58');
+const { Connection } = require('@solana/web3.js');
+const Send = require('./Send');
+const Distribute = require('./Distribute');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
 const InstanceInitializer = require('../InstanceInitializer');
 const Telegram = require('../Telegram');
+
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
-const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
-const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const ENV_PATH = process.env.ENV;
-const TX_INTERVAL = 1000;
-
-const SOLANA_CONNECTION = new Connection(SOLANA_RPC_ENDPOINT_2);
-
-class InsufficientBalanceError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'InsufficientBalanceError';
-  }
-}
 
 class Solana {
   constructor() {
-    this.connection = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
+    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -37,7 +25,42 @@ class Solana {
     this.messageCache = {}; // Initialize cache for messages
   }
 
-  // Method to check and update the cache
+  async distributeSolana(chatId) {
+    try {
+      const userData = await this.dataManager.getCollection(chatId.toString());
+
+      if (!userData || !userData.walletPk) {
+        throw new Error('User data or wallet private key not found');
+      }
+
+      const sendInstance = new Send();
+      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk);
+
+      if (updatedBalance > 0) {
+        const distributeInstance = new Distribute();
+        const results = await distributeInstance.distributeSolana(userData.walletPk, chatId);
+        console.log('Distribution results:', results);
+      } else {
+        console.log('No balance left to distribute.');
+        const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
+        const userDoc = await userDocRef.get();
+        if (!userDoc.exists) {
+          throw new Error('User document does not exist');
+        }
+        await userDocRef.update({ distributeSolana: true });
+        if (!userData.instancesCreated) {
+          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
+          const message = MESSAGES.DEPLOYMENT;
+          if (this.shouldSendMessage(chatId, message)) {
+            await this.telegramNotifier.sendTelegramMessage(chatId, message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in distributeSolana:', error);
+    }
+  }
+
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
@@ -56,170 +79,6 @@ class Solana {
 
     this.messageCache[cacheKey] = { message, timestamp: currentTime };
     return true;
-  }
-
-  async distributeSolana(chatId) {
-    const chatIdStr = chatId.toString();
-  
-    if (!chatIdStr || typeof chatIdStr !== 'string') {
-      throw new Error('Invalid chatIdStr');
-    }
-  
-    const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
-    const userDoc = await userDocRef.get();
-    if (!userDoc.exists) {
-      throw new Error('User document does not exist');
-    }
-    const userData = userDoc.data();
-    const NUM_DROPS_PER_TX = userData.batchSize;
-    const senderPrivateKey = userData.walletPk;
-  
-    if (!senderPrivateKey) {
-      throw new Error('Wallet private key not found in user data');
-    }
-  
-    try {
-      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
-      const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
-      console.log('Sender balance:', senderBalance);
-      this.senderBalance = senderBalance;
-      this.senderKeypair = senderKeypair;
-  
-      if (senderBalance <= 0) {
-        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-      }
-  
-      await this.sendToKoynlabsWallet(senderKeypair, senderBalance);
-  
-      const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
-      console.log('Updated sender balance:', updatedBalance);
-      this.senderBalance = updatedBalance;
-  
-      const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
-      const fileContent = await fs.readFile(filePath, 'utf8');
-      const newWallets = JSON.parse(fileContent);
-      console.log(newWallets);
-  
-      const amountPerWallet = Math.floor(updatedBalance / newWallets.length);
-  
-      const dropList = newWallets.map(wallet => ({
-        walletAddress: wallet.publicKey,
-        numLamports: amountPerWallet,
-      }));
-  
-      const transactionList = this.generateTransactions(NUM_DROPS_PER_TX, dropList, senderKeypair.publicKey);
-      const txResults = await this.executeTransactions(SOLANA_CONNECTION, transactionList, senderKeypair);
-  
-      console.log(txResults);
-  
-      const allSuccessful = txResults.every(result => result.status === 'fulfilled');
-  
-      if (allSuccessful) {
-        console.log('Airdrop completed successfully');
-        await userDocRef.update({ distributeSolana: true });
-        if (!userData.instancesCreated) {
-          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
-          const message = MESSAGES.DEPLOYMENT;
-          if (this.shouldSendMessage(chatId, message)) {
-            await this.telegramNotifier.sendTelegramMessage(chatId, message);
-          }
-        }
-      } else {
-        console.error('Some transactions failed:', txResults);
-        throw new Error('Bulk transactions failed');
-      }
-    } catch (error) {
-      console.error('Error during airdrop:', error);
-      if (error instanceof InsufficientBalanceError) {
-        console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
-        if (this.shouldSendMessage(chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(chatId, message);
-        }
-      } else {
-        console.log(error.message);
-      }
-    }
-  }
-  
-
-  generateTransactions(batchSize, dropList, fromWallet) {
-    const transactions = [];
-    const txInstructions = dropList.map(drop =>
-      SystemProgram.transfer({
-        fromPubkey: fromWallet,
-        toPubkey: new PublicKey(drop.walletAddress),
-        lamports: drop.numLamports,
-      })
-    );
-
-    const numTransactions = Math.ceil(txInstructions.length / batchSize);
-    for (let i = 0; i < numTransactions; i++) {
-      const transaction = new Transaction();
-      const lowerIndex = i * batchSize;
-      const upperIndex = (i + 1) * batchSize;
-      for (let j = lowerIndex; j < upperIndex; j++) {
-        if (txInstructions[j]) transaction.add(txInstructions[j]);
-      }
-      transactions.push(transaction);
-    }
-    return transactions;
-  }
-
-  async executeTransactions(solanaConnection, transactionList, payer) {
-    const results = [];
-    const staggeredTransactions = transactionList.map((transaction, i) => {
-      return new Promise((resolve) => {
-        setTimeout(async () => {
-          console.log(`Requesting Transaction ${i + 1}/${transactionList.length}`);
-          const { blockhash } = await solanaConnection.getLatestBlockhash();
-          transaction.recentBlockhash = blockhash;
-          const signature = await sendAndConfirmTransaction(solanaConnection, transaction, [payer]);
-          resolve({ status: 'fulfilled', signature });
-        }, i * TX_INTERVAL);
-      });
-    });
-
-    results.push(...await Promise.allSettled(staggeredTransactions));
-    return results;
-  }
-
-  async sendToKoynlabsWallet(senderKeypair, senderBalance) {
-    const currentBalance = Math.floor(senderBalance * 0.25);
-
-    if (currentBalance <= 0) {
-      throw new Error('No remaining balance to send to KOYNLABS_WALLET');
-    }
-
-    const estimatedFee = await this.getEstimatedFee(senderKeypair);
-    const koynlabsTransaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: senderKeypair.publicKey,
-        toPubkey: new PublicKey(KOYNLABS_WALLET),
-        lamports: currentBalance - estimatedFee
-      })
-    );
-
-    koynlabsTransaction.feePayer = senderKeypair.publicKey;
-    koynlabsTransaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
-    koynlabsTransaction.sign(senderKeypair);
-    await sendAndConfirmTransaction(this.connection, koynlabsTransaction, [senderKeypair]);
-  }
-
-  async getEstimatedFee(senderKeypair) {
-    const { blockhash } = await this.connection.getLatestBlockhash();
-    const message = new Transaction({
-      recentBlockhash: blockhash,
-      feePayer: senderKeypair.publicKey
-    }).add(
-      SystemProgram.transfer({
-        fromPubkey: senderKeypair.publicKey,
-        toPubkey: senderKeypair.publicKey, // Dummy transfer to self
-        lamports: 1
-      })
-    ).compileMessage();
-    const { value } = await this.connection.getFeeForMessage(message);
-    return value;
   }
 }
 
