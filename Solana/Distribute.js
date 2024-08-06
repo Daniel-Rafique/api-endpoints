@@ -4,11 +4,10 @@ const path = require('path');
 const bs58 = require('bs58');
 const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
-const { fileURLToPath } = require('url');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const TX_INTERVAL = 1000;
-const ENV_PATH = process.env.ENV;
+const ENV_PATH = process.env.ENV; // Ensure this is set to 'devnet-api'
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
 class InsufficientBalanceError extends Error {
@@ -36,19 +35,18 @@ class Distribute {
       }
 
       const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
-      console.log(filePath)
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
 
-      const remainingBalance = senderBalance;
-      const amountPerWallet = Math.floor(remainingBalance / newWallets.length);
+      const remainingBalance = senderBalance; // Use the entire balance left in the sender's wallet
+      const amountPerWallet = Math.floor(remainingBalance / newWallets.length); // Distribute the entire remaining balance equally
 
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
         numLamports: amountPerWallet,
       }));
 
-      const transactionList = this.generateTransactions(4, dropList, senderKeypair.publicKey); // Using batch size of 10
+      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
       const txResults = await this.executeTransactions(transactionList, senderKeypair);
 
       return txResults;
@@ -66,7 +64,7 @@ class Distribute {
     }
   }
 
-  generateTransactions(batchSize, dropList, fromWallet) {
+  generateTransactions(dropList, fromWallet) {
     const transactions = [];
     const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
@@ -76,6 +74,7 @@ class Distribute {
       })
     );
 
+    const batchSize = Math.ceil(txInstructions.length / dropList.length);
     const numTransactions = Math.ceil(txInstructions.length / batchSize);
     for (let i = 0; i < numTransactions; i++) {
       const transaction = new Transaction();
@@ -112,7 +111,7 @@ class Distribute {
   }
 
   shouldSendMessage(chatId, message) {
-    const cacheKey = `${chatId}-${message}`;
+    const cacheKey = chatId;
     const currentTime = Date.now();
     const cacheDuration = 60 * 1000; // 1 minute
 
