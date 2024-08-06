@@ -1,14 +1,18 @@
+require('dotenv').config();
 const { Queue, Worker } = require('bullmq');
 const DataManager = require('../database');
 const WalletManager = require('../WalletManager');
 const InstanceInitializer = require('../InstanceInitializer');
 const Solana = require('../Solana');
+const ENV_PATH = process.env.ENV_PATH;
 
 class WalletProcessor {
   constructor() {
     this.walletManager = new WalletManager();
-    // Prepare the directories for initialization
-    this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
+    // Define absolute paths
+    const basePath = `/root/${ENV_PATH}/marketMaker`;
+    const instancePath = `/root/${ENV_PATH}/instances`;
+    this.instanceInitializer = new InstanceInitializer(basePath, instancePath);
     this.dataManager = new DataManager();
     this.solana = new Solana();
 

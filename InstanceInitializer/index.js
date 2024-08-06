@@ -7,12 +7,11 @@ const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
-const ENV_PATH = process.env.ENV_PATH; // Ensure this is defined
 
 class InstanceInitializer {
   constructor(basePath, instancePath) {
-    this.basePath = basePath; // ./marketMaker
-    this.instancePath = instancePath; // ./instances
+    this.basePath = basePath; // Path to the marketMaker directory
+    this.instancePath = instancePath; // Path to the instances directory
     this.dataManager = new DataManager();
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
@@ -22,7 +21,6 @@ class InstanceInitializer {
     });
   }
 
-  // Function to initialize a market maker instance
   async initializeMarketMakerInstance(chatId) {
     try {
       const userData = await this.dataManager.getCollection(chatId);
@@ -32,25 +30,19 @@ class InstanceInitializer {
         fs.mkdirSync(userDir, { recursive: true });
       }
 
-      // Copy necessary files from marketMaker to the user directory
       this.copyRecursiveSync(this.basePath, userDir);
 
-      // Create the .env file with the specific environment variables
       const envFilePath = path.join(userDir, '.env');
       const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
       fs.writeFileSync(envFilePath, envContent);
 
-      // Ensure the Dockerfile is in the correct location
       this.ensureDockerfile(userDir);
-
-      // Build and run the Docker container
       await this.buildAndRunDockerContainer(chatId, userDir);
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
     }
   }
 
-  // Function to ensure Dockerfile is in the correct location
   ensureDockerfile(dest) {
     const dockerfilePath = path.join(this.basePath, 'Dockerfile');
     const destDockerfilePath = path.join(dest, 'Dockerfile');
@@ -59,7 +51,6 @@ class InstanceInitializer {
     }
   }
 
-  // Function to recursively copy files and directories
   copyRecursiveSync(src, dest) {
     const exists = fs.existsSync(src);
     const stats = exists && fs.statSync(src);
@@ -76,7 +67,6 @@ class InstanceInitializer {
     }
   }
 
-  // Function to build and run Docker container
   async buildAndRunDockerContainer(chatId, userDir) {
     const imageName = `koynlabs-${chatId}`;
     const containerName = `koynlabs-instance-${chatId}`;
@@ -86,12 +76,11 @@ class InstanceInitializer {
       await this.runCommand(buildCommand);
       console.log(`Docker image ${imageName} built successfully`);
 
-      // Create and start the Docker container
       const container = await this.docker.createContainer({
         Image: imageName,
         name: containerName,
         HostConfig: {
-          Binds: [`${userDir}:/app`], // Mount the user directory inside the container
+          Binds: [`${userDir}:/app`],
           PortBindings: {
             '443/tcp': [
               {
@@ -118,7 +107,6 @@ class InstanceInitializer {
     }
   }
 
-  // Function to run shell commands
   runCommand(command) {
     return new Promise((resolve, reject) => {
       exec(command, (error, stdout, stderr) => {
