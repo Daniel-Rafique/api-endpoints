@@ -99,7 +99,8 @@ class InstanceInitializer {
       console.log(`Docker container ${containerName} started successfully`);
       const userData = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
       await userData.update({
-        instancesCreated: true
+        instancesCreated: true,
+        distributeSolana: false
       });
 
     } catch (error) {

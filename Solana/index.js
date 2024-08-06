@@ -121,11 +121,12 @@ class Solana {
         await userDocRef.update({
           distributeSolana: true,
         });
-
-        this.instanceInitializer.initializeMarketMakerInstance(chatId);
-        const message = MESSAGES.DEPLOYMENT;
-        if (this.shouldSendMessage(chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        if(!userDocRef.instancesCreated) {
+          this.instanceInitializer.initializeMarketMakerInstance(chatId);
+          const message = MESSAGES.DEPLOYMENT;
+          if (this.shouldSendMessage(chatId, message)) {
+            await this.telegramNotifier.sendTelegramMessage(chatId, message);
+          }
         }
       } else {
         console.error('Some transactions failed:', txResults);
