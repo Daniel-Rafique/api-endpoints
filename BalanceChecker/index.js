@@ -40,7 +40,7 @@ class BalanceChecker {
     this.walletProcessor = new WalletProcessor();
     this.chatId = chatId;
     this.contractAddress = contractAddress;
-    this.dataManager = new DataManager(chatId);
+    this.dataManager = new DataManager(chatId.toString());
 
     this.messageQueue = [];
     this.messageCache = {};
