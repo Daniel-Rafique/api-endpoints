@@ -62,6 +62,7 @@ class Solana {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Sender balance:', senderBalance);
+      this.senderBalance = senderBalance;
 
       if (senderBalance <= 0) {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
@@ -106,7 +107,8 @@ class Solana {
         // Handle insufficient balance error specifically
         console.log('Wallet is empty:', error.message)
         // You can notify the user or log it for further analysis
-        this.telegramNotifier.sendTelegramMessage(chatId, MESSAGES.INSUFFICIENT_SOL)
+        const message = MESSAGES.INSUFFICIENT_SOL( this.senderBalance);
+        this.telegramNotifier.sendTelegramMessage(chatId, message)
 
       } else {
         console.log( error.message)
