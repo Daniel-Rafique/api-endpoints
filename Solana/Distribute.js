@@ -6,6 +6,7 @@ const { MESSAGES } = require('../constants'); // Ensure the path is correct
 const Telegram = require('../Telegram');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TX_INTERVAL = 1000;
 const ENV_PATH = process.env.ENV;
 
