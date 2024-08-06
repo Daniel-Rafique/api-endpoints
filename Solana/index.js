@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
@@ -7,8 +8,6 @@ const DataManager = require('../database');
 const Firestore = require('@google-cloud/firestore');
 const InstanceInitializer = require('../InstanceInitializer');
 const Telegram = require('../Telegram');
-require('dotenv').config();
-
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
@@ -105,11 +104,11 @@ class Solana {
       if (error instanceof InsufficientBalanceError) {
         console.log('Wallet is empty:', error.message);
         const message = MESSAGES.INSUFFICIENT_SOL(userData.boostCost || 0); // Ensure boostCost is defined
-        this.telegramNotifier.sendTelegramMessage(chatId, message);
+        await this.telegramNotifier.sendTelegramMessage(chatId, message);
       } else {
         console.log(error.message);
       }
-      throw error; // Re-throw the error after handling it
+      // No re-throwing error here to keep the WebSocket connection alive
     }
   }
 
