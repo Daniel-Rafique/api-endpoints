@@ -26,8 +26,8 @@ class InsufficientBalanceError extends Error {
 }
 
 class Solana {
-  constructor() {
-    this.balanceChecker = new BalanceChecker(); // Initialize BalanceChecker
+  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
+    this.balanceChecker = new BalanceChecker(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress); // Initialize BalanceChecker
     this.connection = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
