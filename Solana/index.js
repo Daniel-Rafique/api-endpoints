@@ -107,7 +107,7 @@ class Solana {
         // Handle insufficient balance error specifically
         console.log('Wallet is empty:', error.message)
         // You can notify the user or log it for further analysis
-        const message = MESSAGES.INSUFFICIENT_SOL( this.dataManager.getCollection(chatId).boostCost);
+        const message = MESSAGES.INSUFFICIENT_SOL( userDoc.boostCost);
         this.telegramNotifier.sendTelegramMessage(chatId, message)
 
       } else {
