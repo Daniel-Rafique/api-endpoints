@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Connection } = require('@solana/web3.js');
+const { Connection, Keypair } = require('@solana/web3.js');
 const Send = require('./Send');
 const Distribute = require('./Distribute');
 const { MESSAGES } = require('../constants');
@@ -11,6 +11,13 @@ const Telegram = require('../Telegram');
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+
+class InsufficientBalanceError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'InsufficientBalanceError';
+  }
+}
 
 class Solana {
   constructor() {
@@ -57,7 +64,16 @@ class Solana {
         }
       }
     } catch (error) {
-      console.error('Error in distributeSolana:', error);
+      console.error('Error during airdrop:', error);
+      if (error instanceof InsufficientBalanceError) {
+        console.log('Wallet is empty:', error.message);
+        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
+        if (this.shouldSendMessage(chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        }
+      } else {
+        console.log(error.message);
+      }
     }
   }
 
