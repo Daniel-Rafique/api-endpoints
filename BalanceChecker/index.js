@@ -48,11 +48,17 @@ class BalanceChecker {
     this.ws = null;
     this.pingInterval = null;
     this.reconnectInterval = null;
+    this.listenerActive = true; // Flag to control the listener
     this.listenForTransactions();
   }
 
 
   listenForTransactions() {
+    const userData = this.dataManager.getUserData();
+    if (!this.listenerActive || userData.walletsCreated) {
+      console.log('Transaction listener is inactive or wallets are already created.');
+      return;
+    }
     const endpoint = getNextWebSocketEndpoint();
     this.ws = new WebSocket(endpoint);
 
@@ -105,6 +111,22 @@ class BalanceChecker {
         }, 1000); // Adjust the interval as needed
       }
     });
+  }
+
+  enableListener() {
+    this.listenerActive = true;
+    if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+      this.listenForTransactions();
+    }
+  }
+
+  disableListener() {
+    this.listenerActive = false;
+    if (this.ws) {
+      this.ws.close();
+    }
+    clearInterval(this.pingInterval);
+    clearInterval(this.reconnectInterval);
   }
 
   switchWebSocketEndpoint() {
@@ -186,7 +208,7 @@ class BalanceChecker {
   
       const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
   
-      if (amountReceived <= 0 && userData.walletsCreated === false) {
+      if (amountReceived <= 0) {
         console.error('Invalid transaction amount');
         return;
       }
