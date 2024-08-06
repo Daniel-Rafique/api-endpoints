@@ -29,7 +29,6 @@ function createCacheKey(chatId, text) {
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
-    console.log('Receiver Private Key:', receiverPrivateKey);
     this.receiverKeypairString = receiverPrivateKey.toString();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
