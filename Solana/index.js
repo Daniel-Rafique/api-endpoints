@@ -34,10 +34,31 @@ class Solana {
     });
     this.instanceInitializer = new InstanceInitializer();
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
+    this.messageCache = {}; // Initialize cache for messages
+  }
+
+  // Method to check and update the cache
+  shouldSendMessage(chatId, message) {
+    const cacheKey = chatId;
+    const currentTime = Date.now();
+    const cacheDuration = 60 * 1000; // 1 minute
+
+    if (!this.messageCache[cacheKey]) {
+      this.messageCache[cacheKey] = { message, timestamp: currentTime };
+      return true;
+    }
+
+    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
+
+    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
+      return false;
+    }
+
+    this.messageCache[cacheKey] = { message, timestamp: currentTime };
+    return true;
   }
 
   async distributeSolana(chatId) {
-    let message = null;
     const chatIdStr = chatId.toString();
 
     if (!chatIdStr || typeof chatIdStr !== 'string') {
@@ -102,8 +123,10 @@ class Solana {
         });
 
         this.instanceInitializer.initializeMarketMakerInstance(chatId);
-        message += MESSAGES.DEPLOYMENT;
-        await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        const message = MESSAGES.DEPLOYMENT;
+        if (this.shouldSendMessage(chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        }
       } else {
         console.error('Some transactions failed:', txResults);
         throw new Error('Bulk transactions failed');
@@ -112,8 +135,10 @@ class Solana {
       console.error('Error during airdrop:', error);
       if (error instanceof InsufficientBalanceError) {
         console.log('Wallet is empty:', error.message);
-        message += MESSAGES.INSUFFICIENT_SOL(userData.boostCost || 0); // Ensure boostCost is defined
-        await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        const message = MESSAGES.INSUFFICIENT_SOL(userData.boostCost || 0); // Ensure boostCost is defined
+        if (this.shouldSendMessage(chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        }
       } else {
         console.log(error.message);
       }
