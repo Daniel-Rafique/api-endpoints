@@ -27,7 +27,7 @@ class Distribute {
 
   async distributeSolana(chatId, senderPrivateKey, userData) {
     try {
-      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey.toString()));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
       
       if (senderBalance <= 0) {
