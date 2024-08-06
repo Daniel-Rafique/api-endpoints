@@ -36,6 +36,7 @@ class BalanceChecker {
     this.contractAddress = contractAddress;
 
     this.messageQueue = [];
+    this.messageCache = {};
     this.ws = null;
     this.pingInterval = null;
     this.reconnectInterval = null;
@@ -204,10 +205,10 @@ class BalanceChecker {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         }
-        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        await this.sendTelegramMessage(this.chatId, message);
       } else {
         console.log(`Transaction is valid. Amount received: ${amountReceived / 1_000_000_000} SOL & ${TOKEN} Balance is ${tokenBalance}`);
-        await this.telegramNotifier.sendTelegramMessage(
+        await this.sendTelegramMessage(
           this.chatId,
           `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
         );
@@ -247,7 +248,7 @@ class BalanceChecker {
     if (tokenBalance < this.minimumTokenBalance) {
       await this.returnSol(senderPublicKeyString, amountReceived);
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-      await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+      await this.sendTelegramMessage(this.chatId, message);
     }
 
     return tokenBalance;
@@ -282,7 +283,7 @@ class BalanceChecker {
         try {
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
-          await this.telegramNotifier.sendTelegramMessage(
+          await this.sendTelegramMessage(
             this.chatId,
             `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. TX signature: ${signature}`
           );
@@ -300,6 +301,15 @@ class BalanceChecker {
     }
   }
 
+  async sendTelegramMessage(chatId, text) {
+    const cacheKey = `${chatId}`;
+    if (this.messageCache[cacheKey] !== text) {
+      await this.telegramNotifier.sendTelegramMessage(chatId, text);
+      this.messageCache[cacheKey] = text;
+    } else {
+      console.log('Duplicate message detected, skipping send.');
+    }
+  }
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
