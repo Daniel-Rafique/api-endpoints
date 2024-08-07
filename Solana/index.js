@@ -50,7 +50,7 @@ class Solana {
         const distributeInstance = new Distribute(chatId);
         const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
         console.log('Distribution results:', results);
-        const message = MESSAGES.DEPLOYMENT(userData.boostCost || 0);
+        const message = MESSAGES.DEPLOYMENT(updatedBalance);
         if (this.shouldSendMessage(chatId, message)) { // Call shouldSendMessage from solana instance
           await this.telegramNotifier.sendTelegramMessage(chatId, message);
         }
