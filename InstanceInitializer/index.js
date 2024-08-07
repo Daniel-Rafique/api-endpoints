@@ -74,13 +74,19 @@ class InstanceInitializer {
 
   async startMarketMakerInstance(chatId, userDir) {
     const instanceName = `koynlabs-instance-${chatId}`;
-
-    pm2.connect(err => {
-      if (err) {
-        console.error('Failed to connect to PM2:', err);
-        process.exit(2);
-      }
-
+  
+    const connectToPM2 = (callback) => {
+      pm2.connect((err) => {
+        if (err) {
+          console.error('Failed to connect to PM2:', err);
+          setTimeout(() => connectToPM2(callback), 1000); // Retry after 1 second
+          return;
+        }
+        callback();
+      });
+    };
+  
+    connectToPM2(() => {
       pm2.start({
         script: path.join(userDir, 'dist', 'index.js'),
         name: instanceName,
@@ -90,24 +96,24 @@ class InstanceInitializer {
           CHAT_ID: chatId,
           // Add other environment variables here if needed
         }
-      }, (err, apps) => {
+      }, (err) => {
         if (err) {
           console.error(`Failed to start market maker instance ${instanceName}:`, err);
           pm2.disconnect();
           return;
         }
-
+  
         console.log(`Market maker instance ${instanceName} started successfully`);
-
+  
         exec('pm2 save', (err, stdout, stderr) => {
           if (err) {
             console.error('Failed to save PM2 process list:', stderr);
             pm2.disconnect();
             return;
           }
-
+  
           console.log('PM2 process list saved successfully');
-
+  
           exec('pm2 startup', (err, stdout, stderr) => {
             if (err) {
               console.error('Failed to generate PM2 startup script:', stderr);
@@ -115,7 +121,7 @@ class InstanceInitializer {
               console.log('PM2 startup script generated successfully');
             }
             pm2.disconnect();
-
+  
             // Update Firestore.
             this.updateFirestoreFlag(chatId);
           });
@@ -123,6 +129,7 @@ class InstanceInitializer {
       });
     });
   }
+  
 
   async updateFirestoreFlag(chatId) {
     try {
