@@ -27,7 +27,9 @@ class InstanceInitializer {
       const userData = await this.dataManager.getCollection(chatId);
       const { contractAddress, batchSize } = userData;
       const userDir = path.join(this.instancePath, chatId.toString());
+      console.log('User directory', userDir)
       if (!fs.existsSync(userDir)) {
+        console.log('!User directory', userDir)
         fs.mkdirSync(userDir, { recursive: true });
       }
 
@@ -36,6 +38,7 @@ class InstanceInitializer {
       const envFilePath = path.join(userDir, '.env');
       const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
       fs.writeFileSync(envFilePath, envContent);
+      console.log('Env path', envFilePath)
 
       await this.buildAndRunDockerContainer(chatId, userDir);
     } catch (error) {
