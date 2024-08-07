@@ -5,7 +5,10 @@ const os = require('os');
 const bs58 = require('bs58');
 const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
+const { Firestore } = require('@google-cloud/firestore');
 
+const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const TX_INTERVAL = 1000;
 const ENV_PATH = process.env.ENV_PATH;
@@ -24,10 +27,15 @@ class Distribute {
     this.chatId = chatId;
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
     this.messageCache = {}; // Initialize cache for messages
+    this.firestore = new Firestore({
+      projectId: 'koynlabs-2f749',
+      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'), // Corrected path
+    });
   }
 
   async distributeSolana(senderPrivateKey, chatId, userData) {
     try {
+      const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
@@ -51,10 +59,10 @@ class Distribute {
         walletAddress: wallet.publicKey,
         numLamports: amountPerWallet,
       }));
-
+      await userDocRef.update({ distributeSolana: true });
       const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
       const txResults = await this.executeTransactions(transactionList, senderKeypair);
-
+      await userDocRef.update({ distributeSolana: false });
       return txResults;
     } catch (error) {
       console.error('Error during distribution:', error);

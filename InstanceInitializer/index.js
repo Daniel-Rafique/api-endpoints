@@ -134,9 +134,8 @@ class InstanceInitializer {
   async updateFirestoreFlag(chatId) {
     try {
       const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-      await userDocRef.update({ instancesCreated: true, distributeSolana: true });
+      await userDocRef.update({ instancesCreated: true});
       await this.solana.distributeSolana(chatId)
-      await userDocRef.update({ distributeSolana: false });
       console.log(`Firestore flag updated for chatId: ${chatId}`);
     } catch (error) {
       console.error('Failed to update Firestore flag:', error);
