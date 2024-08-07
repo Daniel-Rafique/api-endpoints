@@ -11,14 +11,14 @@ const ENV_PATH = process.env.ENV_PATH;
 
 class InstanceInitializer {
   constructor() {
-    this.basePath = path.resolve(__dirname, '../marketMaker'); // Path to the marketMaker directory
-    this.instancePath = path.resolve(__dirname, '../instances'); // Path to the instances directory
+    this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker'); // Correct base path
+    this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances'); // Correct instance path
     this.dataManager = new DataManager();
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: '.config/firebaseServiceAccountKey.json',
+      keyFilename: path.join(os.homedir(), '.config/firebaseServiceAccountKey.json'),
     });
   }
 
