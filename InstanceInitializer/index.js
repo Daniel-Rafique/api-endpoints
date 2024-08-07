@@ -19,7 +19,7 @@ class InstanceInitializer {
 
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename:'../.config/firebaseServiceAccountKey.json',
+      keyFilename:`${ENV_PATH}.config/firebaseServiceAccountKey.json`,
     });
   }
 
