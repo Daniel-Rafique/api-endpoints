@@ -7,7 +7,7 @@ const { exec } = require('child_process');
 const pm2 = require('pm2');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
-const Solana = require('../Solana')
+const Solana = require('../Solana/index')
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
