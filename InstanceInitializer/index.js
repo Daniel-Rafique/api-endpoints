@@ -1,5 +1,6 @@
 require('dotenv').config();
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { exec } = require('child_process');
 const Docker = require('dockerode');
