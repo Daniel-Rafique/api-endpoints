@@ -55,8 +55,8 @@ class BalanceChecker {
 
   listenForTransactions() {
     const userData = this.dataManager.getCollection(this.chatId);
-    if (!this.listenerActive || userData.walletsCreated) {
-      console.log('Transaction listener is inactive or wallets are already created.');
+    if (!this.listenerActive || userData.distributeSolana) {
+      console.log('Transaction listener is inactive or solana being distributed.');
       return;
     }
     const endpoint = getNextWebSocketEndpoint();
