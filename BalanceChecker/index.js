@@ -50,7 +50,21 @@ class BalanceChecker {
     this.reconnectInterval = null;
     this.listenerActive = true; // Flag to control the listener
     this.messageCache = {};
+
+    // Fetch and set the distributeSolana flag
+    this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
+    this.distributeSolana = this.getDistributeSolanaFlagFromDatabase(chatId);
     this.listenForTransactions();
+  }
+
+  async getDistributeSolanaFlagFromDatabase(chatId) {
+    try {
+      const userData = await this.dataManager.getCollection(chatId);
+      return userData.distributeSolana ? true : false;
+    } catch (error) {
+      console.error('Failed to fetch distributeSolana flag from database:', error);
+      return false; // Default to false if there's an error
+    }
   }
 
   listenForTransactions() {
@@ -69,7 +83,7 @@ class BalanceChecker {
         id: 1,
         method: "logsSubscribe",
         params: [{
-          mentions: [this.receiverKeypair.publicKey.toString()]
+          mentions: [this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString()]
         }]
       });
 
@@ -175,85 +189,85 @@ class BalanceChecker {
       this.sendMessage(message);
     }
   }
-  
+
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
     const cacheDuration = 60 * 10000; // 1 minute
-  
+
     console.log(`Checking message cache for chatId: ${chatId}`);
     console.log(`Current message: ${message}`);
     console.log(`Message cache:`, this.messageCache);
-  
+
     if (!this.messageCache[cacheKey]) {
       console.log('No cached message found, sending message.');
       this.messageCache[cacheKey] = { message, timestamp: currentTime };
       return true;
     }
-  
+
     const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
-  
+
     if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
       console.log('Duplicate message detected, not sending.');
       return false;
     }
-  
+
     console.log('Message cache expired or different message, sending message.');
     this.messageCache[cacheKey] = { message, timestamp: currentTime };
     return true;
   }
-  
+
 
   async handleTransaction(signature) {
     try {
       const userData = this.dataManager;
       console.log('Handling transaction:', signature);
-  
+
       const transaction = await this.connection.getTransaction(signature, {
         maxSupportedTransactionVersion: 0,
       });
-  
+
       if (!transaction) {
         console.error('Failed to retrieve transaction');
         return;
       }
-  
+
       console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
-  
+
       const senderPublicKey = transaction.transaction.message.accountKeys.find(
         key => !key.equals(this.receiverKeypair.publicKey)
       );
-  
+
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
         return;
       }
-  
+
       const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
         key => key.equals(this.receiverKeypair.publicKey)
       );
-  
+
       const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
-  
+
       if (amountReceived <= 0) {
         console.error('Invalid transaction amount');
         return;
       }
-  
+
       const senderPublicKeyString = new PublicKey(senderPublicKey);
-  
+
       const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
       const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
-  
+
       console.log('Token balance:', tokenBalance);
       console.log('Minimum token balance:', this.minimumTokenBalance);
       console.log('Sol balance:', solBalance);
       console.log('Minimum Sol balance:', this.minimumSolBalance * 1_000_000_000);
-  
+
       if (solBalance < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
-  
+
         let message = '';
         if (solBalance < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
@@ -280,7 +294,7 @@ class BalanceChecker {
       console.error('Error handling transaction:', error);
     }
   }
-  
+
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
 
@@ -368,7 +382,7 @@ class BalanceChecker {
   async sendTelegramMessage(chatId, text) {
     const cacheKey = createCacheKey(chatId, text);
     const currentTime = Date.now();
-  
+
     // Check if the same message was sent in the last 60 seconds
     if (this.messageCache[cacheKey] && (currentTime - this.messageCache[cacheKey].timestamp < 300000)) {
       console.log('Duplicate message detected, skipping send.');
