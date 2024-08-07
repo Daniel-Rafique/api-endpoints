@@ -11,7 +11,7 @@ const InstanceInitializer = require('../InstanceInitializer');
 const Telegram = require('../Telegram');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
-const ENV_PATH = process.env.ENV_PATH;
+const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
@@ -28,7 +28,7 @@ class Solana {
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(), ENV_PATH, '.config/firebaseServiceAccountKey.json'),
+      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
     this.instanceInitializer = new InstanceInitializer();
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
