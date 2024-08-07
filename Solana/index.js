@@ -52,7 +52,7 @@ class Solana {
         console.log('Distribution results:', results);
         const message = MESSAGES.DEPLOYMENT(userData.boostCost || 0);
         if (this.shouldSendMessage(chatId, message)) { // Call shouldSendMessage from solana instance
-          await telegramNotifier.sendTelegramMessage(chatId, message);
+          await this.telegramNotifier.sendTelegramMessage(chatId, message);
         }
       } else {
         console.log('No balance left to distribute.');
