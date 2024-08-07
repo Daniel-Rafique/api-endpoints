@@ -50,6 +50,10 @@ class Solana {
         const distributeInstance = new Distribute(chatId);
         const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
         console.log('Distribution results:', results);
+        const message = MESSAGES.DEPLOYMENT(userData.boostCost || 0);
+        if (this.shouldSendMessage(chatId, message)) { // Call shouldSendMessage from solana instance
+          await telegramNotifier.sendTelegramMessage(chatId, message);
+        }
       } else {
         console.log('No balance left to distribute.');
         const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());

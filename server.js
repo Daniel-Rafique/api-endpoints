@@ -24,7 +24,6 @@ const instanceInitializer = new InstanceInitializer();
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
-const { MESSAGES } = require('./constants');
 // Load environment variables for SSL
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
 const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
@@ -40,7 +39,6 @@ app.use(bodyParser.json());
 
 // Secret key (store this securely, e.g., in environment variables)
 const SECRET_KEY = process.env.SECRET_KEY;
-let tokenMintAddress;
 
 // Function to generate the hash
 function generateHash(chatId, timestamp) {
@@ -112,10 +110,6 @@ app.post('/api/create', async (req, res) => {
     } else if (userData?.instancesCreated) {
       await solana.distributeSolana(chatId);
       res.status(200).send('Distributing SOL...');
-      const message = MESSAGES.DEPLOYMENT(userData.boostCost || 0);
-      if (solana.shouldSendMessage(chatId, message)) { // Call shouldSendMessage from solana instance
-        await telegramNotifier.sendTelegramMessage(chatId, message);
-      }
     }
   } catch (error) {
     console.error('Error processing request:', error);
