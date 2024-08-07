@@ -51,11 +51,16 @@ class InstanceInitializer {
     const exists = fs.existsSync(src);
     const stats = exists && fs.statSync(src);
     const isDirectory = exists && stats.isDirectory();
+    console.log('copying', exists, stats, isDirectory)
+
     if (isDirectory) {
+      console.log('Checking..', exists, stats, isDirectory)
       if (!fs.existsSync(dest)) {
+        console.log('More Checking..', exists, stats, isDirectory)
         fs.mkdirSync(dest);
       }
       fs.readdirSync(src).forEach((childItemName) => {
+        console.log('Fore each..',childItemName)
         this.copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
       });
     } else {
@@ -67,7 +72,7 @@ class InstanceInitializer {
     const imageName = `koynlabs-${chatId}`;
     const containerName = `koynlabs-instance-${chatId}`;
     const buildCommand = `docker build -t ${imageName} ${userDir}`;
-
+    console.log('Building', imageName, containerName, buildCommand)
     try {
       await this.runCommand(buildCommand);
       console.log(`Docker image ${imageName} built successfully`);
