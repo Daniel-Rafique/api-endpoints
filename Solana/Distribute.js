@@ -34,7 +34,7 @@ class Distribute {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
 
-      const filePath = path.resolve(__dirname, `./instances/${chatId}/wallets.json`);
+      const filePath = path.resolve(__dirname, `../instances/${chatId}/wallets.json`);
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
 

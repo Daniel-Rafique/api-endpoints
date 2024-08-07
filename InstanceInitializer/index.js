@@ -11,8 +11,8 @@ const ENV_PATH = process.env.ENV_PATH;
 
 class InstanceInitializer {
   constructor() {
-    this.basePath = path.resolve(__dirname, 'marketMaker'); // Path to the marketMaker directory
-    this.instancePath = path.resolve(__dirname, 'instances'); // Path to the instances directory
+    this.basePath = path.resolve(__dirname, '../marketMaker'); // Path to the marketMaker directory
+    this.instancePath = path.resolve(__dirname, '../instances'); // Path to the instances directory
     this.dataManager = new DataManager();
     this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
 

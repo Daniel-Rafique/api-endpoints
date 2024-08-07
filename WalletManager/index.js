@@ -60,7 +60,7 @@ class WalletManager {
 
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
-            const filePath = path.resolve(__dirname, `./instances/${chatIdStr}wallets.json`);
+            const filePath = path.resolve(__dirname, `../instances/${chatIdStr}wallets.json`);
             const walletData = newWallets.map(wallet => ({
                 publicKey: wallet.publicKey,
                 secretKey: wallet.privateKey
