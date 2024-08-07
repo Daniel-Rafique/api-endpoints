@@ -96,18 +96,18 @@ class InstanceInitializer {
 
         console.log(`Market maker instance ${instanceName} started successfully`);
 
-        pm2.save(err => {
+        exec('pm2 save', (err, stdout, stderr) => {
           if (err) {
-            console.error('Failed to save PM2 process list:', err);
+            console.error('Failed to save PM2 process list:', stderr);
             pm2.disconnect();
             return;
           }
 
           console.log('PM2 process list saved successfully');
 
-          pm2.startup(err => {
+          exec('pm2 startup', (err, stdout, stderr) => {
             if (err) {
-              console.error('Failed to generate PM2 startup script:', err);
+              console.error('Failed to generate PM2 startup script:', stderr);
             } else {
               console.log('PM2 startup script generated successfully');
             }
