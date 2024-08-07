@@ -12,7 +12,12 @@ const WEBSOCKET_ENDPOINTS = [
   process.env.SOLANA_WEBSOCKET_3,
   process.env.SOLANA_WEBSOCKET_4,
 ];
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
+const SOLANA_RPC_ENDPOINTS = [
+  process.env.SOLANA_RPC_ENDPOINT_1,
+  process.env.SOLANA_RPC_ENDPOINT_2,
+  process.env.SOLANA_RPC_ENDPOINT_3,
+  process.env.SOLANA_RPC_ENDPOINT_4
+];
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
@@ -22,23 +27,23 @@ const { MESSAGES } = require('../constants');
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
 let currentEndpointIndex = 0;
+let currentRpcEndpointIndex = 0;
 
-// Load balancer
-function getNextWebSocketEndpoint() {
+// Load balancers
+function getWebSocketEndpoint() {
   currentEndpointIndex = (currentEndpointIndex + 1) % WEBSOCKET_ENDPOINTS.length;
   return WEBSOCKET_ENDPOINTS[currentEndpointIndex];
 }
 
-// Cache management
-function createCacheKey(chatId, text) {
-  const hash = crypto.createHash('md5').update(text).digest('hex');
-  return `${chatId}-${hash}`;
+function getNextRpcEndpoint() {
+  currentRpcEndpointIndex = (currentRpcEndpointIndex + 1) % SOLANA_RPC_ENDPOINTS.length;
+  return SOLANA_RPC_ENDPOINTS[currentRpcEndpointIndex];
 }
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
     this.receiverKeypairString = receiverPrivateKey.toString();
-    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
+    this.connection = new Connection(getNextRpcEndpoint(), 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
@@ -91,7 +96,7 @@ class BalanceChecker {
       console.log('Transaction listener is inactive or wallets are already created.');
       return;
     }
-    const endpoint = getNextWebSocketEndpoint();
+    const endpoint = getWebSocketEndpoint();
     this.ws = new WebSocket(endpoint);
 
     this.ws.on('open', () => {
