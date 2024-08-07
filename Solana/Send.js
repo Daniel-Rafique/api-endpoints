@@ -27,7 +27,7 @@ class Send {
     try {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
-      
+
       if (senderBalance <= 0) {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
@@ -48,7 +48,7 @@ class Send {
       transaction.sign(senderKeypair);
 
       await sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
-      
+
       const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
       return updatedBalance;
     } catch (error) {
@@ -84,7 +84,7 @@ class Send {
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
-    const cacheDuration = 60 * 10000; // 1 minute
+    const cacheDuration = 60 * 10000; // 10 minutes
 
     console.log(`Checking message cache for chatId: ${chatId}`);
     console.log(`Current message: ${message}`);

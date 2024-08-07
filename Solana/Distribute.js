@@ -119,7 +119,7 @@ class Distribute {
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
-    const cacheDuration = 60 * 10000; // 1 minute
+    const cacheDuration = 60 * 10000; // 10 minutes
 
     console.log(`Checking message cache for chatId: ${chatId}`);
     console.log(`Current message: ${message}`);

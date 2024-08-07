@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config()
 const path = require('path');
 const os = require('os');
 const { Connection } = require('@solana/web3.js');
@@ -6,12 +6,11 @@ const Send = require('./Send');
 const Distribute = require('./Distribute');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
-const Firestore = require('@google-cloud/firestore');
+const { Firestore } = require('@google-cloud/firestore');
 const InstanceInitializer = require('../InstanceInitializer');
 const Telegram = require('../Telegram');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
-const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
@@ -28,7 +27,7 @@ class Solana {
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
+      keyFilename: path.join(os.homedir(), FIRESTORE_COLLECTION, '.config/firebaseServiceAccountKey.json'),
     });
     this.instanceInitializer = new InstanceInitializer();
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
@@ -76,7 +75,7 @@ class Solana {
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
-    const cacheDuration = 60 * 1000; // 1 minute
+    const cacheDuration = 60 * 10000; // 10 minutes
 
     console.log(`Checking message cache for chatId: ${chatId}`);
     console.log(`Current message: ${message}`);
