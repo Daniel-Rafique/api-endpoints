@@ -51,7 +51,7 @@ class InstanceInitializer {
 
   async startMarketMakerInstance(chatId, userDir) {
     const instanceName = `koynlabs-instance-${chatId}`;
-    const command = `npm run dist/index.js --prefix ${userDir}`;
+    const command = `npm start --prefix ${userDir}`;
 
     this.runCommand(command).then(() => {
       console.log(`Market maker instance ${instanceName} started successfully`);
