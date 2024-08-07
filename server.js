@@ -106,7 +106,7 @@ app.post('/api/create', async (req, res) => {
             websocket.listenForTransactions(chatId, receiverPublicKey);
             telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
             res.status(200).send('Checking balance...');
-        } else if (userData?.walletsCreated) {
+        } else if (userData?.walletsCreated && !userData?.instancesCreated) {
             await instanceInitializer.initializeMarketMakerInstance(chatId);
             res.status(200).send('Instances created...');
         } else if (userData?.instancesCreated) {
