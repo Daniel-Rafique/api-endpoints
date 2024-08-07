@@ -7,6 +7,7 @@ const { exec } = require('child_process');
 const pm2 = require('pm2');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
+const Solana = require('../Solana')
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
@@ -17,6 +18,7 @@ class InstanceInitializer {
     this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker'); // Correct base path
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances'); // Correct instance path
     this.dataManager = new DataManager();
+    this.solana = new Solana();
 
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -127,6 +129,7 @@ class InstanceInitializer {
     try {
       const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
       await userDocRef.update({ instancesCreated: true });
+      await this.solana.distributeSolana(chatId)
       console.log(`Firestore flag updated for chatId: ${chatId}`);
     } catch (error) {
       console.error('Failed to update Firestore flag:', error);
