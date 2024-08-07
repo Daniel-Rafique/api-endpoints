@@ -42,7 +42,6 @@ class BalanceChecker {
     this.chatId = chatId;
     this.contractAddress = contractAddress;
     this.dataManager = new DataManager(chatId);
-    this.solana = new Solana();
 
     this.messageQueue = [];
     this.ws = null;
