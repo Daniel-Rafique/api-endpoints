@@ -112,8 +112,10 @@ class InstanceInitializer {
     return new Promise((resolve, reject) => {
       exec(command, (error, stdout, stderr) => {
         if (error) {
+          console.log('An error occured', error)
           reject(`Error: ${stderr}`);
         } else {
+          console.log('', stdout)
           resolve(stdout);
         }
       });
