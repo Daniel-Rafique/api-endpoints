@@ -24,7 +24,7 @@ const instanceInitializer = new InstanceInitializer();
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
-const { MESSAGES } = require('../constants');
+const { MESSAGES } = require('./constants');
 // Load environment variables for SSL
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
 const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
