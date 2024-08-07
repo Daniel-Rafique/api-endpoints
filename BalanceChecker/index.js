@@ -13,7 +13,6 @@ const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 const { MESSAGES } = require('../constants');
-const { userInfo } = require('os');
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
@@ -43,6 +42,7 @@ class BalanceChecker {
     this.chatId = chatId;
     this.contractAddress = contractAddress;
     this.dataManager = new DataManager(chatId);
+    this.solana = new Solana();
 
     this.messageQueue = [];
     this.ws = null;
@@ -204,34 +204,6 @@ class BalanceChecker {
     }
   }
 
-  shouldSendMessage(chatId, message) {
-    const cacheKey = chatId;
-    const currentTime = Date.now();
-    const cacheDuration = 60 * 10000; // 1 minute
-
-    console.log(`Checking message cache for chatId: ${chatId}`);
-    console.log(`Current message: ${message}`);
-    console.log(`Message cache:`, this.messageCache);
-
-    if (!this.messageCache[cacheKey]) {
-      console.log('No cached message found, sending message.');
-      this.messageCache[cacheKey] = { message, timestamp: currentTime };
-      return true;
-    }
-
-    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
-
-    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
-      console.log('Duplicate message detected, not sending.');
-      return false;
-    }
-
-    console.log('Message cache expired or different message, sending message.');
-    this.messageCache[cacheKey] = { message, timestamp: currentTime };
-    return true;
-  }
-
-
   async handleTransaction(signature) {
     try {
       const userData = this.dataManager;
@@ -292,7 +264,7 @@ class BalanceChecker {
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         }
         if (this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          await solana.sendTelegramMessage(this.chatId, message);
         }
       } else {
         let message = '';
@@ -393,17 +365,31 @@ class BalanceChecker {
     }
   }
 
-  async sendTelegramMessage(chatId, text) {
-    const cacheKey = createCacheKey(chatId, text);
+  shouldSendMessage(chatId, message) {
+    const cacheKey = chatId;
     const currentTime = Date.now();
+    const cacheDuration = 60 * 10000; // 10 minutes
 
-    // Check if the same message was sent in the last 60 seconds
-    if (this.messageCache[cacheKey] && (currentTime - this.messageCache[cacheKey].timestamp < 300000)) {
-      console.log('Duplicate message detected, skipping send.');
-    } else {
-      await this.telegramNotifier.sendTelegramMessage(chatId, text);
-      this.messageCache[cacheKey] = { timestamp: currentTime };
+    console.log(`Checking message cache for chatId: ${chatId}`);
+    console.log(`Current message: ${message}`);
+    console.log(`Message cache:`, this.messageCache);
+
+    if (!this.messageCache[cacheKey]) {
+      console.log('No cached message found, sending message.');
+      this.messageCache[cacheKey] = { message, timestamp: currentTime };
+      return true;
     }
+
+    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
+
+    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
+      console.log('Duplicate message detected, not sending.');
+      return false;
+    }
+
+    console.log('Message cache expired or different message, sending message.');
+    this.messageCache[cacheKey] = { message, timestamp: currentTime };
+    return true;
   }
 
   async getEstimatedFee() {
