@@ -55,13 +55,6 @@ class Solana {
           throw new Error('User document does not exist');
         }
         await userDocRef.update({ distributeSolana: true });
-        if (!userData.instancesCreated) {
-          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
-          const message = MESSAGES.DEPLOYMENT;
-          if (this.shouldSendMessage(chatId, message)) {
-            await this.telegramNotifier.sendTelegramMessage(chatId, message);
-          }
-        }
       }
     } catch (error) {
       console.error('Error during airdrop:', error);

@@ -112,10 +112,23 @@ class InstanceInitializer {
               console.log('PM2 startup script generated successfully');
             }
             pm2.disconnect();
+
+            // Update Firestore.
+            this.updateFirestoreFlag(chatId);
           });
         });
       });
     });
+  }
+
+  async updateFirestoreFlag(chatId) {
+    try {
+      const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
+      await userDocRef.update({ instancesCreated: true });
+      console.log(`Firestore flag updated for chatId: ${chatId}`);
+    } catch (error) {
+      console.error('Failed to update Firestore flag:', error);
+    }
   }
 
   runCommand(command) {

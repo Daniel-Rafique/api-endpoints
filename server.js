@@ -106,14 +106,14 @@ app.post('/api/create', async (req, res) => {
             websocket.listenForTransactions(chatId, receiverPublicKey);
             telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
             res.status(200).send('Checking balance...');
-        } else if (userData?.walletsCreated && !userData.distributeSolana) {
-            websocket.disableListener(); // Disable the listener before distributing Solana
-            await solana.distributeSolana(chatId);
-            res.status(200).send('Airdropping SOL...');
-            websocket.enableListener(); // Re-enable the listener after distribution
-        } else if (userData?.distributeSolana) {
+        } else if (userData?.walletsCreated) {
             await instanceInitializer.initializeMarketMakerInstance(chatId);
             res.status(200).send('Instances created...');
+        } else if (userData?.instancesCreated) {
+            websocket.disableListener(); // Disable the listener before distributing Solana
+            await solana.distributeSolana(chatId);
+            res.status(200).send('Distributing SOL...');
+            websocket.enableListener(); // Re-enable the listener after distribution
         }
     } catch (error) {
         console.error('Error processing request:', error);

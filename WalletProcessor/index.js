@@ -44,13 +44,14 @@ class WalletProcessor {
           }
         }
         if (userData.walletsCreated) {
-          console.log('Airdrop Solana for chatId:', chatId);
-          await this.solana.distributeSolana(chatId);
-        }
-
-        if (userData.distributeSolana) {
           console.log('Initializing market maker instance for chatId:', chatId);
           await this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        }
+
+        if (userData.instancesCreated) {
+          console.log('Airdrop Solana for chatId:', chatId);
+          await this.solana.distributeSolana(chatId);
+        
         }
         console.log(`Processed job for chatId: ${chatId}`);
       } catch (error) {
