@@ -69,6 +69,7 @@ class BalanceChecker {
 
   listenForTransactions() {
     const userData = this.dataManager.getCollection(this.chatId);
+    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
     if (!this.listenerActive || userData.walletsCreated) {
       console.log('Transaction listener is inactive or wallets are already created.');
       return;
@@ -83,7 +84,7 @@ class BalanceChecker {
         id: 1,
         method: "logsSubscribe",
         params: [{
-          mentions: [this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString()]
+          mentions: [publicKeyToMention]
         }]
       });
 
