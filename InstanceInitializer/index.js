@@ -30,7 +30,7 @@ class InstanceInitializer {
         fs.mkdirSync(userDir, { recursive: true });
       }
 
-      this.createSymlink(this.basePath, userDir);
+      this.copyFiles(this.basePath, userDir);
 
       const envFilePath = path.join(userDir, '.env');
       const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
@@ -42,11 +42,22 @@ class InstanceInitializer {
     }
   }
 
-  createSymlink(src, dest) {
-    const linkPath = path.join(dest, 'marketMaker');
-    if (!fs.existsSync(linkPath)) {
-      fs.symlinkSync(src, linkPath, 'junction'); // Create a symlink to the marketMaker directory
-    }
+  copyFiles(src, dest) {
+    const files = fs.readdirSync(src);
+    files.forEach(file => {
+      const srcPath = path.join(src, file);
+      const destPath = path.join(dest, file);
+      const stats = fs.statSync(srcPath);
+
+      if (stats.isDirectory()) {
+        if (!fs.existsSync(destPath)) {
+          fs.mkdirSync(destPath);
+        }
+        this.copyFiles(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    });
   }
 
   async startMarketMakerInstance(chatId, userDir) {
