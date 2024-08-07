@@ -17,8 +17,8 @@ class InstanceInitializer {
   constructor() {
     this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker'); // Correct base path
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances'); // Correct instance path
-    this.dataManager = new DataManager;
     this.solana = new Solana;
+    this.dataManager = new DataManager;
 
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
