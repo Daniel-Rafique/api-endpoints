@@ -31,7 +31,6 @@ class Solana {
       FIRESTORE_KEYSTORE, 
       '.config/firebaseServiceAccountKey.json'),
     });
-    this.instanceInitializer = new InstanceInitializer();
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
     this.messageCache = {}; // Initialize cache for messages
   }
