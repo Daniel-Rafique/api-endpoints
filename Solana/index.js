@@ -7,7 +7,6 @@ const Distribute = require('./Distribute');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
-const InstanceInitializer = require('../InstanceInitializer');
 const Telegram = require('../Telegram');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
