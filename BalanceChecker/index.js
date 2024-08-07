@@ -50,14 +50,26 @@ class BalanceChecker {
     this.reconnectInterval = null;
     this.listenerActive = true; // Flag to control the listener
     this.messageCache = {};
+    this.initialize();
 
     // Fetch and set the distributeSolana flag
     this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
-    this.distributeSolana = this.getDistributeSolanaFlagFromDatabase(chatId);
-    this.listenForTransactions();
+    this.distributeSolana = this.getDistributeSolanaFlag(chatId);
   }
 
-  async getDistributeSolanaFlagFromDatabase(chatId) {
+  async initialize() {
+    try {
+      const userData = await this.dataManager.getCollection(this.chatId);
+      this.distributeSolana = userData.distributeSolana ? true : false;
+      this.listenForTransactions();
+    } catch (error) {
+      console.error('Failed to initialize BalanceChecker:', error);
+      this.distributeSolana = false; // Default to false if there's an error
+      this.listenForTransactions();
+    }
+  }
+
+  async getDistributeSolanaFlag(chatId) {
     try {
       const userData = await this.dataManager.getCollection(chatId);
       return userData.distributeSolana ? true : false;
