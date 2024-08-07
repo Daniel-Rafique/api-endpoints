@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const { Queue, Worker } = require('bullmq');
 const DataManager = require('../database');
 const WalletManager = require('../WalletManager');
