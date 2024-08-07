@@ -24,7 +24,7 @@ const instanceInitializer = new InstanceInitializer();
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
-
+const { MESSAGES } = require('../constants');
 // Load environment variables for SSL
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
 const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
@@ -113,6 +113,10 @@ app.post('/api/create', async (req, res) => {
             websocket.disableListener(); // Disable the listener before distributing Solana
             await solana.distributeSolana(chatId);
             res.status(200).send('Distributing SOL...');
+            const message = MESSAGES.DEPLOYMENT(userData.boostCost || 0);
+            if (this.shouldSendMessage(this.chatId, message)) {
+              await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            }
             websocket.enableListener(); // Re-enable the listener after distribution
         }
     } catch (error) {
