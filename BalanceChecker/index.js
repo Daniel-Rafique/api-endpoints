@@ -70,6 +70,7 @@ class BalanceChecker {
   listenForTransactions() {
     const userData = this.dataManager.getCollection(this.chatId);
     const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
+    console.log(publicKeyToMention)
     if (!this.listenerActive || userData.walletsCreated) {
       console.log('Transaction listener is inactive or wallets are already created.');
       return;
