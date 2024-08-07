@@ -1,14 +1,31 @@
+require('dotenv').config();
+const path = require('path');
+const os = require('os');
 const { Queue, Worker } = require('bullmq');
 const DataManager = require('../database');
 const WalletManager = require('../WalletManager');
 const InstanceInitializer = require('../InstanceInitializer');
 const Solana = require('../Solana');
 
+const ENV_PATH = process.env.ENV_PATH;
+
+if (!ENV_PATH) {
+  throw new Error('ENV_PATH is not defined. Please check your .env file.');
+}
+
 class WalletProcessor {
   constructor() {
     this.walletManager = new WalletManager();
-    // Prepare the directories for initialization
-    this.instanceInitializer = new InstanceInitializer('./marketMaker', './instances');
+
+    // Define absolute paths
+    const basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
+    const instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
+
+    if (!basePath || !instancePath) {
+      throw new Error('Error resolving basePath or instancePath.');
+    }
+
+    this.instanceInitializer = new InstanceInitializer(basePath, instancePath);
     this.dataManager = new DataManager();
     this.solana = new Solana();
 
@@ -38,14 +55,22 @@ class WalletProcessor {
             console.log(error);
           }
         }
-        if (userData.walletsCreated) {
-          console.log('Airdrop Solana for chatId:', chatId);
-          await this.solana.distributeSolana(chatId);
-        }
-
-        if (userData.distributeSolana) {
+        if (userData.walletsCreated && !userData.instancesCreated) {
           console.log('Initializing market maker instance for chatId:', chatId);
           await this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        }
+
+        if (userData.instancesCreated) {
+          console.log('Airdrop Solana for chatId:', chatId);
+
+          // Add debugging statements
+          console.log('ENV_PATH:', ENV_PATH);
+          console.log('chatId:', chatId);
+
+          const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+          console.log('filePath:', filePath);
+
+          await this.solana.distributeSolana(chatId);
         }
         console.log(`Processed job for chatId: ${chatId}`);
       } catch (error) {

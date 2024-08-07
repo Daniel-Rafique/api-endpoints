@@ -6,33 +6,44 @@ const DataManager = require('../database')
 const WebSocket = require('ws');
 const crypto = require('crypto');
 
-const WEBSOCKET_ENDPOINTS = [process.env.SOLANA_WEBSOCKET_1, process.env.SOLANA_WEBSOCKET_2];
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
+const WEBSOCKET_ENDPOINTS = [
+  process.env.SOLANA_WEBSOCKET_1, 
+  process.env.SOLANA_WEBSOCKET_2,
+  process.env.SOLANA_WEBSOCKET_3,
+  process.env.SOLANA_WEBSOCKET_4,
+];
+const SOLANA_RPC_ENDPOINTS = [
+  process.env.SOLANA_RPC_ENDPOINT_1,
+  process.env.SOLANA_RPC_ENDPOINT_2,
+  process.env.SOLANA_RPC_ENDPOINT_3,
+  process.env.SOLANA_RPC_ENDPOINT_4
+];
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
 const { MESSAGES } = require('../constants');
-const { userInfo } = require('os');
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
 let currentEndpointIndex = 0;
+let currentRpcEndpointIndex = 0;
 
-function getNextWebSocketEndpoint() {
+// Load balancers
+function getWebSocketEndpoint() {
   currentEndpointIndex = (currentEndpointIndex + 1) % WEBSOCKET_ENDPOINTS.length;
   return WEBSOCKET_ENDPOINTS[currentEndpointIndex];
 }
 
-function createCacheKey(chatId, text) {
-  const hash = crypto.createHash('md5').update(text).digest('hex');
-  return `${chatId}-${hash}`;
+function getNextRpcEndpoint() {
+  currentRpcEndpointIndex = (currentRpcEndpointIndex + 1) % SOLANA_RPC_ENDPOINTS.length;
+  return SOLANA_RPC_ENDPOINTS[currentRpcEndpointIndex];
 }
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
     this.receiverKeypairString = receiverPrivateKey.toString();
-    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
+    this.connection = new Connection(getNextRpcEndpoint(), 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
@@ -43,22 +54,49 @@ class BalanceChecker {
     this.dataManager = new DataManager(chatId);
 
     this.messageQueue = [];
-    this.messageCache = {};
     this.ws = null;
     this.pingInterval = null;
     this.reconnectInterval = null;
     this.listenerActive = true; // Flag to control the listener
-    this.listenForTransactions();
+    this.messageCache = {};
+    this.initialize();
+
+    // Fetch and set the distributeSolana flag
+    this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
+    this.distributeSolana = this.getDistributeSolanaFlag(chatId);
   }
 
+  async initialize() {
+    try {
+      const userData = await this.dataManager.getCollection(this.chatId);
+      this.distributeSolana = userData.distributeSolana ? true : false;
+      this.listenForTransactions();
+    } catch (error) {
+      console.error('Failed to initialize BalanceChecker:', error);
+      this.distributeSolana = false; // Default to false if there's an error
+      this.listenForTransactions();
+    }
+  }
+
+  async getDistributeSolanaFlag(chatId) {
+    try {
+      const userData = await this.dataManager.getCollection(chatId);
+      return userData.distributeSolana ? true : false;
+    } catch (error) {
+      console.error('Failed to fetch distributeSolana flag from database:', error);
+      return false; // Default to false if there's an error
+    }
+  }
 
   listenForTransactions() {
     const userData = this.dataManager.getCollection(this.chatId);
+    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
+    console.log(publicKeyToMention)
     if (!this.listenerActive || userData.walletsCreated) {
       console.log('Transaction listener is inactive or wallets are already created.');
       return;
     }
-    const endpoint = getNextWebSocketEndpoint();
+    const endpoint = getWebSocketEndpoint();
     this.ws = new WebSocket(endpoint);
 
     this.ws.on('open', () => {
@@ -68,7 +106,7 @@ class BalanceChecker {
         id: 1,
         method: "logsSubscribe",
         params: [{
-          mentions: [this.receiverKeypair.publicKey.toString()]
+          mentions: [publicKeyToMention]
         }]
       });
 
@@ -174,58 +212,57 @@ class BalanceChecker {
       this.sendMessage(message);
     }
   }
-  
 
   async handleTransaction(signature) {
     try {
       const userData = this.dataManager;
       console.log('Handling transaction:', signature);
-  
+
       const transaction = await this.connection.getTransaction(signature, {
         maxSupportedTransactionVersion: 0,
       });
-  
+
       if (!transaction) {
         console.error('Failed to retrieve transaction');
         return;
       }
-  
+
       console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
-  
+
       const senderPublicKey = transaction.transaction.message.accountKeys.find(
         key => !key.equals(this.receiverKeypair.publicKey)
       );
-  
+
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
         return;
       }
-  
+
       const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
         key => key.equals(this.receiverKeypair.publicKey)
       );
-  
+
       const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
-  
+
       if (amountReceived <= 0) {
         console.error('Invalid transaction amount');
         return;
       }
-  
+
       const senderPublicKeyString = new PublicKey(senderPublicKey);
-  
+
       const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
       const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
-  
+
       console.log('Token balance:', tokenBalance);
       console.log('Minimum token balance:', this.minimumTokenBalance);
       console.log('Sol balance:', solBalance);
       console.log('Minimum Sol balance:', this.minimumSolBalance * 1_000_000_000);
-  
+
       if (solBalance < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
-  
+
         let message = '';
         if (solBalance < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
@@ -235,13 +272,16 @@ class BalanceChecker {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         }
-        await this.sendTelegramMessage(this.chatId, message);
+        if (this.shouldSendMessage(this.chatId, message)) {
+          await solana.sendTelegramMessage(this.chatId, message);
+        }
       } else {
-        console.log(`Transaction is valid. Amount received: ${amountReceived / 1_000_000_000} SOL & ${TOKEN} Balance is ${tokenBalance}`);
-        await this.sendTelegramMessage(
-          this.chatId,
-          `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
-        );
+        let message = '';
+        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}`
+        if (this.shouldSendMessage(this.chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        }
+
         const chatId = this.chatId;
         await this.walletProcessor.addJob({ chatId });
       }
@@ -249,8 +289,6 @@ class BalanceChecker {
       console.error('Error handling transaction:', error);
     }
   }
-  
-
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
@@ -279,7 +317,9 @@ class BalanceChecker {
     if (tokenBalance < this.minimumTokenBalance) {
       await this.returnSol(senderPublicKeyString, amountReceived);
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-      await this.sendTelegramMessage(this.chatId, message);
+      if (this.shouldSendMessage(this.chatId, message)) {
+        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+      }
     }
 
     return tokenBalance;
@@ -314,10 +354,12 @@ class BalanceChecker {
         try {
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
-          await this.sendTelegramMessage(
-            this.chatId,
-            `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`
-          );
+          const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
+
+          if (this.shouldSendMessage(this.chatId, message)) {
+            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          }
+
           return;
         } catch (error) {
           console.error('Error sending transaction, retrying...', error);
@@ -332,19 +374,33 @@ class BalanceChecker {
     }
   }
 
-  async sendTelegramMessage(chatId, text) {
-    const cacheKey = createCacheKey(chatId, text);
+  shouldSendMessage(chatId, message) {
+    const cacheKey = chatId;
     const currentTime = Date.now();
-  
-    // Check if the same message was sent in the last 60 seconds
-    if (this.messageCache[cacheKey] && (currentTime - this.messageCache[cacheKey].timestamp < 300000)) {
-      console.log('Duplicate message detected, skipping send.');
-    } else {
-      await this.telegramNotifier.sendTelegramMessage(chatId, text);
-      this.messageCache[cacheKey] = { timestamp: currentTime };
+    const cacheDuration = 60 * 10000; // 10 minutes
+
+    console.log(`Checking message cache for chatId: ${chatId}`);
+    console.log(`Current message: ${message}`);
+    console.log(`Message cache:`, this.messageCache);
+
+    if (!this.messageCache[cacheKey]) {
+      console.log('No cached message found, sending message.');
+      this.messageCache[cacheKey] = { message, timestamp: currentTime };
+      return true;
     }
-  }  
-  
+
+    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
+
+    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
+      console.log('Duplicate message detected, not sending.');
+      return false;
+    }
+
+    console.log('Message cache expired or different message, sending message.');
+    this.messageCache[cacheKey] = { message, timestamp: currentTime };
+    return true;
+  }
+
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
     const message = new Transaction({

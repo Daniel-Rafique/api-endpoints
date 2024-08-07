@@ -1,113 +1,148 @@
+
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { exec } = require('child_process');
-const Docker = require('dockerode');
+const pm2 = require('pm2');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
+const Solana = require('../Solana');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
+const ENV_PATH = process.env.ENV_PATH;
 
 class InstanceInitializer {
-  constructor(basePath, instancePath) {
-    this.basePath = basePath;
-    this.instancePath = instancePath;
-    this.dataManager = new DataManager();
-    this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
-    
+  constructor() {
+    this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker'); // Correct base path
+    this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances'); // Correct instance path
+    this.dataManager = new DataManager;
     this.firestore = new Firestore({
-      projectId: 'koynlabs-2f749', 
-      keyFilename: '.config/firebaseServiceAccountKey.json',
-  });
+      projectId: 'koynlabs-2f749',
+      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'), // Corrected path
+    });
+    this.solana = new Solana;
   }
 
-  // Function to initialize a market maker instance
   async initializeMarketMakerInstance(chatId) {
     try {
       const userData = await this.dataManager.getCollection(chatId);
       const { contractAddress, batchSize } = userData;
-      const userDir = `${this.instancePath}/${chatId}`;
+      const userDir = path.join(this.instancePath, chatId.toString());
       if (!fs.existsSync(userDir)) {
         fs.mkdirSync(userDir, { recursive: true });
       }
 
-      // Recursively copy the base market maker files to the user directory
-      this.copyRecursiveSync(this.basePath, userDir);
+      this.copyFiles(this.basePath, userDir);
 
-      // Append the CHAT_ID and CONTRACT_ADDRESS variables to the .env file without overwriting existing content
-      const envFilePath = `${userDir}/.env`;
+      const envFilePath = path.join(userDir, '.env');
       const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
-      if (fs.existsSync(envFilePath)) {
-        fs.appendFileSync(envFilePath, envContent);
-      } else {
-        fs.writeFileSync(envFilePath, envContent);
-      }
+      this.appendEnvFile(envFilePath, envContent);
 
-      // Build and run the Docker container
-      await this.buildAndRunDockerContainer(chatId, userDir);
+      await this.startMarketMakerInstance(chatId, userDir);
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
     }
   }
 
-  // Function to recursively copy files and directories
-  copyRecursiveSync(src, dest) {
-    const exists = fs.existsSync(src);
-    const stats = exists && fs.statSync(src);
-    const isDirectory = exists && stats.isDirectory();
-    if (isDirectory) {
-      if (!fs.existsSync(dest)) {
-        fs.mkdirSync(dest);
+  copyFiles(src, dest) {
+    const files = fs.readdirSync(src);
+    files.forEach(file => {
+      const srcPath = path.join(src, file);
+      const destPath = path.join(dest, file);
+      const stats = fs.statSync(srcPath);
+
+      if (stats.isDirectory()) {
+        if (!fs.existsSync(destPath)) {
+          fs.mkdirSync(destPath);
+        }
+        this.copyFiles(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
       }
-      fs.readdirSync(src).forEach((childItemName) => {
-        this.copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-      });
+    });
+  }
+
+  appendEnvFile(filePath, content) {
+    if (fs.existsSync(filePath)) {
+      fs.appendFileSync(filePath, content);
     } else {
-      fs.copyFileSync(src, dest);
+      fs.writeFileSync(filePath, content);
     }
   }
 
-  // Function to build and run Docker container
-  async buildAndRunDockerContainer(chatId, userDir) {
-    const imageName = `koynlabs-${chatId}`;
-    const containerName = `koynlabs-instance-${chatId}`;
-    const buildCommand = `docker build -t ${imageName} ${userDir}`;
+  async startMarketMakerInstance(chatId, userDir) {
+    const instanceName = `koynlabs-instance-${chatId}`;
+  
+    const connectToPM2 = (callback) => {
+      pm2.connect((err) => {
+        if (err) {
+          console.error('Failed to connect to PM2:', err);
+          setTimeout(() => connectToPM2(callback), 1000); // Retry after 1 second
+          return;
+        }
+        callback();
+      });
+    };
+  
+    connectToPM2(() => {
+      pm2.start({
+        script: path.join(userDir, 'dist', 'index.js'),
+        name: instanceName,
+        cwd: userDir,
+        env: {
+          NODE_ENV: 'production',
+          CHAT_ID: chatId,
+          // Add other environment variables here if needed
+        }
+      }, (err) => {
+        if (err) {
+          console.error(`Failed to start market maker instance ${instanceName}:`, err);
+          pm2.disconnect();
+          return;
+        }
+  
+        console.log(`Market maker instance ${instanceName} started successfully`);
+  
+        exec('pm2 save', (err, stdout, stderr) => {
+          if (err) {
+            console.error('Failed to save PM2 process list:', stderr);
+            pm2.disconnect();
+            return;
+          }
+  
+          console.log('PM2 process list saved successfully');
+  
+          exec('pm2 startup', (err, stdout, stderr) => {
+            if (err) {
+              console.error('Failed to generate PM2 startup script:', stderr);
+            } else {
+              console.log('PM2 startup script generated successfully');
+            }
+            pm2.disconnect();
+  
+            // Update Firestore.
+            this.updateFirestoreFlag(chatId);
+          });
+        });
+      });
+    });
+  }
+  
 
+  async updateFirestoreFlag(chatId) {
     try {
-      await this.runCommand(buildCommand);
-      console.log(`Docker image ${imageName} built successfully`);
-
-      // Create and start the Docker container
-      const container = await this.docker.createContainer({
-        Image: imageName,
-        name: containerName,
-        HostConfig: {
-          PortBindings: {
-            '443/tcp': [
-              {
-                HostPort: '8443',
-              },
-            ],
-          },
-        },
-        ExposedPorts: {
-          '443/tcp': {},
-        },
-      });
-
-      await container.start();
-      console.log(`Docker container ${containerName} started successfully`);
-      const userData = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-      await userData.update({
-        instancesCreated: true
-      });
-
+      const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
+      await userDocRef.update({ instancesCreated: true, distributeSolana: true });
+      await this.solana.distributeSolana(chatId)
+      await userDocRef.update({ distributeSolana: false });
+      console.log(`Firestore flag updated for chatId: ${chatId}`);
     } catch (error) {
-      console.error('Failed to build or run Docker container:', error);
+      console.error('Failed to update Firestore flag:', error);
     }
   }
 
-  // Function to run shell commands
   runCommand(command) {
     return new Promise((resolve, reject) => {
       exec(command, (error, stdout, stderr) => {

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const bs58 = require('bs58');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const DataManager = require('../database')
 const { Firestore } = require('@google-cloud/firestore');
@@ -51,7 +52,7 @@ class WalletManager {
             });
 
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            await this.saveWalletsToFile(chatIdStr, newWallets)
+            // await this.saveWalletsToFile(chatIdStr, newWallets)
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
@@ -60,7 +61,12 @@ class WalletManager {
 
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
-            const filePath = path.resolve(__dirname, `../../${ENV_PATH}/instances/${chatId}/wallets.json`);
+            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`)
+
+            if (!filePath) {
+                throw new Error('Error resolving filePath.');
+              }
+
             const walletData = newWallets.map(wallet => ({
                 publicKey: wallet.publicKey,
                 secretKey: wallet.privateKey
