@@ -6,7 +6,12 @@ const DataManager = require('../database')
 const WebSocket = require('ws');
 const crypto = require('crypto');
 
-const WEBSOCKET_ENDPOINTS = [process.env.SOLANA_WEBSOCKET_1, process.env.SOLANA_WEBSOCKET_2];
+const WEBSOCKET_ENDPOINTS = [
+  process.env.SOLANA_WEBSOCKET_1, 
+  process.env.SOLANA_WEBSOCKET_2,
+  process.env.SOLANA_WEBSOCKET_3,
+  process.env.SOLANA_WEBSOCKET_4,
+];
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
