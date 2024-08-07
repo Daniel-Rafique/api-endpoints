@@ -106,7 +106,7 @@ class Distribute {
             const signature = await sendAndConfirmTransaction(this.connection, transaction, [payer]);
             resolve({ status: 'fulfilled', signature });
           } catch (error) {
-            resolve({ status: 'rejected', reason: error });
+            resolve({ status: 'rejected', reason: error.message });
           }
         }, i * TX_INTERVAL);
       });
