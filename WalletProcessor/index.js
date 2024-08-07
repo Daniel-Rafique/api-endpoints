@@ -55,7 +55,7 @@ class WalletProcessor {
             console.log(error);
           }
         }
-        if (userData.walletsCreated) {
+        if (userData.walletsCreated && !userData.instancesCreated) {
           console.log('Initializing market maker instance for chatId:', chatId);
           await this.instanceInitializer.initializeMarketMakerInstance(chatId);
         }
