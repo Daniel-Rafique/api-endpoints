@@ -5,9 +5,9 @@ const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
 const pm2 = require('pm2');
-const Solana = require('../Solana');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
+const Solana = require('../Solana');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
@@ -17,13 +17,12 @@ class InstanceInitializer {
   constructor() {
     this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker'); // Correct base path
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances'); // Correct instance path
-    this.solana = new Solana;
     this.dataManager = new DataManager;
-
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'), // Corrected path
     });
+    this.solana = new Solana;
   }
 
   async initializeMarketMakerInstance(chatId) {
