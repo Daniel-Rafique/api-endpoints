@@ -28,7 +28,9 @@ class Solana {
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
+      keyFilename: path.join(os.homedir(), 
+      FIRESTORE_KEYSTORE, 
+      '.config/firebaseServiceAccountKey.json'),
     });
     this.instanceInitializer = new InstanceInitializer();
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
