@@ -36,6 +36,10 @@ class Distribute {
       }
       
       const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`)
+
+      if (!filePath) {
+        throw new Error('Error resolving filePath.');
+      }
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
 
