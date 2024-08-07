@@ -10,8 +10,9 @@ const { Firestore } = require('@google-cloud/firestore');
 const InstanceInitializer = require('../InstanceInitializer');
 const Telegram = require('../Telegram');
 
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
 class InsufficientBalanceError extends Error {
@@ -27,7 +28,7 @@ class Solana {
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(), FIRESTORE_COLLECTION, '.config/firebaseServiceAccountKey.json'),
+      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
     this.instanceInitializer = new InstanceInitializer();
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
