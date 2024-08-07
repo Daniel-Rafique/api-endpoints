@@ -35,7 +35,7 @@ class InstanceInitializer {
 
       const envFilePath = path.join(userDir, '.env');
       const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
-      fs.writeFileSync(envFilePath, envContent);
+      this.appendEnvFile(envFilePath, envContent);
 
       await this.startMarketMakerInstance(chatId, userDir);
     } catch (error) {
@@ -59,6 +59,14 @@ class InstanceInitializer {
         fs.copyFileSync(srcPath, destPath);
       }
     });
+  }
+
+  appendEnvFile(filePath, content) {
+    if (fs.existsSync(filePath)) {
+      fs.appendFileSync(filePath, content);
+    } else {
+      fs.writeFileSync(filePath, content);
+    }
   }
 
   async startMarketMakerInstance(chatId, userDir) {
