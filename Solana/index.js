@@ -54,7 +54,7 @@ class Solana {
         if (!userDoc.exists) {
           throw new Error('User document does not exist');
         }
-        await userDocRef.update({ distributeSolana: true });
+        await userDocRef.update({ distributeSolana: false });
       }
     } catch (error) {
       console.error('Error during airdrop:', error);
