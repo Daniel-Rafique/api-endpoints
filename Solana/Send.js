@@ -32,7 +32,7 @@ class Send {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
 
-      const amountToSend = Math.floor(senderBalance * 0.25);
+      const amountToSend = Math.floor(senderBalance * 0.30);
       const estimatedFee = await this.getEstimatedFee(senderKeypair);
 
       const transaction = new Transaction().add(
