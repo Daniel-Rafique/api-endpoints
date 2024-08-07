@@ -10,8 +10,8 @@ class WalletProcessor {
   constructor() {
     this.walletManager = new WalletManager();
     // Define absolute paths
-    const basePath = `/root/${ENV_PATH}/marketMaker`;
-    const instancePath = `/root/${ENV_PATH}/instances`;
+    const basePath = `~/${ENV_PATH}/marketMaker`;
+    const instancePath = `~/${ENV_PATH}/instances`;
     this.instanceInitializer = new InstanceInitializer(basePath, instancePath);
     this.dataManager = new DataManager();
     this.solana = new Solana();
