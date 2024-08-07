@@ -179,7 +179,7 @@ class BalanceChecker {
   shouldSendMessage(chatId, message) {
     const cacheKey = createCacheKey(chatId, message);
     const currentTime = Date.now();
-    const cacheDuration = 60 * 1000; // 1 minute
+    const cacheDuration = 60 * 10000; // 1 minute
 
     if (!this.messageCache[cacheKey]) {
       this.messageCache[cacheKey] = { message, timestamp: currentTime };

@@ -119,9 +119,14 @@ class Distribute {
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
-    const cacheDuration = 60 * 1000; // 1 minute
+    const cacheDuration = 60 * 10000; // 1 minute
+
+    console.log(`Checking message cache for chatId: ${chatId}`);
+    console.log(`Current message: ${message}`);
+    console.log(`Message cache:`, this.messageCache);
 
     if (!this.messageCache[cacheKey]) {
+      console.log('No cached message found, sending message.');
       this.messageCache[cacheKey] = { message, timestamp: currentTime };
       return true;
     }
@@ -129,9 +134,11 @@ class Distribute {
     const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
 
     if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
+      console.log('Duplicate message detected, not sending.');
       return false;
     }
 
+    console.log('Message cache expired or different message, sending message.');
     this.messageCache[cacheKey] = { message, timestamp: currentTime };
     return true;
   }
