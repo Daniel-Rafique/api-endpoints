@@ -36,6 +36,7 @@ class Distribute {
       }
       
       const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`)
+      console.log(filePath)
 
       if (!filePath) {
         throw new Error('Error resolving filePath.');
