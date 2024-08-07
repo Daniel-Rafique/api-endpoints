@@ -11,6 +11,7 @@ const InstanceInitializer = require('../InstanceInitializer');
 const Telegram = require('../Telegram');
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
+const ENV_PATH = process.env.ENV_PATH;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
