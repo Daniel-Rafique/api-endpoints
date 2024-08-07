@@ -110,14 +110,14 @@ app.post('/api/create', async (req, res) => {
             await instanceInitializer.initializeMarketMakerInstance(chatId);
             res.status(200).send('Instances created...');
         } else if (userData?.instancesCreated) {
-            websocket.disableListener(); // Disable the listener before distributing Solana
+            // websocket.disableListener(); 
             await solana.distributeSolana(chatId);
             res.status(200).send('Distributing SOL...');
             const message = MESSAGES.DEPLOYMENT(userData.boostCost || 0);
             if (this.shouldSendMessage(this.chatId, message)) {
               await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
             }
-            websocket.enableListener(); // Re-enable the listener after distribution
+            // websocket.enableListener(); 
         }
     } catch (error) {
         console.error('Error processing request:', error);
