@@ -236,8 +236,8 @@ class BalanceChecker {
       const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
   
       if (amountReceived <= 0) {
-        console.log('Received a transaction with no balance change, continuing...');
-        // Continue processing, do not return early
+        console.error('Invalid transaction amount');
+        return;
       }
   
       const senderPublicKeyString = new PublicKey(senderPublicKey);
