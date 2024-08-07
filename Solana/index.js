@@ -1,4 +1,6 @@
 require('dotenv').config();
+const path = require('path');
+const os = require('os');
 const { Connection } = require('@solana/web3.js');
 const Send = require('./Send');
 const Distribute = require('./Distribute');
