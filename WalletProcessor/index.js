@@ -62,6 +62,14 @@ class WalletProcessor {
 
         if (userData.instancesCreated) {
           console.log('Airdrop Solana for chatId:', chatId);
+
+          // Add debugging statements
+          console.log('ENV_PATH:', ENV_PATH);
+          console.log('chatId:', chatId);
+
+          const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+          console.log('filePath:', filePath);
+
           await this.solana.distributeSolana(chatId);
         }
         console.log(`Processed job for chatId: ${chatId}`);

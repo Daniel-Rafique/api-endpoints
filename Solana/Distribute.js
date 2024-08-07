@@ -35,7 +35,7 @@ class Distribute {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
       
-      const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`)
+      const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
       console.log(filePath)
 
       if (!filePath) {
