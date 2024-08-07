@@ -9,6 +9,7 @@ const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const ENV_PATH = process.env.ENV_PATH;
 
 class InstanceInitializer {
@@ -19,7 +20,7 @@ class InstanceInitializer {
 
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(), ENV_PATH, '.config/firebaseServiceAccountKey.json'), // Corrected path
+      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'), // Corrected path
     });
   }
 
