@@ -8,15 +8,11 @@ const crypto = require('crypto');
 
 const WEBSOCKET_ENDPOINTS = [
   process.env.SOLANA_WEBSOCKET_1, 
-  process.env.SOLANA_WEBSOCKET_2,
-  process.env.SOLANA_WEBSOCKET_3,
-  process.env.SOLANA_WEBSOCKET_4,
+  process.env.SOLANA_WEBSOCKET_2
 ];
 const SOLANA_RPC_ENDPOINTS = [
   process.env.SOLANA_RPC_ENDPOINT_1,
-  process.env.SOLANA_RPC_ENDPOINT_2,
-  process.env.SOLANA_RPC_ENDPOINT_3,
-  process.env.SOLANA_RPC_ENDPOINT_4
+  process.env.SOLANA_RPC_ENDPOINT_2
 ];
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
