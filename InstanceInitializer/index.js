@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
+const pm2 = require('pm2');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
 
@@ -62,12 +63,50 @@ class InstanceInitializer {
 
   async startMarketMakerInstance(chatId, userDir) {
     const instanceName = `koynlabs-instance-${chatId}`;
-    const command = `pm2 start dist/index.js --name ${instanceName}`;
 
-    this.runCommand(command).then(() => {
-      console.log(`Market maker instance ${instanceName} started successfully`);
-    }).catch((error) => {
-      console.error(`Failed to start market maker instance ${instanceName}:`, error);
+    pm2.connect(err => {
+      if (err) {
+        console.error('Failed to connect to PM2:', err);
+        process.exit(2);
+      }
+
+      pm2.start({
+        script: path.join(userDir, 'dist', 'index.js'),
+        name: instanceName,
+        cwd: userDir,
+        env: {
+          NODE_ENV: 'production',
+          CHAT_ID: chatId,
+          // Add other environment variables here if needed
+        }
+      }, (err, apps) => {
+        if (err) {
+          console.error(`Failed to start market maker instance ${instanceName}:`, err);
+          pm2.disconnect();
+          return;
+        }
+
+        console.log(`Market maker instance ${instanceName} started successfully`);
+
+        pm2.save(err => {
+          if (err) {
+            console.error('Failed to save PM2 process list:', err);
+            pm2.disconnect();
+            return;
+          }
+
+          console.log('PM2 process list saved successfully');
+
+          pm2.startup(err => {
+            if (err) {
+              console.error('Failed to generate PM2 startup script:', err);
+            } else {
+              console.log('PM2 startup script generated successfully');
+            }
+            pm2.disconnect();
+          });
+        });
+      });
     });
   }
 
