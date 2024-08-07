@@ -277,7 +277,7 @@ class BalanceChecker {
         }
       } else {
         let message = '';
-        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} token balance is ${tokenBalance}`
+        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}`
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }

@@ -4,7 +4,7 @@ const TOKEN = process.env.TOKEN;
 const MESSAGES = {
   BALANCE_CHECK_REPORT: '🔍 Balance check report:',
   SOL_BALANCE: (balance) => `\n💰 SOL balance is: ${balance.toFixed(2)} SOL`,
-  DEPLOYMENT: (message) => `\n🚀 Starting deployment🚀 ${message} SOL`,
+  DEPLOYMENT: () => `\n🚀 Starting deployment🚀`,
   TOKEN_BALANCE: (balance) => `\n💸 Senders' ${escapeMarkdown(TOKEN)} balance is: ${balance.toFixed(2)}`,
   SUFFICIENT_BALANCE: '\n✅ Transfer received, starting deployment',
   INSUFFICIENT_SOL: (minBalance) => `\n❌ Insufficient SOL balance. Minimum required: ${minBalance.toFixed(2)} SOL`,
