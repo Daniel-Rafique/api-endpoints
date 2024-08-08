@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -17,12 +16,12 @@ class InstanceInitializer {
   constructor() {
     this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker'); // Correct base path
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances'); // Correct instance path
-    this.dataManager = new DataManager;
+    this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'), // Corrected path
     });
-    this.solana = new Solana;
+    this.solana = new Solana();
   }
 
   async initializeMarketMakerInstance(chatId) {
@@ -34,7 +33,7 @@ class InstanceInitializer {
         fs.mkdirSync(userDir, { recursive: true });
       }
 
-      this.copyFiles(this.basePath, userDir);
+      this.createSymbolicLink(this.basePath, userDir);
 
       const envFilePath = path.join(userDir, '.env');
       const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
@@ -46,22 +45,10 @@ class InstanceInitializer {
     }
   }
 
-  copyFiles(src, dest) {
-    const files = fs.readdirSync(src);
-    files.forEach(file => {
-      const srcPath = path.join(src, file);
-      const destPath = path.join(dest, file);
-      const stats = fs.statSync(srcPath);
-
-      if (stats.isDirectory()) {
-        if (!fs.existsSync(destPath)) {
-          fs.mkdirSync(destPath);
-        }
-        this.copyFiles(srcPath, destPath);
-      } else {
-        fs.copyFileSync(srcPath, destPath);
-      }
-    });
+  createSymbolicLink(src, dest) {
+    if (!fs.existsSync(path.join(dest, 'marketMaker'))) {
+      fs.symlinkSync(src, path.join(dest, 'marketMaker'), 'junction');
+    }
   }
 
   appendEnvFile(filePath, content) {
@@ -74,7 +61,7 @@ class InstanceInitializer {
 
   async startMarketMakerInstance(chatId, userDir) {
     const instanceName = `koynlabs-instance-${chatId}`;
-  
+
     const connectToPM2 = (callback) => {
       pm2.connect((err) => {
         if (err) {
@@ -85,7 +72,7 @@ class InstanceInitializer {
         callback();
       });
     };
-  
+
     connectToPM2(() => {
       pm2.start({
         script: path.join(userDir, 'dist', 'index.js'),
@@ -102,18 +89,18 @@ class InstanceInitializer {
           pm2.disconnect();
           return;
         }
-  
+
         console.log(`Market maker instance ${instanceName} started successfully`);
-  
+
         exec('pm2 save', (err, stdout, stderr) => {
           if (err) {
             console.error('Failed to save PM2 process list:', stderr);
             pm2.disconnect();
             return;
           }
-  
+
           console.log('PM2 process list saved successfully');
-  
+
           exec('pm2 startup', (err, stdout, stderr) => {
             if (err) {
               console.error('Failed to generate PM2 startup script:', stderr);
@@ -121,7 +108,7 @@ class InstanceInitializer {
               console.log('PM2 startup script generated successfully');
             }
             pm2.disconnect();
-  
+
             // Update Firestore.
             this.updateFirestoreFlag(chatId);
           });
@@ -129,13 +116,12 @@ class InstanceInitializer {
       });
     });
   }
-  
 
   async updateFirestoreFlag(chatId) {
     try {
       const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-      await userDocRef.update({ instancesCreated: true});
-      await this.solana.distributeSolana(chatId)
+      await userDocRef.update({ instancesCreated: true });
+      await this.solana.distributeSolana(chatId);
       console.log(`Firestore flag updated for chatId: ${chatId}`);
     } catch (error) {
       console.error('Failed to update Firestore flag:', error);
