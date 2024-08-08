@@ -269,7 +269,7 @@ class BalanceChecker {
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         }
         if (this.shouldSendMessage(this.chatId, message)) {
-          await solana.sendTelegramMessage(this.chatId, message);
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
       } else {
         let message = '';
