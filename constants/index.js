@@ -1,5 +1,6 @@
 const { escapeMarkdown } = require('../utils');
 const TOKEN = process.env.TOKEN;
+const MINIMUM_TOKEN_BALANCE = parseFloat(process.env.MINIMUM_TOKEN_BALANCE);
 
 const MESSAGES = {
   BALANCE_CHECK_REPORT: '🔍 Balance check report:',
@@ -9,7 +10,7 @@ const MESSAGES = {
   SUFFICIENT_BALANCE: '\n✅ Transfer received, starting deployment',
   INSUFFICIENT_SOL: (minBalance) => `\n❌ Insufficient SOL balance. Minimum required: ${minBalance.toFixed(2)} SOL`,
   TOPUP_SOL: (minBalance) => `\n❌ Your SOL balance is running low. Please arrange a topup: ${minBalance.toFixed(2)} SOL`,
-  INSUFFICIENT_TOKEN: (minBalance) => `\n❌ Insufficient ${escapeMarkdown(TOKEN)} balance. Minimum required: ${minBalance}`,
+  INSUFFICIENT_TOKEN: (minBalance) => `\n❌ Insufficient ${escapeMarkdown(TOKEN)} balance. Minimum required: ${MINIMUM_TOKEN_BALANCE.toFixed(2)}`,
   RETURNED_SOL_PENDING: (balance) => `\n⏳ Returning ${balance.toFixed(2)} SOL (pending...)`,
   RETURNED_SOL_SUCCESS: (balance, signature) => `\n🔄 Returned ${balance.toFixed(2)} SOL successfully here is your transaction ID: \n ${signature}`,
   INSUFFICIENT_FUNDS_FOR_RENT: (minBalance) => `\n❌ Sender does not have enough funds to be rent-exempt. Minimum required: ${(minBalance / 1_000_000_000).toFixed(2)} SOL`,
