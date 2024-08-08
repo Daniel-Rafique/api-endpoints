@@ -5,6 +5,7 @@ const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
 
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
+const KOYNLABS_COMMS = process.env.KOYNLABS_COMMS || 0.3;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
@@ -32,7 +33,7 @@ class Send {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
 
-      const amountToSend = Math.floor(senderBalance * 0.30);
+      const amountToSend = Math.floor(senderBalance * parseInt(KOYNLABS_COMMS));
       const estimatedFee = await this.getEstimatedFee(senderKeypair);
 
       const transaction = new Transaction().add(
