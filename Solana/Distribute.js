@@ -54,12 +54,13 @@ class Distribute {
       const newWallets = JSON.parse(fileContent);
 
       const remainingBalance = senderBalance; // Use the entire balance left in the sender's wallet
-      const amountPerWallet = Math.floor(remainingBalance / userData.makers); // Distribute the entire remaining balance equally
+      const amountPerWallet = Math.floor(remainingBalance / parseInt(userData.makers)); // Distribute the entire remaining balance equally
 
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
         numLamports: amountPerWallet,
       }));
+      
       await userDocRef.update({ distributeSolana: true });
       const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
       const txResults = await this.executeTransactions(transactionList, senderKeypair);
