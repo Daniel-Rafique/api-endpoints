@@ -38,6 +38,7 @@ class Distribute {
       const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+      const userData = await userDocRef.get();
 
       if (senderBalance <= 0) {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
@@ -53,7 +54,7 @@ class Distribute {
       const newWallets = JSON.parse(fileContent);
 
       const remainingBalance = senderBalance; // Use the entire balance left in the sender's wallet
-      const amountPerWallet = Math.floor(remainingBalance / newWallets.length); // Distribute the entire remaining balance equally
+      const amountPerWallet = Math.floor(remainingBalance / userData.makers); // Distribute the entire remaining balance equally
 
       const dropList = newWallets.map(wallet => ({
         walletAddress: wallet.publicKey,
