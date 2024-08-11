@@ -1,4 +1,3 @@
-require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -14,12 +13,12 @@ const ENV_PATH = process.env.ENV_PATH;
 
 class InstanceInitializer {
   constructor() {
-    this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker'); // Correct base path
-    this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances'); // Correct instance path
+    this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
+    this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'), // Corrected path
+      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
     this.solana = new Solana();
   }
@@ -33,7 +32,7 @@ class InstanceInitializer {
         fs.mkdirSync(userDir, { recursive: true });
       }
 
-      this.createSymbolicLink(this.basePath, userDir);
+      this.createSymbolicLinksIndividually(this.basePath, userDir);
 
       const envFilePath = path.join(userDir, '.env');
       const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
@@ -45,10 +44,16 @@ class InstanceInitializer {
     }
   }
 
-  createSymbolicLink(src, dest) {
-    if (!fs.existsSync(path.join(dest, 'marketMaker'))) {
-      fs.symlinkSync(src, path.join(dest, 'marketMaker'), 'junction');
-    }
+  createSymbolicLinksIndividually(srcDir, destDir) {
+    const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+    entries.forEach(entry => {
+      const srcPath = path.join(srcDir, entry.name);
+      const destPath = path.join(destDir, entry.name);
+
+      if (!fs.existsSync(destPath)) {
+        fs.symlinkSync(srcPath, destPath, entry.isDirectory() ? 'junction' : 'file');
+      }
+    });
   }
 
   appendEnvFile(filePath, content) {
@@ -66,7 +71,7 @@ class InstanceInitializer {
       pm2.connect((err) => {
         if (err) {
           console.error('Failed to connect to PM2:', err);
-          setTimeout(() => connectToPM2(callback), 1000); // Retry after 1 second
+          setTimeout(() => connectToPM2(callback), 1000);
           return;
         }
         callback();
@@ -81,7 +86,6 @@ class InstanceInitializer {
         env: {
           NODE_ENV: 'production',
           CHAT_ID: chatId,
-          // Add other environment variables here if needed
         }
       }, (err) => {
         if (err) {
@@ -109,7 +113,6 @@ class InstanceInitializer {
             }
             pm2.disconnect();
 
-            // Update Firestore.
             this.updateFirestoreFlag(chatId);
           });
         });
