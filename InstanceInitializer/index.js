@@ -55,35 +55,33 @@ class InstanceInitializer {
   }
 
   async copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize }) {
-    const srcEnvPath = path.join(userDir, 'marketMaker', '.env');
+    const parentEnvPath = path.join(this.basePath, '.env');
     const destEnvPath = path.join(userDir, '.env');
 
-    // Step 1: Check if the .env file exists before copying
-    if (fs.existsSync(srcEnvPath)) {
-        // Copy the .env file to /root/devnet-api/instances/{chatId}/.env
-        fs.copyFileSync(srcEnvPath, destEnvPath);
-        console.log(`Copied .env file to ${destEnvPath}`);
+    // Ensure the original .env file is never modified
+    if (fs.existsSync(parentEnvPath)) {
+      // Step 1: Copy the parent .env file to /root/devnet-api/instances/{chatId}/.env
+      if (!fs.existsSync(destEnvPath)) {
+        fs.copyFileSync(parentEnvPath, destEnvPath);
+        console.log(`Copied parent .env file to ${destEnvPath}`);
+      } else {
+        console.log(`.env file already exists at ${destEnvPath}, skipping copy.`);
+      }
       
-        // Unlink the .env file from the marketMaker directory if it's a symlink
-        if (fs.lstatSync(srcEnvPath).isSymbolicLink()) {
-            fs.unlinkSync(srcEnvPath);  // Remove the symlink
-            console.log(`Removed symlink to .env at ${srcEnvPath}`);
-        }
+      // Step 2: Unlink the .env file from the parent directory if it's a symlink
+      if (fs.lstatSync(parentEnvPath).isSymbolicLink()) {
+        fs.unlinkSync(parentEnvPath);  // Remove the symlink
+        console.log(`Removed symlink to .env at ${parentEnvPath}`);
+      }
       
-        // Append new parameters to the copied .env file
-        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
-        fs.appendFileSync(destEnvPath, envContent);
-        console.log(`Appended new parameters to ${destEnvPath}`);
+      // Step 3: Append new parameters to the copied .env file
+      const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
+      fs.appendFileSync(destEnvPath, envContent);
+      console.log(`Appended new parameters to ${destEnvPath}`);
     } else {
-        console.warn(`No .env file found at ${srcEnvPath}. Skipping copy and unlink.`);
-      
-        // Optionally, create a new .env file with the necessary parameters
-        const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
-        fs.writeFileSync(destEnvPath, envContent);
-        console.log(`Created new .env file with parameters at ${destEnvPath}`);
+      console.warn(`No parent .env file found at ${parentEnvPath}.`);
     }
-}
-
+  }
 
   async startMarketMakerInstance(chatId, userDir) {
     const instanceName = `koynlabs-instance-${chatId}`;
