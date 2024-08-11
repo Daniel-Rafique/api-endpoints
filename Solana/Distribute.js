@@ -35,52 +35,51 @@ class Distribute {
 
   async distributeSolana(senderPrivateKey, chatId, userData) {
     try {
-        const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-        const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
-        const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+      const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
+      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+      const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
-        if (senderBalance <= 0) {
-            throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-        }
+      if (senderBalance <= 0) {
+        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
+      }
 
-        const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
-        const fileContent = await fs.readFile(filePath, 'utf8');
-        const newWallets = JSON.parse(fileContent);
+      const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+      const fileContent = await fs.readFile(filePath, 'utf8');
+      const newWallets = JSON.parse(fileContent);
 
-        const remainingBalance = senderBalance; // Use the entire balance left in the sender's wallet
-        if (!userData.makers || userData.makers <= 0) {
-            throw new Error('Invalid number of makers.');
-        }
-        const amountPerWallet = Math.floor(remainingBalance / userData.makers);
+      const remainingBalance = senderBalance; // Use the entire balance left in the sender's wallet
+      if (!userData.makers || userData.makers <= 0) {
+        throw new Error('Invalid number of makers.');
+      }
+      const amountPerWallet = Math.floor(remainingBalance / userData.makers);
 
-        if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
-            throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
-        }
+      if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
+        throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
+      }
 
-        const dropList = newWallets.map(wallet => ({
-            walletAddress: wallet.publicKey,
-            numLamports: amountPerWallet,
-        }));
+      const dropList = newWallets.map(wallet => ({
+        walletAddress: wallet.publicKey,
+        numLamports: amountPerWallet,
+      }));
 
-        await userDocRef.update({ distributeSolana: true });
-        const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
-        const txResults = await this.executeTransactions(transactionList, senderKeypair);
-        await userDocRef.update({ distributeSolana: false });
-        return txResults;
+      await userDocRef.update({ distributeSolana: true });
+      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
+      const txResults = await this.executeTransactions(transactionList, senderKeypair);
+      await userDocRef.update({ distributeSolana: false });
+      return txResults;
     } catch (error) {
-        console.error('Error during distribution:', error);
-        if (error instanceof InsufficientBalanceError) {
-            console.log('Wallet is empty:', error.message);
-            const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
-            if (this.shouldSendMessage(this.chatId, message)) {
-                await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-            }
-        } else {
-            throw error;
+      console.error('Error during distribution:', error);
+      if (error instanceof InsufficientBalanceError) {
+        console.log('Wallet is empty:', error.message);
+        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
+        if (this.shouldSendMessage(this.chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
+      } else {
+        throw error;
+      }
     }
-}
-
+  }
 
   generateTransactions(dropList, fromWallet) {
     const transactions = [];
