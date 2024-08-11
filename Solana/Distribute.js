@@ -43,11 +43,18 @@ class Distribute {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
 
+      // Resolve the file path
       const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+
+      // Wait for the wallets.json file to be created if it doesn't exist
+      await this.waitForFile(filePath);
+
+      // Read the wallets.json file
       const fileContent = await fs.readFile(filePath, 'utf8');
       const newWallets = JSON.parse(fileContent);
 
-      const remainingBalance = senderBalance; // Use the entire balance left in the sender's wallet
+      // Remaining balance logic
+      const remainingBalance = senderBalance; 
       if (!userData.makers || userData.makers <= 0) {
         throw new Error('Invalid number of makers.');
       }
@@ -80,6 +87,19 @@ class Distribute {
       }
     }
   }
+
+    // Wait for the file to exist
+    async waitForFile(filePath) {
+      while (true) {
+        try {
+          await fs.access(filePath);
+          break; // File exists, break out of loop
+        } catch (err) {
+          console.log(`Waiting for file to be created: ${filePath}`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before retrying
+        }
+      }
+    }
 
   generateTransactions(dropList, fromWallet) {
     const transactions = [];
