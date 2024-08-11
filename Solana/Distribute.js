@@ -58,7 +58,7 @@ class Distribute {
       if (!userData.makers || userData.makers <= 0) {
         throw new Error('Invalid number of makers.');
       }
-      const amountPerWallet = Math.floor(remainingBalance / userData.makers);
+      const amountPerWallet = Math.round(remainingBalance / userData.makers);
 
       if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
         throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
@@ -70,8 +70,8 @@ class Distribute {
       }));
 
       await userDocRef.update({ distributeSolana: true });
-      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
-      const txResults = await this.executeTransactions(transactionList, senderKeypair);
+      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
+      const txResults = await this.executeTransactions(transactionList, senderKeypair, userData);
       await userDocRef.update({ distributeSolana: false });
       return txResults;
     } catch (error) {
@@ -101,7 +101,7 @@ class Distribute {
       }
     }
 
-  generateTransactions(dropList, fromWallet) {
+  generateTransactions(dropList, fromWallet, userData) {
     const transactions = [];
     const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
@@ -111,8 +111,8 @@ class Distribute {
       })
     );
 
-    const batchSize = Math.ceil(txInstructions.length / dropList.length);
-    const numTransactions = Math.ceil(txInstructions.length / batchSize);
+    const batchSize = Math.round(txInstructions.length / userData.makers);
+    const numTransactions = Math.round(txInstructions.length / batchSize);
     for (let i = 0; i < numTransactions; i++) {
       const transaction = new Transaction();
       const lowerIndex = i * batchSize;
@@ -125,13 +125,13 @@ class Distribute {
     return transactions;
   }
 
-  async executeTransactions(transactionList, payer) {
+  async executeTransactions(transactionList, payer, userData) {
     const results = [];
     const staggeredTransactions = transactionList.map((transaction, i) => {
       return new Promise((resolve) => {
         setTimeout(async () => {
           try {
-            console.log(`Requesting Transaction ${i + 1}/${transactionList.length}`);
+            console.log(`Requesting Transaction ${i + 1}/${userData.makers}`);
             const { blockhash } = await this.connection.getLatestBlockhash();
             transaction.recentBlockhash = blockhash;
             const signature = await sendAndConfirmTransaction(this.connection, transaction, [payer]);
