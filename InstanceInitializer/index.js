@@ -34,9 +34,7 @@ class InstanceInitializer {
 
       this.createSymbolicLinksIndividually(this.basePath, userDir);
 
-      const envFilePath = path.join(userDir, '.env');
-      const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
-      this.appendEnvFile(envFilePath, envContent);
+      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize });
 
       await this.startMarketMakerInstance(chatId, userDir);
     } catch (error) {
@@ -56,12 +54,28 @@ class InstanceInitializer {
     });
   }
 
-  appendEnvFile(filePath, content) {
-    if (fs.existsSync(filePath)) {
-      fs.appendFileSync(filePath, content);
+  async copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize }) {
+    const srcEnvPath = path.join(userDir, 'marketMaker', '.env');
+    const destEnvPath = path.join(userDir, '.env');
+
+    // Step 1: Copy the .env file
+    if (fs.existsSync(srcEnvPath)) {
+      fs.copyFileSync(srcEnvPath, destEnvPath);
+      console.log(`Copied .env file to ${destEnvPath}`);
     } else {
-      fs.writeFileSync(filePath, content);
+      console.warn(`No .env file found at ${srcEnvPath}`);
     }
+
+    // Step 2: Unlink the .env file from the parent directory
+    if (fs.existsSync(srcEnvPath) && fs.lstatSync(srcEnvPath).isSymbolicLink()) {
+      fs.unlinkSync(srcEnvPath);  // Remove the symlink
+      console.log(`Removed symlink to .env at ${srcEnvPath}`);
+    }
+
+    // Step 3: Append new parameters to the copied .env file
+    const envContent = `CHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
+    fs.appendFileSync(destEnvPath, envContent);
+    console.log(`Appended new parameters to ${destEnvPath}`);
   }
 
   async startMarketMakerInstance(chatId, userDir) {
