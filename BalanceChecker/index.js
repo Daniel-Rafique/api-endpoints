@@ -5,6 +5,14 @@ const WalletProcessor = require('../WalletProcessor');
 const DataManager = require('../database')
 const WebSocket = require('ws');
 const crypto = require('crypto');
+const redis = require('redis');
+const client = redis.createClient();
+
+client.on('error', (err) => console.error('Redis Client Error', err));
+
+(async () => {
+    await client.connect();
+})();
 
 const WEBSOCKET_ENDPOINTS = [
   process.env.SOLANA_WEBSOCKET_1, 
@@ -370,32 +378,31 @@ class BalanceChecker {
     }
   }
 
-  shouldSendMessage(chatId, message) {
+  async shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
-    const cacheDuration = 60 * 10000; // 10 minutes
+    const cacheDuration = 600; // 10 minutes in seconds
 
     console.log(`Checking message cache for chatId: ${chatId}`);
     console.log(`Current message: ${message}`);
-    console.log(`Message cache:`, this.messageCache);
 
-    if (!this.messageCache[cacheKey]) {
-      console.log('No cached message found, sending message.');
-      this.messageCache[cacheKey] = { message, timestamp: currentTime };
-      return true;
+    const cachedMessage = await client.get(cacheKey);
+
+    if (cachedMessage) {
+        const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
+        if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
+            console.log('Duplicate message detected, not sending.');
+            return false;
+        }
     }
 
-    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
+    console.log('No cached message found or cache expired, sending message.');
+    await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
+        EX: cacheDuration,
+    });
 
-    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
-      console.log('Duplicate message detected, not sending.');
-      return false;
-    }
-
-    console.log('Message cache expired or different message, sending message.');
-    this.messageCache[cacheKey] = { message, timestamp: currentTime };
     return true;
-  }
+}
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();

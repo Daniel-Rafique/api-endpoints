@@ -7,6 +7,15 @@ const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
 const { Firestore } = require('@google-cloud/firestore');
 
+const redis = require('redis');
+const client = redis.createClient();
+
+client.on('error', (err) => console.error('Redis Client Error', err));
+
+(async () => {
+  await client.connect();
+})();
+
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
@@ -54,7 +63,7 @@ class Distribute {
       const newWallets = JSON.parse(fileContent);
 
       // Remaining balance logic
-      const remainingBalance = senderBalance; 
+      const remainingBalance = senderBalance;
       if (!userData.makers || userData.makers <= 0) {
         throw new Error('Invalid number of makers.');
       }
@@ -88,18 +97,18 @@ class Distribute {
     }
   }
 
-    // Wait for the file to exist
-    async waitForFile(filePath) {
-      while (true) {
-        try {
-          await fs.access(filePath);
-          break; // File exists, break out of loop
-        } catch (err) {
-          console.log(`Waiting for file to be created: ${filePath}`);
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before retrying
-        }
+  // Wait for the file to exist
+  async waitForFile(filePath) {
+    while (true) {
+      try {
+        await fs.access(filePath);
+        break; // File exists, break out of loop
+      } catch (err) {
+        console.log(`Waiting for file to be created: ${filePath}`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before retrying
       }
     }
+  }
 
   generateTransactions(dropList, fromWallet, userData) {
     const transactions = [];
@@ -147,32 +156,31 @@ class Distribute {
     return results;
   }
 
-  shouldSendMessage(chatId, message) {
+  async shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
-    const cacheDuration = 60 * 10000; // 10 minutes
+    const cacheDuration = 600; // 10 minutes in seconds
 
     console.log(`Checking message cache for chatId: ${chatId}`);
     console.log(`Current message: ${message}`);
-    console.log(`Message cache:`, this.messageCache);
 
-    if (!this.messageCache[cacheKey]) {
-      console.log('No cached message found, sending message.');
-      this.messageCache[cacheKey] = { message, timestamp: currentTime };
-      return true;
+    const cachedMessage = await client.get(cacheKey);
+
+    if (cachedMessage) {
+      const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
+      if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
+        console.log('Duplicate message detected, not sending.');
+        return false;
+      }
     }
 
-    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
+    console.log('No cached message found or cache expired, sending message.');
+    await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
+      EX: cacheDuration,
+    });
 
-    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
-      console.log('Duplicate message detected, not sending.');
-      return false;
-    }
-
-    console.log('Message cache expired or different message, sending message.');
-    this.messageCache[cacheKey] = { message, timestamp: currentTime };
     return true;
   }
-}
+} // Add this closing parenthesis
 
 module.exports = Distribute;
