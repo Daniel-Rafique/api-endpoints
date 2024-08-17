@@ -337,7 +337,7 @@ class BalanceChecker {
 
     // Find the token account that matches the contract address (mint address)
     const tokenAccount = tokenAccounts.value.find(
-      account => account.account.data.parsed.info.mint === this.contractAddress.toString()
+      account => account.data.parsed.info.mint === this.contractAddress.toString()
     );
 
     if (!tokenAccount) {
