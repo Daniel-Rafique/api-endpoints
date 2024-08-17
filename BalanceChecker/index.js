@@ -298,11 +298,9 @@ class BalanceChecker {
     try {
         console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS.toBase58());
 
-        // Ensure that senderPublicKeyString is a PublicKey object
         const senderPublicKey = new PublicKey(senderPublicKeyString);
         const mintPublicKey = new PublicKey(MINT_ADDRESS);
 
-        // Fetch the token accounts associated with the sender's public key and the specific mint address
         const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
             mint: mintPublicKey
         }, 'jsonParsed');
@@ -318,16 +316,20 @@ class BalanceChecker {
 
         console.log('Here is the token account', tokenAccount);
 
-        // Assuming there should be only one account for the specific mint address
-        if (tokenAccount.account.data.parsed.info.owner !== senderPublicKey.toBase58()) {
+        // Check if the necessary fields exist
+        if (!tokenAccount?.account?.data?.parsed || !tokenAccount?.account?.data?.parsed?.info) {
+            console.error('Parsed token account data or info is missing.');
+            return 0;
+        }
+
+        if (tokenAccount?.account?.data?.parsed?.info?.owner !== senderPublicKey.toBase58()) {
             console.log('The owner of the token account does not match the sender public key.');
             return 0;
         }
 
         console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
 
-        // Retrieve and parse the token balance
-        const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
+        const tokenBalance = parseFloat(tokenAccount?.account?.data?.parsed?.info?.tokenAmount?.uiAmount);
 
         if (tokenBalance < this.minimumTokenBalance) {
             console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
@@ -344,6 +346,7 @@ class BalanceChecker {
         return 0;
     }
 }
+
 
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
