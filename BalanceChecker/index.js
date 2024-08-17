@@ -255,7 +255,7 @@ class BalanceChecker {
 
       const senderPublicKeyString = new PublicKey(senderPublicKey);
 
-      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
+      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString.toString(), amountReceived);
       const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
 
       console.log('Token balance:', tokenBalance);
