@@ -312,7 +312,7 @@ class BalanceChecker {
             return 0;
         }
 
-        const tokenAccount = tokenAccounts.value[0];
+        const tokenAccount = JSON.parse(tokenAccounts.value[0]);
 
         console.log('Here is the token account', tokenAccount);
 
