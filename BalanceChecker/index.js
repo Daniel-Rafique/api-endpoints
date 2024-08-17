@@ -310,18 +310,19 @@ class BalanceChecker {
 
         console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
 
-        if (tokenAccounts.result.value[0].account.data.parsed.info.owner === senderPublicKey) {
+        const tokenAccount = tokenAccounts.value[0];
+
+        if (tokenAccounts.account.data.parsed.info.owner === senderPublicKey) {
             console.log('No token accounts found for the specified mint address.');
             return 0;
         }
 
         // Assuming there should be only one account for the specific mint address
-        const tokenAccount = tokenAccounts.result.value[0].account.data.parsed ;
 
         console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
 
         // Retrieve and parse the token balance
-        const tokenBalance = parseFloat(tokenAccount.tokenAmount.uiAmount);
+        const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
 
         if (tokenBalance < this.minimumTokenBalance) {
             console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
