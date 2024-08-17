@@ -303,7 +303,7 @@ class BalanceChecker {
 
         // Fetch the token accounts associated with the sender's public key and the specific mint address
         const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
-            mint: MINT_ADDRESS
+            mint: MINT_ADDRESS.toBase58()
         }, 'jsonParsed');
 
         console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
