@@ -297,9 +297,7 @@ class BalanceChecker {
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
 
-    const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKeyString, {
-      programId: TOKEN_PROGRAM_ID,
-    });
+    const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKeyString, MINT_ADDRESS)
 
     console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
 
