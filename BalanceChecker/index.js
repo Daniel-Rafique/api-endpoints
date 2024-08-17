@@ -323,6 +323,7 @@ class BalanceChecker {
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
 
+    // Fetch the token accounts associated with the sender's public key
     const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, {
       programId: TOKEN_PROGRAM_ID,
     });
@@ -330,14 +331,17 @@ class BalanceChecker {
     console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
 
     if (tokenAccounts.value.length === 0) {
+      console.log('No token accounts found.');
       return 0;
     }
 
+    // Find the token account that matches the contract address (mint address)
     const tokenAccount = tokenAccounts.value.find(
-      account => account.account.data.parsed.info
+      account => account.account.data.parsed.info.mint === this.contractAddress.toString()
     );
 
-    if (!tokenAccount.mint === this.contractAddress.toString()) {
+    if (!tokenAccount) {
+      console.log('No matching token account found for the specified mint address.');
       return 0;
     }
 
@@ -345,15 +349,17 @@ class BalanceChecker {
     const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
 
     if (tokenBalance < this.minimumTokenBalance) {
+      console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
       await this.returnSol(senderPublicKeyString, amountReceived);
-      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-      if (this.shouldSendMessage(this.chatId, message)) {
+      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
+      if (await this.shouldSendMessage(this.chatId, message)) {
         await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
       }
     }
 
     return tokenBalance;
   }
+
 
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
