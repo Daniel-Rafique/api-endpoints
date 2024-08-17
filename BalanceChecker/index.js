@@ -134,7 +134,7 @@ class BalanceChecker {
       }
     });
 
-    this.ws.on('error', (error) => {
+    this.ws.on('error here', (error) => {
       console.error('WebSocket error:', error);
       if (error.message.includes('429')) {
         console.log('Received 429 error, switching WebSocket endpoint...');
