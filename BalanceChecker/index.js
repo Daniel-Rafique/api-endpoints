@@ -312,6 +312,8 @@ class BalanceChecker {
 
         const tokenAccount = tokenAccounts.value[0];
 
+        console.log('Hete is the token account', tokenAccount)
+
         if (tokenAccounts.account.data.parsed.info.owner === senderPublicKey) {
             console.log('No token accounts found for the specified mint address.');
             return 0;
