@@ -303,7 +303,7 @@ class BalanceChecker {
 
         const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
             mint: mintPublicKey
-        }, 'jsonParsed');
+        });
 
         console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
 
