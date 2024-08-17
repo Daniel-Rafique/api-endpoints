@@ -299,32 +299,32 @@ class BalanceChecker {
 
     const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKeyString, MINT_ADDRESS);
 
-    console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
+    console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts.value, null, 2));
 
-    if (tokenAccounts.value.length === 0) {
-      return 0;
-    }
+    // if (tokenAccounts.value.length === 0) {
+    //   return 0;
+    // }
 
-    const tokenAccount = tokenAccounts.value.find(
-      account => account.account.data.parsed.info
-    );
+    // const tokenAccount = tokenAccounts.value.find(
+    //   account => account.account.data.parsed.info
+    // );
 
-    if (!tokenAccount.mint === this.contractAddress.toString()) {
-      return 0;
-    }
+    // if (!tokenAccount.mint === this.contractAddress.toString()) {
+    //   return 0;
+    // }
 
-    console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
-    const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
+    // console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
+    // const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
 
-    if (tokenBalance < this.minimumTokenBalance) {
-      await this.returnSol(senderPublicKeyString, amountReceived);
-      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-      if (this.shouldSendMessage(this.chatId, message)) {
-        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-      }
-    }
+    // if (tokenBalance < this.minimumTokenBalance) {
+    //   await this.returnSol(senderPublicKeyString, amountReceived);
+    //   const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
+    //   if (this.shouldSendMessage(this.chatId, message)) {
+    //     await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+    //   }
+    // }
 
-    return tokenBalance;
+    // return tokenBalance;
   }
 
   async returnSol(senderPublicKeyString, amountReceived) {
