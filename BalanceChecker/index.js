@@ -324,7 +324,7 @@ class BalanceChecker {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
 
     // Fetch the token accounts associated with the sender's public key
-    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, {
+    const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKeyString, {
       programId: TOKEN_PROGRAM_ID,
     });
 
