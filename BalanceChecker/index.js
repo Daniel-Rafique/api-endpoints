@@ -92,32 +92,6 @@ class BalanceChecker {
     }
   }
 
-  async shouldSendMessage(chatId, message) {
-    const cacheKey = chatId;
-    const currentTime = Date.now();
-    const cacheDuration = 600; // 10 minutes in seconds
-
-    console.log(`Checking message cache for chatId: ${chatId}`);
-    console.log(`Current message: ${message}`);
-
-    const cachedMessage = await client.get(cacheKey);
-
-    if (cachedMessage) {
-        const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
-        if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
-            console.log('Duplicate message detected, not sending.');
-            return false;
-        }
-    }
-
-    console.log('No cached message found or cache expired, sending message.');
-    await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
-        EX: cacheDuration,
-    });
-
-    return true;
-}
-
   listenForTransactions() {
     const userData = this.dataManager.getCollection(this.chatId);
     const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
@@ -323,25 +297,21 @@ class BalanceChecker {
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
     console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
 
-    // Fetch the token accounts associated with the sender's public key
-    const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKeyString, {
+    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, {
       programId: TOKEN_PROGRAM_ID,
     });
 
     console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
 
     if (tokenAccounts.value.length === 0) {
-      console.log('No token accounts found.');
       return 0;
     }
 
-    // Find the token account that matches the contract address (mint address)
     const tokenAccount = tokenAccounts.value.find(
-      account => account.data.parsed.info.mint === this.contractAddress.toString()
+      account => account.account.data.parsed.info
     );
 
-    if (!tokenAccount) {
-      console.log('No matching token account found for the specified mint address.');
+    if (!tokenAccount.mint === this.contractAddress.toString()) {
       return 0;
     }
 
@@ -349,17 +319,15 @@ class BalanceChecker {
     const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
 
     if (tokenBalance < this.minimumTokenBalance) {
-      console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
       await this.returnSol(senderPublicKeyString, amountReceived);
-      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
-      if (await this.shouldSendMessage(this.chatId, message)) {
+      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
+      if (this.shouldSendMessage(this.chatId, message)) {
         await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
       }
     }
 
     return tokenBalance;
   }
-
 
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
