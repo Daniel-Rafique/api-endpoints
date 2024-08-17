@@ -295,38 +295,48 @@ class BalanceChecker {
   }
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
-    console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
-    
+    try {
+        console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS.toBase58());
 
-    const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKeyString.toString(), MINT_ADDRESS);
+        // Ensure that senderPublicKeyString is a PublicKey object
+        const senderPublicKey = new PublicKey(senderPublicKeyString);
 
-    console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts.value.account.data.parsed.info.tokenAmount.uiAmount, null, 2));
+        // Fetch the token accounts associated with the sender's public key and the specific mint address
+        const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
+            mint: MINT_ADDRESS
+        }, 'jsonParsed');
 
-    if (tokenAccounts.value.length === 0) {
-      return 0;
+        console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
+
+        if (tokenAccounts.value.length === 0) {
+            console.log('No token accounts found for the specified mint address.');
+            return 0;
+        }
+
+        // Assuming there should be only one account for the specific mint address
+        const tokenAccount = tokenAccounts.value[0];
+
+        console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
+
+        // Retrieve and parse the token balance
+        const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
+
+        if (tokenBalance < this.minimumTokenBalance) {
+            console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
+            await this.returnSol(senderPublicKeyString, amountReceived);
+            const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
+            if (await this.shouldSendMessage(this.chatId, message)) {
+                await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            }
+        }
+
+        return tokenBalance;
+    } catch (error) {
+        console.error('Error checking token balance:', error);
+        return 0;
     }
+}
 
-    const tokenAccount = tokenAccounts.value.find(
-      account => account.account.data.parsed.info.mint
-    );
-
-    if (!tokenAccount.mint === this.contractAddress.toString()) {
-      return 0;
-    }
-
-    console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
-    const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
-
-    if (tokenBalance < this.minimumTokenBalance) {
-      await this.returnSol(senderPublicKeyString, amountReceived);
-      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-      if (this.shouldSendMessage(this.chatId, message)) {
-        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-      }
-    }
-
-    return tokenBalance;
-  }
 
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
