@@ -300,10 +300,12 @@ class BalanceChecker {
 
         // Ensure that senderPublicKeyString is a PublicKey object
         const senderPublicKey = new PublicKey(senderPublicKeyString);
+        const mintPublicKey = new PublicKey(MINT_ADDRESS);
+
 
         // Fetch the token accounts associated with the sender's public key and the specific mint address
         const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
-            mint: MINT_ADDRESS.toBase58()
+            mint: MINT_ADDRESS
         }, 'jsonParsed');
 
         console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
