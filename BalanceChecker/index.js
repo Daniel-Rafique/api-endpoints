@@ -12,11 +12,11 @@ const client = redis.createClient();
 client.on('error', (err) => console.error('Redis Client Error', err));
 
 (async () => {
-    await client.connect();
+  await client.connect();
 })();
 
 const WEBSOCKET_ENDPOINTS = [
-  process.env.SOLANA_WEBSOCKET_1, 
+  process.env.SOLANA_WEBSOCKET_1,
   process.env.SOLANA_WEBSOCKET_2
 ];
 const SOLANA_RPC_ENDPOINTS = [
@@ -304,27 +304,31 @@ class BalanceChecker {
 
       // Fetch the token accounts associated with the sender's public key and the specific mint address
       const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
-          mint: mintPublicKey
+        mint: mintPublicKey
       });
 
       console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
 
       if (tokenAccounts.value.length === 0) {
-          console.log('No token accounts found for the specified mint address.');
-          return 0;
+        console.log('No token accounts found for the specified mint address.');
+        return 0;
       }
 
       const tokenAccount = tokenAccounts.value[0];
 
       console.log('Here is the token account:', tokenAccount);
 
-      // Verify if data is a Buffer, if not convert it
-      const accountDataBuffer = Buffer.isBuffer(tokenAccount.account.data) 
-          ? tokenAccount.account.data 
-          : Buffer.from(tokenAccount.account.data);
+      // Directly access the data buffer
+      const accountDataBuffer = tokenAccount.account.data;
 
       // Decode the account data using the SPL Token layout
       const accountInfo = AccountLayout.decode(accountDataBuffer);
+
+      // Ensure `accountInfo.amount` is defined and is a Buffer
+      if (!accountInfo.amount || !Buffer.isBuffer(accountInfo.amount)) {
+        console.error('Failed to parse token amount from account data.');
+        return 0;
+      }
 
       // Convert the balance from a u64 to a number and adjust for decimals
       const tokenBalance = u64.fromBuffer(accountInfo.amount).toNumber() / Math.pow(10, accountInfo.decimals);
@@ -332,20 +336,20 @@ class BalanceChecker {
       console.log('Parsed token balance:', tokenBalance);
 
       if (tokenBalance < this.minimumTokenBalance) {
-          console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
-          await this.returnSol(senderPublicKeyString, amountReceived);
-          const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
-          if (await this.shouldSendMessage(this.chatId, message)) {
-              await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-          }
+        console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
+        await this.returnSol(senderPublicKeyString, amountReceived);
+        const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
+        if (await this.shouldSendMessage(this.chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        }
       }
 
       return tokenBalance;
-  } catch (error) {
+    } catch (error) {
       console.error('Error checking token balance:', error);
       return 0;
+    }
   }
-}
 
 
   async returnSol(senderPublicKeyString, amountReceived) {
@@ -408,20 +412,20 @@ class BalanceChecker {
     const cachedMessage = await client.get(cacheKey);
 
     if (cachedMessage) {
-        const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
-        if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
-            console.log('Duplicate message detected, not sending.');
-            return false;
-        }
+      const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
+      if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
+        console.log('Duplicate message detected, not sending.');
+        return false;
+      }
     }
 
     console.log('No cached message found or cache expired, sending message.');
     await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
-        EX: cacheDuration,
+      EX: cacheDuration,
     });
 
     return true;
-}
+  }
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
