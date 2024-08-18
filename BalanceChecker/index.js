@@ -317,24 +317,20 @@ class BalanceChecker {
       const tokenAccount = tokenAccounts.value[0];
       console.log('Here is the token account:', tokenAccount);
 
-      // Directly access the data buffer
-      const accountDataBuffer = tokenAccount.account.data;
-
-      console.log('Raw Buffer Data:', accountDataBuffer);
-
       // Decode the account data using the SPL Token layout
+      const accountDataBuffer = tokenAccount.account.data;
       const accountInfo = AccountLayout.decode(accountDataBuffer);
 
       console.log('Decoded Account Info:', accountInfo);
 
-      // Check if the 'amount' field is present and is a Buffer
-      if (!accountInfo.amount || !Buffer.isBuffer(accountInfo.amount)) {
-        console.error('Failed to parse token amount from account data.');
+      // Check if the token account is owned by the sender
+      if (!accountInfo.owner.equals(senderPublicKey)) {
+        console.log('The owner of the token account does not match the sender public key.');
         return 0;
       }
 
-      // Convert the balance from a u64 to a number and adjust for decimals
-      const tokenBalance = u64.fromBuffer(accountInfo.amount).toNumber() / Math.pow(10, accountInfo.decimals);
+      // Convert the balance from a BigInt to a human-readable number
+      const tokenBalance = Number(accountInfo.amount) / Math.pow(10, accountInfo.decimals);
 
       console.log('Parsed token balance:', tokenBalance);
 
