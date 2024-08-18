@@ -33,6 +33,8 @@ class Send {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
 
+      console.log('Senders balance', amountToSend)
+
       const amountToSend = Math.floor(senderBalance * parseInt(KOYNLABS_COMMS));
       const estimatedFee = await this.getEstimatedFee(senderKeypair);
 
