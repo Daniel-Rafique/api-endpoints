@@ -297,56 +297,54 @@ class BalanceChecker {
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
     try {
-        console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS.toString());
+      console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS.toBase58());
 
-        const senderPublicKey = new PublicKey(senderPublicKeyString);
-        const mintPublicKey = new PublicKey(MINT_ADDRESS);
+      const senderPublicKey = new PublicKey(senderPublicKeyString);
+      const mintPublicKey = new PublicKey(MINT_ADDRESS);
 
-        const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKeyString, {
-            mint: MINT_ADDRESS,
-            encoding: 'jsonParsed'
-        });
+      // Fetch the token accounts associated with the sender's public key and the specific mint address
+      const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
+          mint: mintPublicKey
+      });
 
-        console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
+      console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
 
-        if (tokenAccounts.value.length === 0) {
-            console.log('No token accounts found for the specified mint address.');
-            return 0;
-        }
+      if (tokenAccounts.value.length === 0) {
+          console.log('No token accounts found for the specified mint address.');
+          return 0;
+      }
 
-        const tokenAccount = tokenAccounts.value[0];
+      const tokenAccount = tokenAccounts.value[0];
 
-        console.log('Here is the token account', tokenAccount);
+      console.log('Here is the token account:', tokenAccount);
 
-        // Check if the necessary fields exist
-        if (!tokenAccount?.account?.data?.parsed || !tokenAccount?.account?.data?.parsed?.info) {
-            console.error('Parsed token account data or info is missing.');
-            return 0;
-        }
+      // Verify if data is a Buffer, if not convert it
+      const accountDataBuffer = Buffer.isBuffer(tokenAccount.account.data) 
+          ? tokenAccount.account.data 
+          : Buffer.from(tokenAccount.account.data);
 
-        if (tokenAccount?.account?.data?.parsed?.info?.owner !== senderPublicKey.toBase58()) {
-            console.log('The owner of the token account does not match the sender public key.');
-            return 0;
-        }
+      // Decode the account data using the SPL Token layout
+      const accountInfo = AccountLayout.decode(accountDataBuffer);
 
-        console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
+      // Convert the balance from a u64 to a number and adjust for decimals
+      const tokenBalance = u64.fromBuffer(accountInfo.amount).toNumber() / Math.pow(10, accountInfo.decimals);
 
-        const tokenBalance = parseFloat(tokenAccount?.account?.data?.parsed?.info?.tokenAmount?.uiAmount);
+      console.log('Parsed token balance:', tokenBalance);
 
-        if (tokenBalance < this.minimumTokenBalance) {
-            console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
-            await this.returnSol(senderPublicKeyString, amountReceived);
-            const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
-            if (await this.shouldSendMessage(this.chatId, message)) {
-                await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-            }
-        }
+      if (tokenBalance < this.minimumTokenBalance) {
+          console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
+          await this.returnSol(senderPublicKeyString, amountReceived);
+          const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
+          if (await this.shouldSendMessage(this.chatId, message)) {
+              await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          }
+      }
 
-        return tokenBalance;
-    } catch (error) {
-        console.error('Error checking token balance:', error);
-        return 0;
-    }
+      return tokenBalance;
+  } catch (error) {
+      console.error('Error checking token balance:', error);
+      return 0;
+  }
 }
 
 
