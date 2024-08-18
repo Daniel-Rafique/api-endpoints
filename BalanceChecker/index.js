@@ -1,10 +1,11 @@
-const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction } = require('@solana/web3.js');
+const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, web3 } = require('@solana/web3.js');
+const { AccountLayout, u64 } = require('@solana/spl-token');
 const bs58 = require('bs58');
 const TelegramNotifier = require('../Telegram');
 const WalletProcessor = require('../WalletProcessor');
 const DataManager = require('../database')
 const WebSocket = require('ws');
-const crypto = require('crypto');
+
 const redis = require('redis');
 const client = redis.createClient();
 
@@ -302,7 +303,8 @@ class BalanceChecker {
         const mintPublicKey = new PublicKey(MINT_ADDRESS);
 
         const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
-            mint: mintPublicKey
+            mint: mintPublicKey,
+            encoding: 'jsonParsed'
         });
 
         console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
