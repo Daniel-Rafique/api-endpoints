@@ -330,7 +330,7 @@ class BalanceChecker {
       }
 
       // Convert the balance from a BigInt to a human-readable number
-      const tokenBalance = Number(accountInfo.amount) / Math.pow(10, accountInfo.decimals);
+      const tokenBalance = accountInfo.amount.
 
       console.log('Parsed token balance:', tokenBalance);
 
