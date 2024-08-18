@@ -43,59 +43,44 @@ class Distribute {
   }
 
   async distributeSolana(senderPrivateKey, chatId, userData) {
-    try {
-      const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
-      const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+    const retryLimit = 3;
+    let attempt = 0;
 
-      if (senderBalance <= 0) {
-        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-      }
+    while (attempt < retryLimit) {
+        try {
+            const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+            const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
-      // Resolve the file path
-      const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+            if (senderBalance <= 0) {
+                throw new InsufficientBalanceError('Insufficient balance in sender wallet');
+            }
 
-      // Wait for the wallets.json file to be created if it doesn't exist
-      await this.waitForFile(filePath);
+            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+            await this.waitForFile(filePath);
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            const newWallets = JSON.parse(fileContent);
 
-      // Read the wallets.json file
-      const fileContent = await fs.readFile(filePath, 'utf8');
-      const newWallets = JSON.parse(fileContent);
+            const amountPerWallet = Math.floor(senderBalance / userData.makers);
+            if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
+                throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
+            }
 
-      // Remaining balance logic
-      const remainingBalance = senderBalance;
-      if (!userData.makers || userData.makers <= 0) {
-        throw new Error('Invalid number of makers.');
-      }
-      const amountPerWallet = Math.round(remainingBalance / userData.makers);
+            const dropList = newWallets.map(wallet => ({
+                walletAddress: wallet.publicKey,
+                numLamports: amountPerWallet,
+            }));
 
-      if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
-        throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
-      }
+            const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
+            const txResults = await this.executeTransactions(transactionList, senderKeypair, userData);
 
-      const dropList = newWallets.map(wallet => ({
-        walletAddress: wallet.publicKey,
-        numLamports: amountPerWallet,
-      }));
-
-      await userDocRef.update({ distributeSolana: true });
-      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
-      const txResults = await this.executeTransactions(transactionList, senderKeypair, userData);
-      await userDocRef.update({ distributeSolana: false, commissionPaid: false });
-      return txResults;
-    } catch (error) {
-      console.error('Error during distribution:', error);
-      if (error instanceof InsufficientBalanceError) {
-        console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
-        if (this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            return txResults;
+        } catch (error) {
+            console.error(`Attempt ${attempt + 1} failed during distribution:`, error.message);
+            if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
         }
-      } else {
-        throw error;
-      }
+        attempt++;
     }
-  }
+}
 
   // Wait for the file to exist
   async waitForFile(filePath) {
@@ -181,6 +166,16 @@ class Distribute {
 
     return true;
   }
-} // Add this closing parenthesis
+  async retryOperation(operation, retries = 3) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        console.error(`Attempt ${attempt + 1} failed: ${error.message}`);
+        if (attempt === retries - 1) throw error; // Throw the error if it's the last attempt
+      }
+    }
+  }
+}
 
 module.exports = Distribute;

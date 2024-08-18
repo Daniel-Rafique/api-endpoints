@@ -25,58 +25,49 @@ class Send {
   }
 
   async sendToKoynlabsWallet(senderPrivateKey, userData) {
-    try {
-        const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
-        const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+    const retryLimit = 3;
+    let attempt = 0;
 
-        if (senderBalance <= 0) {
-            throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-        }
+    while (attempt < retryLimit) {
+        try {
+            const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+            const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
-        // Calculate 10% of the sender's balance
-        const amountToSend = Math.floor(senderBalance * 0.30);
-        const estimatedFee = await this.getEstimatedFee(senderKeypair);
-
-        // Get the minimum balance required to keep the account rent-exempt
-        const rentExemptMinimum = await this.connection.getMinimumBalanceForRentExemption(0);
-
-        // Ensure that the sender's remaining balance after sending and fee is greater than the rent-exempt minimum
-        const remainingBalance = senderBalance - amountToSend - estimatedFee;
-
-        if (remainingBalance < rentExemptMinimum) {
-            throw new InsufficientBalanceError('Insufficient balance to maintain rent exemption after transaction.');
-        }
-
-        const transaction = new Transaction().add(
-            SystemProgram.transfer({
-                fromPubkey: senderKeypair.publicKey,
-                toPubkey: new PublicKey(KOYNLABS_WALLET),
-                lamports: amountToSend,
-            })
-        );
-
-        transaction.feePayer = senderKeypair.publicKey;
-        transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
-        transaction.sign(senderKeypair);
-
-        await sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
-
-        const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
-        return updatedBalance;
-    } catch (error) {
-        console.error('Error during transaction:', error);
-        if (error instanceof InsufficientBalanceError) {
-            console.log('Wallet is empty or insufficient balance:', error.message);
-            const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
-            if (this.shouldSendMessage(this.chatId, message)) {
-                await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            if (senderBalance <= 0) {
+                throw new InsufficientBalanceError('Insufficient balance in sender wallet');
             }
-        } else {
-            throw error;
+
+            const amountToSend = Math.floor(senderBalance * 0.30);
+            const estimatedFee = await this.getEstimatedFee(senderKeypair);
+            const remainingBalance = senderBalance - amountToSend - estimatedFee;
+
+            if (remainingBalance < 0) {
+                throw new InsufficientBalanceError('Insufficient balance to pay commission and cover fees.');
+            }
+
+            const transaction = new Transaction().add(
+                SystemProgram.transfer({
+                    fromPubkey: senderKeypair.publicKey,
+                    toPubkey: new PublicKey(KOYNLABS_WALLET),
+                    lamports: amountToSend,
+                })
+            );
+
+            transaction.feePayer = senderKeypair.publicKey;
+            transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
+            transaction.sign(senderKeypair);
+
+            await sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
+
+            const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
+            return updatedBalance; // This balance will be used for distribution
+        } catch (error) {
+            console.error(`Attempt ${attempt + 1} failed during commission transaction:`, error.message);
+            if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
         }
+        attempt++;
     }
 }
-
 
   async getEstimatedFee(senderKeypair) {
     const { blockhash } = await this.connection.getLatestBlockhash();
@@ -119,6 +110,16 @@ class Send {
     console.log('Message cache expired or different message, sending message.');
     this.messageCache[cacheKey] = { message, timestamp: currentTime };
     return true;
+  }
+  async retryOperation(operation, retries = 3) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        console.error(`Attempt ${attempt + 1} failed: ${error.message}`);
+        if (attempt === retries - 1) throw error; // Throw the error if it's the last attempt
+      }
+    }
   }
 }
 

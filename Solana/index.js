@@ -48,7 +48,7 @@ class Solana {
 
         const sendInstance = new Send(chatId);
 
-        if (!userData.commissionPaid) {
+        if (userData.commissionPaid === false) {
             updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
             // Mark the commission as paid
             await this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ commissionPaid: true });

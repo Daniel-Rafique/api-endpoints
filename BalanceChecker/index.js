@@ -25,7 +25,6 @@ const { MESSAGES } = require('../constants');
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
-let currentRpcEndpointIndex = 0;
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
@@ -382,7 +381,7 @@ class BalanceChecker {
   }
 
   async shouldSendMessage(chatId, message) {
-    const cacheKey = chatId;
+    const cacheKey = String(chatId); // Ensure the cache key is a string
     const currentTime = Date.now();
     const cacheDuration = 600; // 10 minutes in seconds
 
@@ -394,7 +393,17 @@ class BalanceChecker {
 
         if (cachedMessage) {
             console.log(`Cached message found: ${cachedMessage}`);
-            const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
+            
+            // Parse the cached message safely
+            let parsedCache;
+            try {
+                parsedCache = JSON.parse(cachedMessage);
+            } catch (error) {
+                console.error('Error parsing cached message from Redis:', error);
+                return false;
+            }
+
+            const { message: cachedMsg, timestamp } = parsedCache;
 
             if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
                 console.log('Duplicate message detected, not sending.');
@@ -404,7 +413,7 @@ class BalanceChecker {
             console.log('No cached message found.');
         }
     } catch (error) {
-        console.error('Error retrieving or parsing cached message from Redis:', error);
+        console.error('Error retrieving cached message from Redis:', error);
         return false;
     }
 
