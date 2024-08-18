@@ -296,58 +296,53 @@ class BalanceChecker {
   }
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
-    try {
-        console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS.toBase58());
-
-        const senderPublicKey = new PublicKey(senderPublicKeyString);
-        const mintPublicKey = new PublicKey(MINT_ADDRESS);
-
-        const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
-            mint: mintPublicKey,
-            encoding: 'jsonParsed'
-        });
-
-        console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
-
-        if (tokenAccounts.value.length === 0) {
-            console.log('No token accounts found for the specified mint address.');
-            return 0;
-        }
-
-        const tokenAccount = JSON.parse(tokenAccounts.value[0]);
-
-        console.log('Here is the token account', tokenAccount);
-
-        // Check if the necessary fields exist
-        if (!tokenAccount?.account?.data?.parsed || !tokenAccount?.account?.data?.parsed?.info) {
-            console.error('Parsed token account data or info is missing.');
-            return 0;
-        }
-
-        if (tokenAccount?.account?.data?.parsed?.info?.owner !== senderPublicKey.toBase58()) {
-            console.log('The owner of the token account does not match the sender public key.');
-            return 0;
-        }
-
-        console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
-
-        const tokenBalance = parseFloat(tokenAccount?.account?.data?.parsed?.info?.tokenAmount?.uiAmount);
-
-        if (tokenBalance < this.minimumTokenBalance) {
-            console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
-            await this.returnSol(senderPublicKeyString, amountReceived);
-            const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
-            if (await this.shouldSendMessage(this.chatId, message)) {
-                await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-            }
-        }
-
-        return tokenBalance;
-    } catch (error) {
-        console.error('Error checking token balance:', error);
-        return 0;
-    }
-}
+      try {
+          console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS.toBase58());
+  
+          const senderPublicKey = new PublicKey(senderPublicKeyString);
+          const mintPublicKey = new PublicKey(MINT_ADDRESS);
+  
+          // Fetch the token accounts associated with the sender's public key and the specific mint address
+          const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
+              mint: mintPublicKey
+          });
+  
+          console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
+  
+          if (tokenAccounts.value.length === 0) {
+              console.log('No token accounts found for the specified mint address.');
+              return 0;
+          }
+  
+          const tokenAccount = tokenAccounts.value[0];
+  
+          console.log('Here is the token account:', tokenAccount);
+  
+          // Manually decode the account data buffer using the SPL Token layout
+          const accountDataBuffer = Buffer.from(tokenAccount.account.data[0], 'base64'); // Decode base64 data into a Buffer
+          const accountInfo = AccountLayout.decode(accountDataBuffer);
+  
+          // Convert the balance from a u64 to a number and adjust for decimals
+          const tokenBalance = u64.fromBuffer(accountInfo.amount).toNumber() / Math.pow(10, accountInfo.decimals);
+  
+          console.log('Parsed token balance:', tokenBalance);
+  
+          if (tokenBalance < this.minimumTokenBalance) {
+              console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
+              await this.returnSol(senderPublicKeyString, amountReceived);
+              const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
+              if (await this.shouldSendMessage(this.chatId, message)) {
+                  await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+              }
+          }
+  
+          return tokenBalance;
+      } catch (error) {
+          console.error('Error checking token balance:', error);
+          return 0;
+      }
+  }
+  
 
 
   async returnSol(senderPublicKeyString, amountReceived) {
