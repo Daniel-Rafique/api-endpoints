@@ -26,49 +26,57 @@ class Send {
 
   async sendToKoynlabsWallet(senderPrivateKey, userData) {
     try {
-      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
-      const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+        const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+        const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
-      if (senderBalance <= 0) {
-        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-      }
-
-      console.log('Senders balance', senderBalance)
-
-      const amountToSend = Math.floor(senderBalance * parseInt(KOYNLABS_COMMS));
-      const estimatedFee = await this.getEstimatedFee(senderKeypair);
-
-      console.log('About to send to koynlabs', amountToSend)
-
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: senderKeypair.publicKey,
-          toPubkey: new PublicKey(KOYNLABS_WALLET),
-          lamports: amountToSend - estimatedFee,
-        })
-      );
-
-      transaction.feePayer = senderKeypair.publicKey;
-      transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
-      transaction.sign(senderKeypair);
-
-      await sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
-
-      const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
-      return updatedBalance;
-    } catch (error) {
-      console.error('Error during airdrop:', error);
-      if (error instanceof InsufficientBalanceError) {
-        console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
-        if (this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        if (senderBalance <= 0) {
+            throw new InsufficientBalanceError('Insufficient balance in sender wallet');
         }
-      } else {
-        throw error;
-      }
+
+        // Calculate 10% of the sender's balance
+        const amountToSend = Math.floor(senderBalance * 0.30);
+        const estimatedFee = await this.getEstimatedFee(senderKeypair);
+
+        // Get the minimum balance required to keep the account rent-exempt
+        const rentExemptMinimum = await this.connection.getMinimumBalanceForRentExemption(0);
+
+        // Ensure that the sender's remaining balance after sending and fee is greater than the rent-exempt minimum
+        const remainingBalance = senderBalance - amountToSend - estimatedFee;
+
+        if (remainingBalance < rentExemptMinimum) {
+            throw new InsufficientBalanceError('Insufficient balance to maintain rent exemption after transaction.');
+        }
+
+        const transaction = new Transaction().add(
+            SystemProgram.transfer({
+                fromPubkey: senderKeypair.publicKey,
+                toPubkey: new PublicKey(KOYNLABS_WALLET),
+                lamports: amountToSend,
+            })
+        );
+
+        transaction.feePayer = senderKeypair.publicKey;
+        transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
+        transaction.sign(senderKeypair);
+
+        await sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
+
+        const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
+        return updatedBalance;
+    } catch (error) {
+        console.error('Error during transaction:', error);
+        if (error instanceof InsufficientBalanceError) {
+            console.log('Wallet is empty or insufficient balance:', error.message);
+            const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
+            if (this.shouldSendMessage(this.chatId, message)) {
+                await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            }
+        } else {
+            throw error;
+        }
     }
-  }
+}
+
 
   async getEstimatedFee(senderKeypair) {
     const { blockhash } = await this.connection.getLatestBlockhash();
