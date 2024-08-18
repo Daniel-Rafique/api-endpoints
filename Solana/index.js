@@ -45,20 +45,23 @@ class Solana {
 
         let updatedBalance;
 
+        const sendInstance = new Send(chatId);
+
         if (!userData.commissionPaid) {
-            const sendInstance = new Send(chatId);
             updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
-            // Assume commission is now paid after sending
+            // Mark the commission as paid
             await this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ commissionPaid: true });
         } else {
             const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
             updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
         }
 
+        // After sending the commission, proceed to distribute the remaining Solana if there is a balance left
         if (updatedBalance > 0) {
             const distributeInstance = new Distribute(chatId);
             const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
             console.log('Distribution results:', results);
+
             const message = MESSAGES.DEPLOYMENT(updatedBalance);
             if (this.shouldSendMessage(chatId, message)) {
                 await this.telegramNotifier.sendTelegramMessage(chatId, message);
@@ -85,6 +88,7 @@ class Solana {
         }
     }
 }
+
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
