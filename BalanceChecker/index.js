@@ -315,16 +315,19 @@ class BalanceChecker {
       }
 
       const tokenAccount = tokenAccounts.value[0];
-
       console.log('Here is the token account:', tokenAccount);
 
       // Directly access the data buffer
       const accountDataBuffer = tokenAccount.account.data;
 
+      console.log('Raw Buffer Data:', accountDataBuffer);
+
       // Decode the account data using the SPL Token layout
       const accountInfo = AccountLayout.decode(accountDataBuffer);
 
-      // Ensure `accountInfo.amount` is defined and is a Buffer
+      console.log('Decoded Account Info:', accountInfo);
+
+      // Check if the 'amount' field is present and is a Buffer
       if (!accountInfo.amount || !Buffer.isBuffer(accountInfo.amount)) {
         console.error('Failed to parse token amount from account data.');
         return 0;
