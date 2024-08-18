@@ -80,7 +80,7 @@ class Solana {
         console.error('Error during airdrop:', error);
         if (error instanceof InsufficientBalanceError) {
             console.log('Wallet is empty:', error.message);
-            const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
+            const message = MESSAGES.TOPUP_SOL(userData.boostCost);
             if (this.shouldSendMessage(chatId, message)) {
                 await this.telegramNotifier.sendTelegramMessage(chatId, message);
             }

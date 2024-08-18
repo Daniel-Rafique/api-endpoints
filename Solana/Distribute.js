@@ -81,8 +81,7 @@ class Distribute {
       await userDocRef.update({ distributeSolana: true });
       const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
       const txResults = await this.executeTransactions(transactionList, senderKeypair, userData);
-      await userDocRef.update({ distributeSolana: false });
-      await userDocRef.update({ commissionPaid: false });
+      await userDocRef.update({ distributeSolana: false, commissionPaid: false });
       return txResults;
     } catch (error) {
       console.error('Error during distribution:', error);
