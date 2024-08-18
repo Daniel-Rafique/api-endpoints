@@ -1,4 +1,5 @@
 require('dotenv').config()
+const bs58 = require('bs58');
 const path = require('path');
 const os = require('os');
 const { Connection, Keypair } = require('@solana/web3.js'); // Import Keypair
