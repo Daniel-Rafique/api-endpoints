@@ -36,6 +36,8 @@ class Send {
       const amountToSend = Math.floor(senderBalance * parseInt(KOYNLABS_COMMS));
       const estimatedFee = await this.getEstimatedFee(senderKeypair);
 
+      console.log('About to send to koynlabs', amountToSend)
+
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: senderKeypair.publicKey,
