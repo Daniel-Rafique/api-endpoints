@@ -102,6 +102,7 @@ class BalanceChecker {
       return;
     }
     const endpoint = getWebSocketEndpoint();
+    console.log('Websocket endpoint', endpoint)
     this.ws = new WebSocket(endpoint);
 
     this.ws.on('open', () => {
