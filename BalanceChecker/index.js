@@ -328,9 +328,18 @@ class BalanceChecker {
         console.log('The owner of the token account does not match the sender public key.');
         return 0;
       }
+      // Check if 'decimals' is defined, if not, set a default (usually 0)
+      const decimals = accountInfo.decimals !== undefined ? accountInfo.decimals : 0;
 
       // Convert the balance from a BigInt to a human-readable number
-      const tokenBalance = accountInfo.amount.
+      const tokenBalance = Number(accountInfo.amount) / Math.pow(10, decimals);
+
+      console.log('Parsed token balance:', tokenBalance);
+
+      if (isNaN(tokenBalance)) {
+          console.error('Token balance calculation resulted in NaN. Check the amount and decimals fields.');
+          return 0;
+      }
 
       console.log('Parsed token balance:', tokenBalance);
 
