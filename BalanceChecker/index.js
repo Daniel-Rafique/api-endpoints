@@ -418,23 +418,37 @@ class BalanceChecker {
     console.log(`Checking message cache for chatId: ${chatId}`);
     console.log(`Current message: ${message}`);
 
-    const cachedMessage = await client.get(cacheKey);
+    try {
+        const cachedMessage = await client.get(cacheKey);
 
-    if (cachedMessage) {
-      const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
-      if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
-        console.log('Duplicate message detected, not sending.');
+        if (cachedMessage) {
+            console.log(`Cached message found: ${cachedMessage}`);
+            const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
+
+            if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
+                console.log('Duplicate message detected, not sending.');
+                return false;
+            }
+        } else {
+            console.log('No cached message found.');
+        }
+    } catch (error) {
+        console.error('Error retrieving or parsing cached message from Redis:', error);
+        // Handle or rethrow the error based on your needs
         return false;
-      }
     }
 
     console.log('No cached message found or cache expired, sending message.');
-    await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
-      EX: cacheDuration,
-    });
+    try {
+        await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
+            EX: cacheDuration,
+        });
+    } catch (error) {
+        console.error('Error setting cache in Redis:', error);
+    }
 
     return true;
-  }
+}
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();

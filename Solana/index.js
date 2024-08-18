@@ -27,9 +27,9 @@ class Solana {
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(), 
-      FIRESTORE_KEYSTORE, 
-      '.config/firebaseServiceAccountKey.json'),
+      keyFilename: path.join(os.homedir(),
+        FIRESTORE_KEYSTORE,
+        '.config/firebaseServiceAccountKey.json'),
     });
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
     this.messageCache = {}; // Initialize cache for messages
@@ -37,46 +37,54 @@ class Solana {
 
   async distributeSolana(chatId) {
     try {
-      const userData = await this.dataManager.getCollection(chatId.toString());
+        const userData = await this.dataManager.getCollection(chatId.toString());
 
-      if (!userData || !userData.walletPk) {
-        throw new Error('User data or wallet private key not found');
-      }
-
-      const sendInstance = new Send(chatId);
-      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
-
-      if (updatedBalance > 0) {
-        const distributeInstance = new Distribute(chatId);
-        const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
-        console.log('Distribution results:', results);
-        const message = MESSAGES.DEPLOYMENT(updatedBalance);
-        if (this.shouldSendMessage(chatId, message)) { // Call shouldSendMessage from solana instance
-          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        if (!userData || !userData.walletPk) {
+            throw new Error('User data or wallet private key not found');
         }
-      } else {
-        console.log('No balance left to distribute.');
-        const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-        const userDoc = await userDocRef.get();
-        if (!userDoc.exists) {
-          throw new Error('User document does not exist');
+
+        let updatedBalance;
+
+        if (!userData.commissionPaid) {
+            const sendInstance = new Send(chatId);
+            updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
+            // Assume commission is now paid after sending
+            await this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ commissionPaid: true });
+        } else {
+            const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
+            updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
         }
-        await userDocRef.update({ distributeSolana: false });
-      }
+
+        if (updatedBalance > 0) {
+            const distributeInstance = new Distribute(chatId);
+            const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
+            console.log('Distribution results:', results);
+            const message = MESSAGES.DEPLOYMENT(updatedBalance);
+            if (this.shouldSendMessage(chatId, message)) {
+                await this.telegramNotifier.sendTelegramMessage(chatId, message);
+            }
+        } else {
+            console.log('No balance left to distribute.');
+            const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
+            const userDoc = await userDocRef.get();
+            if (!userDoc.exists) {
+                throw new Error('User document does not exist');
+            }
+            await userDocRef.update({ distributeSolana: false });
+        }
     } catch (error) {
-      console.error('Error during airdrop:', error);
-      if (error instanceof InsufficientBalanceError) {
-        console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
-        if (this.shouldSendMessage(chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        console.error('Error during airdrop:', error);
+        if (error instanceof InsufficientBalanceError) {
+            console.log('Wallet is empty:', error.message);
+            const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
+            if (this.shouldSendMessage(chatId, message)) {
+                await this.telegramNotifier.sendTelegramMessage(chatId, message);
+            }
+        } else {
+            console.log(error.message);
         }
-      } else {
-        console.log(error.message);
-      }
     }
-  }
-
+}
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
