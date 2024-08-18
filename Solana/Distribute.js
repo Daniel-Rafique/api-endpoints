@@ -18,7 +18,7 @@ client.on('error', (err) => console.error('Redis Client Error', err));
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const TX_INTERVAL = 1000;
 const ENV_PATH = process.env.ENV_PATH;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;

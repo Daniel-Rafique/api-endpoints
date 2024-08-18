@@ -15,14 +15,8 @@ client.on('error', (err) => console.error('Redis Client Error', err));
   await client.connect();
 })();
 
-const WEBSOCKET_ENDPOINTS = [
-  process.env.SOLANA_WEBSOCKET_1,
-  process.env.SOLANA_WEBSOCKET_2
-];
-const SOLANA_RPC_ENDPOINTS = [
-  process.env.SOLANA_RPC_ENDPOINT_1,
-  process.env.SOLANA_RPC_ENDPOINT_2
-];
+const WEBSOCKET_ENDPOINT = process.env.WEBSOCKET_ENDPOINT; // Only one WebSocket endpoint is used now
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
@@ -31,24 +25,12 @@ const { MESSAGES } = require('../constants');
 
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
-let currentEndpointIndex = 0;
 let currentRpcEndpointIndex = 0;
-
-// Load balancers
-function getWebSocketEndpoint() {
-  currentEndpointIndex = (currentEndpointIndex + 1) % WEBSOCKET_ENDPOINTS.length;
-  return WEBSOCKET_ENDPOINTS[currentEndpointIndex];
-}
-
-function getNextRpcEndpoint() {
-  currentRpcEndpointIndex = (currentRpcEndpointIndex + 1) % SOLANA_RPC_ENDPOINTS.length;
-  return SOLANA_RPC_ENDPOINTS[currentRpcEndpointIndex];
-}
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
     this.receiverKeypairString = receiverPrivateKey.toString();
-    this.connection = new Connection(getNextRpcEndpoint(), 'confirmed');
+    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
@@ -66,7 +48,6 @@ class BalanceChecker {
     this.messageCache = {};
     this.initialize();
 
-    // Fetch and set the distributeSolana flag
     this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
     this.distributeSolana = this.getDistributeSolanaFlag(chatId);
   }
@@ -101,9 +82,9 @@ class BalanceChecker {
       console.log('Transaction listener is inactive or wallets are already created.');
       return;
     }
-    const endpoint = getWebSocketEndpoint();
-    console.log('Websocket endpoint', endpoint)
-    this.ws = new WebSocket(endpoint);
+
+    console.log('Websocket endpoint', WEBSOCKET_ENDPOINT)
+    this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened');
@@ -136,11 +117,10 @@ class BalanceChecker {
       }
     });
 
-    this.ws.on('error here', (error) => {
+    this.ws.on('error', (error) => {
       console.error('WebSocket error:', error);
       if (error.message.includes('429')) {
-        console.log('Received 429 error, switching WebSocket endpoint...');
-        this.switchWebSocketEndpoint();
+        console.log('Received 429 error, but no other WebSocket endpoint to switch to.');
       }
     });
 
@@ -170,15 +150,6 @@ class BalanceChecker {
     }
     clearInterval(this.pingInterval);
     clearInterval(this.reconnectInterval);
-  }
-
-  switchWebSocketEndpoint() {
-    console.log('Switching WebSocket endpoint...');
-    clearInterval(this.pingInterval);
-    if (this.ws) {
-      this.ws.close();
-    }
-    this.listenForTransactions();
   }
 
   sendMessage(message) {
@@ -434,7 +405,6 @@ class BalanceChecker {
         }
     } catch (error) {
         console.error('Error retrieving or parsing cached message from Redis:', error);
-        // Handle or rethrow the error based on your needs
         return false;
     }
 
