@@ -1,7 +1,8 @@
 require('dotenv').config()
+const bs58 = require('bs58');
 const path = require('path');
 const os = require('os');
-const { Connection } = require('@solana/web3.js');
+const { Connection, Keypair } = require('@solana/web3.js'); // Import Keypair
 const Send = require('./Send');
 const Distribute = require('./Distribute');
 const { MESSAGES } = require('../constants');
@@ -11,7 +12,7 @@ const Telegram = require('../Telegram');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
 class InsufficientBalanceError extends Error {
@@ -27,9 +28,9 @@ class Solana {
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(), 
-      FIRESTORE_KEYSTORE, 
-      '.config/firebaseServiceAccountKey.json'),
+      keyFilename: path.join(os.homedir(),
+        FIRESTORE_KEYSTORE,
+        '.config/firebaseServiceAccountKey.json'),
     });
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
     this.messageCache = {}; // Initialize cache for messages
@@ -37,43 +38,55 @@ class Solana {
 
   async distributeSolana(chatId) {
     try {
-      const userData = await this.dataManager.getCollection(chatId.toString());
+        const userData = await this.dataManager.getCollection(chatId.toString());
 
-      if (!userData || !userData.walletPk) {
-        throw new Error('User data or wallet private key not found');
-      }
-
-      const sendInstance = new Send(chatId);
-      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
-
-      if (updatedBalance > 0) {
-        const distributeInstance = new Distribute(chatId);
-        const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
-        console.log('Distribution results:', results);
-        const message = MESSAGES.DEPLOYMENT(updatedBalance);
-        if (this.shouldSendMessage(chatId, message)) { // Call shouldSendMessage from solana instance
-          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        if (!userData || !userData.walletPk) {
+            throw new Error('User data or wallet private key not found');
         }
-      } else {
-        console.log('No balance left to distribute.');
-        const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-        const userDoc = await userDocRef.get();
-        if (!userDoc.exists) {
-          throw new Error('User document does not exist');
+
+        let updatedBalance;
+
+        const sendInstance = new Send(chatId);
+
+        if (userData.commissionPaid === false) {
+            updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
+            // Mark the commission as paid
+            await this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ commissionPaid: true });
+        } else {
+            const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
+            updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
         }
-        await userDocRef.update({ distributeSolana: false });
-      }
+
+        // After sending the commission, proceed to distribute the remaining Solana if there is a balance left
+        if (updatedBalance > 0) {
+            const distributeInstance = new Distribute(chatId);
+            const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
+            console.log('Distribution results:', results);
+
+            const message = MESSAGES.DEPLOYMENT(updatedBalance);
+            if (this.shouldSendMessage(chatId, message)) {
+                await this.telegramNotifier.sendTelegramMessage(chatId, message);
+            }
+        } else {
+            console.log('No balance left to distribute.');
+            const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
+            const userDoc = await userDocRef.get();
+            if (!userDoc.exists) {
+                throw new Error('User document does not exist');
+            }
+            await userDocRef.update({ distributeSolana: false });
+        }
     } catch (error) {
-      console.error('Error during airdrop:', error);
-      if (error instanceof InsufficientBalanceError) {
-        console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
-        if (this.shouldSendMessage(chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+        console.error('Error during airdrop:', error);
+        if (error instanceof InsufficientBalanceError) {
+            console.log('Wallet is empty:', error.message);
+            const message = MESSAGES.TOPUP_SOL(userData.boostCost);
+            if (this.shouldSendMessage(chatId, message)) {
+                await this.telegramNotifier.sendTelegramMessage(chatId, message);
+            }
+        } else {
+            console.log(error.message);
         }
-      } else {
-        console.log(error.message);
-      }
     }
   }
 

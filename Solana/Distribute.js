@@ -5,8 +5,20 @@ const os = require('os');
 const bs58 = require('bs58');
 const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
+const { Firestore } = require('@google-cloud/firestore');
 
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_2;
+const redis = require('redis');
+const client = redis.createClient();
+
+client.on('error', (err) => console.error('Redis Client Error', err));
+
+(async () => {
+  await client.connect();
+})();
+
+const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const TX_INTERVAL = 1000;
 const ENV_PATH = process.env.ENV_PATH;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
@@ -24,53 +36,66 @@ class Distribute {
     this.chatId = chatId;
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
     this.messageCache = {}; // Initialize cache for messages
+    this.firestore = new Firestore({
+      projectId: 'koynlabs-2f749',
+      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'), // Corrected path
+    });
   }
 
   async distributeSolana(senderPrivateKey, chatId, userData) {
-    try {
-      const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
-      const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+    const retryLimit = 3;
+    let attempt = 0;
 
-      if (senderBalance <= 0) {
-        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-      }
-      
-      const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
-      console.log(filePath)
+    while (attempt < retryLimit) {
+        try {
+            const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+            const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
-      if (!filePath) {
-        throw new Error('Error resolving filePath.');
-      }
-      const fileContent = await fs.readFile(filePath, 'utf8');
-      const newWallets = JSON.parse(fileContent);
+            if (senderBalance <= 0) {
+                throw new InsufficientBalanceError('Insufficient balance in sender wallet');
+            }
 
-      const remainingBalance = senderBalance; // Use the entire balance left in the sender's wallet
-      const amountPerWallet = Math.floor(remainingBalance / newWallets.length); // Distribute the entire remaining balance equally
+            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+            await this.waitForFile(filePath);
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            const newWallets = JSON.parse(fileContent);
 
-      const dropList = newWallets.map(wallet => ({
-        walletAddress: wallet.publicKey,
-        numLamports: amountPerWallet,
-      }));
+            const amountPerWallet = Math.floor(senderBalance / userData.makers);
+            if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
+                throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
+            }
 
-      const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey);
-      const txResults = await this.executeTransactions(transactionList, senderKeypair);
+            const dropList = newWallets.map(wallet => ({
+                walletAddress: wallet.publicKey,
+                numLamports: amountPerWallet,
+            }));
 
-      return txResults;
-    } catch (error) {
-      console.error('Error during distribution:', error);
-      if (error instanceof InsufficientBalanceError) {
-        console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.TOPUP_SOL(userData.boostCost || 0);
-        if (this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
+            const txResults = await this.executeTransactions(transactionList, senderKeypair, userData);
+
+            return txResults;
+        } catch (error) {
+            console.error(`Attempt ${attempt + 1} failed during distribution:`, error.message);
+            if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
         }
-      } else {
-        throw error;
+        attempt++;
+    }
+}
+
+  // Wait for the file to exist
+  async waitForFile(filePath) {
+    while (true) {
+      try {
+        await fs.access(filePath);
+        break; // File exists, break out of loop
+      } catch (err) {
+        console.log(`Waiting for file to be created: ${filePath}`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before retrying
       }
     }
   }
 
-  generateTransactions(dropList, fromWallet) {
+  generateTransactions(dropList, fromWallet, userData) {
     const transactions = [];
     const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
@@ -80,8 +105,8 @@ class Distribute {
       })
     );
 
-    const batchSize = Math.ceil(txInstructions.length / dropList.length);
-    const numTransactions = Math.ceil(txInstructions.length / batchSize);
+    const batchSize = Math.round(txInstructions.length / userData.makers);
+    const numTransactions = Math.round(txInstructions.length / batchSize);
     for (let i = 0; i < numTransactions; i++) {
       const transaction = new Transaction();
       const lowerIndex = i * batchSize;
@@ -94,13 +119,13 @@ class Distribute {
     return transactions;
   }
 
-  async executeTransactions(transactionList, payer) {
+  async executeTransactions(transactionList, payer, userData) {
     const results = [];
     const staggeredTransactions = transactionList.map((transaction, i) => {
       return new Promise((resolve) => {
         setTimeout(async () => {
           try {
-            console.log(`Requesting Transaction ${i + 1}/${transactionList.length}`);
+            console.log(`Requesting Transaction ${i + 1}/${userData.makers}`);
             const { blockhash } = await this.connection.getLatestBlockhash();
             transaction.recentBlockhash = blockhash;
             const signature = await sendAndConfirmTransaction(this.connection, transaction, [payer]);
@@ -116,31 +141,40 @@ class Distribute {
     return results;
   }
 
-  shouldSendMessage(chatId, message) {
+  async shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
     const currentTime = Date.now();
-    const cacheDuration = 60 * 10000; // 10 minutes
+    const cacheDuration = 600; // 10 minutes in seconds
 
     console.log(`Checking message cache for chatId: ${chatId}`);
     console.log(`Current message: ${message}`);
-    console.log(`Message cache:`, this.messageCache);
 
-    if (!this.messageCache[cacheKey]) {
-      console.log('No cached message found, sending message.');
-      this.messageCache[cacheKey] = { message, timestamp: currentTime };
-      return true;
+    const cachedMessage = await client.get(cacheKey);
+
+    if (cachedMessage) {
+      const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
+      if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
+        console.log('Duplicate message detected, not sending.');
+        return false;
+      }
     }
 
-    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
+    console.log('No cached message found or cache expired, sending message.');
+    await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
+      EX: cacheDuration,
+    });
 
-    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
-      console.log('Duplicate message detected, not sending.');
-      return false;
-    }
-
-    console.log('Message cache expired or different message, sending message.');
-    this.messageCache[cacheKey] = { message, timestamp: currentTime };
     return true;
+  }
+  async retryOperation(operation, retries = 3) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        console.error(`Attempt ${attempt + 1} failed: ${error.message}`);
+        if (attempt === retries - 1) throw error; // Throw the error if it's the last attempt
+      }
+    }
   }
 }
 
