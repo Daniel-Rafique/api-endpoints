@@ -55,6 +55,17 @@ class DataManager {
       console.error(`Error saving info for ${chatId}:`, error);
     }
   }
+
+  async saveSenderWallet(chatId, senderWallet) {
+    try {
+      await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString(), senderWallet).set({
+        senderWallet: senderWallet
+      }, { merge: true });
+      console.log(`Saved senderWallet for chat ID ${chatId}`);
+    } catch (error) {
+      console.error(`Error saving senderWallet for ${chatId}:`, error);
+    }
+  }
 }
 
 module.exports = DataManager;

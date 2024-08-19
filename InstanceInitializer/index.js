@@ -26,7 +26,7 @@ class InstanceInitializer {
   async initializeMarketMakerInstance(chatId) {
     try {
       const userData = await this.dataManager.getCollection(chatId);
-      const { contractAddress, batchSize } = userData;
+      const { contractAddress, batchSize, saveSenderWallet } = userData;
       const userDir = path.join(this.instancePath, chatId.toString());
       if (!fs.existsSync(userDir)) {
         fs.mkdirSync(userDir, { recursive: true });
@@ -34,7 +34,7 @@ class InstanceInitializer {
 
       this.createSymbolicLinksIndividually(this.basePath, userDir);
 
-      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize });
+      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, saveSenderWallet });
 
       await this.startMarketMakerInstance(chatId, userDir);
     } catch (error) {
@@ -54,7 +54,7 @@ class InstanceInitializer {
     });
   }
 
-  async copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize }) {
+  async copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, saveSenderWallet }) {
     const parentEnvPath = path.join(this.basePath, '.env');
     const destEnvPath = path.join(userDir, '.env');
 
@@ -84,7 +84,7 @@ class InstanceInitializer {
         }
 
         // Step 3: Append new parameters to the copied .env file
-        const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\n`;
+        const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\nSENDER_WALLET=${saveSenderWallet}\n`;
         fs.appendFileSync(destEnvPath, envContent);
         console.log(`Appended new parameters to ${destEnvPath}`);
     } else {

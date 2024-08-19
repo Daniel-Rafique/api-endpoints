@@ -254,6 +254,7 @@ class BalanceChecker {
       } else {
         let message = '';
         message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}`
+        this.dataManager.saveSenderWallet(this.chatId, { senderWallet: senderPublicKeyString });
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
