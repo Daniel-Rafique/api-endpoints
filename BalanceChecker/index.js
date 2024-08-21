@@ -101,7 +101,7 @@ class BalanceChecker {
         if (this.ws.readyState === WebSocket.OPEN) {
           this.ws.ping();
         }
-      }, 5000); // Adjust the interval as needed
+      }, 10000); // Adjust the interval as needed
     });
 
     this.ws.on('message', async (data) => {
@@ -118,37 +118,29 @@ class BalanceChecker {
 
     this.ws.on('error', (error) => {
       console.error('WebSocket error:', error);
-      if (error.message.includes('429')) {
-        console.log('Received 429 error, but no other WebSocket endpoint to switch to.');
-      }
+      this.cleanUpWebSocket();
+      this.reconnectWebSocket();
     });
 
     this.ws.on('close', () => {
-      console.log('WebSocket connection closed, reconnecting...');
-      clearInterval(this.pingInterval);
-      if (!this.reconnectInterval) {
-        this.reconnectInterval = setInterval(() => {
-          console.log('Attempting to reconnect WebSocket...');
-          this.listenForTransactions();
-        }, 1000); // Adjust the interval as needed
-      }
+      console.log('WebSocket connection closed');
+      this.cleanUpWebSocket();
+      this.reconnectWebSocket();
     });
   }
-
-  enableListener() {
-    this.listenerActive = true;
-    if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
-      this.listenForTransactions();
-    }
+  cleanUpWebSocket() {
+    clearInterval(this.pingInterval);
+    this.pingInterval = null;
+    this.ws = null;
   }
 
-  disableListener() {
-    this.listenerActive = false;
-    if (this.ws) {
-      this.ws.close();
+  reconnectWebSocket() {
+    if (!this.reconnectInterval) {
+      this.reconnectInterval = setTimeout(() => {
+        console.log('Attempting to reconnect WebSocket...');
+        this.listenForTransactions();
+      }, 5000); // Using a delay before reconnecting, adjust as necessary
     }
-    clearInterval(this.pingInterval);
-    clearInterval(this.reconnectInterval);
   }
 
   sendMessage(message) {
@@ -163,6 +155,7 @@ class BalanceChecker {
       });
     }
   }
+
 
   waitForOpenConnection(callback) {
     const maxAttempts = 10;
@@ -309,8 +302,8 @@ class BalanceChecker {
       console.log('Parsed token balance:', tokenBalance);
 
       if (isNaN(tokenBalance)) {
-          console.error('Token balance calculation resulted in NaN. Check the amount and decimals fields.');
-          return 0;
+        console.error('Token balance calculation resulted in NaN. Check the amount and decimals fields.');
+        return 0;
       }
 
       console.log('Parsed token balance:', tokenBalance);
@@ -390,45 +383,45 @@ class BalanceChecker {
     console.log(`Current message: ${message}`);
 
     try {
-        const cachedMessage = await client.get(cacheKey);
+      const cachedMessage = await client.get(cacheKey);
 
-        if (cachedMessage) {
-            console.log(`Cached message found: ${cachedMessage}`);
-            
-            // Parse the cached message safely
-            let parsedCache;
-            try {
-                parsedCache = JSON.parse(cachedMessage);
-            } catch (error) {
-                console.error('Error parsing cached message from Redis:', error);
-                return false;
-            }
+      if (cachedMessage) {
+        console.log(`Cached message found: ${cachedMessage}`);
 
-            const { message: cachedMsg, timestamp } = parsedCache;
-
-            if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
-                console.log('Duplicate message detected, not sending.');
-                return false;
-            }
-        } else {
-            console.log('No cached message found.');
+        // Parse the cached message safely
+        let parsedCache;
+        try {
+          parsedCache = JSON.parse(cachedMessage);
+        } catch (error) {
+          console.error('Error parsing cached message from Redis:', error);
+          return false;
         }
+
+        const { message: cachedMsg, timestamp } = parsedCache;
+
+        if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
+          console.log('Duplicate message detected, not sending.');
+          return false;
+        }
+      } else {
+        console.log('No cached message found.');
+      }
     } catch (error) {
-        console.error('Error retrieving cached message from Redis:', error);
-        return false;
+      console.error('Error retrieving cached message from Redis:', error);
+      return false;
     }
 
     console.log('No cached message found or cache expired, sending message.');
     try {
-        await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
-            EX: cacheDuration,
-        });
+      await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
+        EX: cacheDuration,
+      });
     } catch (error) {
-        console.error('Error setting cache in Redis:', error);
+      console.error('Error setting cache in Redis:', error);
     }
 
     return true;
-}
+  }
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();
