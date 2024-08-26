@@ -54,7 +54,7 @@ class InstanceInitializer {
     });
   }
 
-  async copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, saveSenderWallet }) {
+  async copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, saveSenderWallet }) {
     const parentEnvPath = path.join(this.basePath, '.env');
     const destEnvPath = path.join(userDir, '.env');
 
@@ -84,7 +84,7 @@ class InstanceInitializer {
         }
 
         // Step 3: Append new parameters to the copied .env file
-        const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\nBOOST_TYPE=${boostType}\nSENDER_WALLET=${saveSenderWallet}\n`;
+        const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\nBOOST_TYPE=${boostType}\nBUY_AMOUNT=${buyAmount}\nSELL_AMOUNT=${sellAmount}\nSENDER_WALLET=${saveSenderWallet}\n`;
         fs.appendFileSync(destEnvPath, envContent);
         console.log(`Appended new parameters to ${destEnvPath}`);
     } else {
