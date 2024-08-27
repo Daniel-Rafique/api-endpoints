@@ -8,7 +8,8 @@ const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
 const Solana = require('../Solana');
 
-const ENV_PATH = process.env.ENV;
+const ENV_PATH = process.env.ENV_PATH;
+console.log("Here is the fucking path", ENV_PATH);
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 class WalletManager {
 

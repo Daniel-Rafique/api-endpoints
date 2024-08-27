@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
