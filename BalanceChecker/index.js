@@ -227,7 +227,7 @@ class BalanceChecker {
 
       const senderPublicKeyString = new PublicKey(senderPublicKey);
 
-      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
+      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString.toString(), amountReceived);
       const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
 
       console.log('Token balance:', tokenBalance);
@@ -291,118 +291,118 @@ class BalanceChecker {
   }
 
   async returnSol(senderPublicKeyString, amountReceived) {
-  try {
-    const estimatedFee = await this.getEstimatedFee();
-    const amountToReturn = amountReceived - estimatedFee; // Double the estimated fee
+    try {
+      const estimatedFee = await this.getEstimatedFee();
+      const amountToReturn = amountReceived - estimatedFee; // Double the estimated fee
 
-    if (amountToReturn <= 0) {
-      console.error('Amount to return is less than or equal to the transaction fee');
-      return;
-    }
-
-    let transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: this.receiverKeypair.publicKey,
-        toPubkey: senderPublicKeyString,
-        lamports: amountToReturn
-      })
-    );
-
-    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = this.receiverKeypair.publicKey;
-    transaction.sign(this.receiverKeypair);
-
-    let currentBlockHeight = await this.connection.getBlockHeight();
-
-    while (currentBlockHeight < lastValidBlockHeight) {
-      try {
-        const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
-        console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
-        const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
-
-        if (this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-        }
-
+      if (amountToReturn <= 0) {
+        console.error('Amount to return is less than or equal to the transaction fee');
         return;
-      } catch (error) {
-        console.error('Error sending transaction, retrying...', error);
       }
-      await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
-      currentBlockHeight = await this.connection.getBlockHeight();
-    }
 
-    console.error('Failed to return SOL: transaction expired');
-  } catch (error) {
-    console.error('Error returning SOL to sender:', error);
+      let transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: this.receiverKeypair.publicKey,
+          toPubkey: senderPublicKeyString,
+          lamports: amountToReturn
+        })
+      );
+
+      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = this.receiverKeypair.publicKey;
+      transaction.sign(this.receiverKeypair);
+
+      let currentBlockHeight = await this.connection.getBlockHeight();
+
+      while (currentBlockHeight < lastValidBlockHeight) {
+        try {
+          const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
+          console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
+          const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
+
+          if (this.shouldSendMessage(this.chatId, message)) {
+            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          }
+
+          return;
+        } catch (error) {
+          console.error('Error sending transaction, retrying...', error);
+        }
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
+        currentBlockHeight = await this.connection.getBlockHeight();
+      }
+
+      console.error('Failed to return SOL: transaction expired');
+    } catch (error) {
+      console.error('Error returning SOL to sender:', error);
+    }
   }
-}
 
   async shouldSendMessage(chatId, message) {
-  const cacheKey = String(chatId); // Ensure the cache key is a string
-  const currentTime = Date.now();
-  const cacheDuration = 600; // 10 minutes in seconds
+    const cacheKey = String(chatId); // Ensure the cache key is a string
+    const currentTime = Date.now();
+    const cacheDuration = 600; // 10 minutes in seconds
 
-  console.log(`Checking message cache for chatId: ${chatId}`);
-  console.log(`Current message: ${message}`);
+    console.log(`Checking message cache for chatId: ${chatId}`);
+    console.log(`Current message: ${message}`);
 
-  try {
-    const cachedMessage = await client.get(cacheKey);
+    try {
+        const cachedMessage = await client.get(cacheKey);
 
-    if (cachedMessage) {
-      console.log(`Cached message found: ${cachedMessage}`);
+        if (cachedMessage) {
+            console.log(`Cached message found: ${cachedMessage}`);
+            
+            // Parse the cached message safely
+            let parsedCache;
+            try {
+                parsedCache = JSON.parse(cachedMessage);
+            } catch (error) {
+                console.error('Error parsing cached message from Redis:', error);
+                return false;
+            }
 
-      // Parse the cached message safely
-      let parsedCache;
-      try {
-        parsedCache = JSON.parse(cachedMessage);
-      } catch (error) {
-        console.error('Error parsing cached message from Redis:', error);
+            const { message: cachedMsg, timestamp } = parsedCache;
+
+            if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
+                console.log('Duplicate message detected, not sending.');
+                return false;
+            }
+        } else {
+            console.log('No cached message found.');
+        }
+    } catch (error) {
+        console.error('Error retrieving cached message from Redis:', error);
         return false;
-      }
-
-      const { message: cachedMsg, timestamp } = parsedCache;
-
-      if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
-        console.log('Duplicate message detected, not sending.');
-        return false;
-      }
-    } else {
-      console.log('No cached message found.');
     }
-  } catch (error) {
-    console.error('Error retrieving cached message from Redis:', error);
-    return false;
-  }
 
-  console.log('No cached message found or cache expired, sending message.');
-  try {
-    await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
-      EX: cacheDuration,
-    });
-  } catch (error) {
-    console.error('Error setting cache in Redis:', error);
-  }
+    console.log('No cached message found or cache expired, sending message.');
+    try {
+        await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
+            EX: cacheDuration,
+        });
+    } catch (error) {
+        console.error('Error setting cache in Redis:', error);
+    }
 
-  return true;
+    return true;
 }
 
   async getEstimatedFee() {
-  const { blockhash } = await this.connection.getLatestBlockhash();
-  const message = new Transaction({
-    recentBlockhash: blockhash,
-    feePayer: this.receiverKeypair.publicKey
-  }).add(
-    SystemProgram.transfer({
-      fromPubkey: this.receiverKeypair.publicKey,
-      toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
-      lamports: 1
-    })
-  ).compileMessage();
-  const { value } = await this.connection.getFeeForMessage(message);
-  return value;
-}
+    const { blockhash } = await this.connection.getLatestBlockhash();
+    const message = new Transaction({
+      recentBlockhash: blockhash,
+      feePayer: this.receiverKeypair.publicKey
+    }).add(
+      SystemProgram.transfer({
+        fromPubkey: this.receiverKeypair.publicKey,
+        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
+        lamports: 1
+      })
+    ).compileMessage();
+    const { value } = await this.connection.getFeeForMessage(message);
+    return value;
+  }
 }
 
 module.exports = BalanceChecker;
