@@ -47,7 +47,7 @@ class Solana {
         let updatedBalance;
         const sendInstance = new Send(chatId);
 
-        if (userData.commissionPaid === false) {
+        if (userData.commissionPaid === false && userData.walletsCreated === true) {
             // Start the promise chain for the commission payment
             updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData)
                 .then(() => {
