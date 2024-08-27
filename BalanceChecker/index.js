@@ -125,11 +125,11 @@ class BalanceChecker {
         this.reconnectWebSocket();
     });
 
-    this.ws.on('close', () => {
-        console.log('WebSocket connection closed');
-        this.cleanUpWebSocket();
-        this.reconnectWebSocket();
-    });
+    // this.ws.on('close', () => {
+    //     console.log('WebSocket connection closed');
+    //     this.cleanUpWebSocket();
+    //     this.reconnectWebSocket();
+    // });
 }
 
   cleanUpWebSocket() {
