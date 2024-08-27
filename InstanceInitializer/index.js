@@ -26,7 +26,7 @@ class InstanceInitializer {
   async initializeMarketMakerInstance(chatId) {
     try {
       const userData = await this.dataManager.getCollection(chatId);
-      const { contractAddress, batchSize, boostType, saveSenderWallet } = userData;
+      const { contractAddress, batchSize, boostType, buyAmount, sellAmount, saveSenderWallet } = userData;
       const userDir = path.join(this.instancePath, chatId.toString());
       if (!fs.existsSync(userDir)) {
         fs.mkdirSync(userDir, { recursive: true });
@@ -34,7 +34,7 @@ class InstanceInitializer {
 
       this.createSymbolicLinksIndividually(this.basePath, userDir);
 
-      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, saveSenderWallet });
+      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, saveSenderWallet });
 
       await this.startMarketMakerInstance(chatId, userDir);
     } catch (error) {
