@@ -61,7 +61,7 @@ class WalletManager {
 
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
-            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`)
+            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/dist/wallets.json`)
 
             if (!filePath) {
                 throw new Error('Error resolving filePath.');
