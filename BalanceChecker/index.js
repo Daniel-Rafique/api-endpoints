@@ -93,7 +93,7 @@ class BalanceChecker {
         method: "logsSubscribe",
         params: [{
           mentions: [publicKeyToMention]
-        }]
+        }],
       });
 
       // Set up a ping interval to keep the connection alive
@@ -264,8 +264,7 @@ class BalanceChecker {
     
     console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS.toString());
 
-
-    const tokenMintAddress = MINT_ADDRESS;
+    const tokenMintAddress = new PublicKey(MINT_ADDRESS);
     const accounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, { programId: TOKEN_PROGRAM_ID });
     const accountInfo = accounts.value.find((account) => account.account.data.parsed.info.mint === tokenMintAddress.toBase58());
 
