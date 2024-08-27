@@ -58,7 +58,7 @@ class DataManager {
 
   async saveSenderWallet(chatId, senderWallet) {
     try {
-      await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString(), senderWallet).set({
+      await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).set({
         senderWallet: senderWallet
       }, { merge: true });
       console.log(`Saved senderWallet for chat ID ${chatId}`);
