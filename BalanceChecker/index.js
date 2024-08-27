@@ -261,21 +261,20 @@ class BalanceChecker {
   }
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
-    
     console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS.toString());
 
     const tokenMintAddress = new PublicKey(MINT_ADDRESS);
-    const accounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, { programId: TOKEN_PROGRAM_ID });
+    const senderPublicKey = new PublicKey(senderPublicKeyString); // Ensure senderPublicKey is a PublicKey object
+    const accounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKey, { programId: TOKEN_PROGRAM_ID });
     const accountInfo = accounts.value.find((account) => account.account.data.parsed.info.mint === tokenMintAddress.toBase58());
 
-    const tokenBalance = accountInfo ? new Decimal(accountInfo.account.data.parsed.info.tokenAmount.amount) : new Decimal(0);
+    const tokenBalance = accountInfo ? parseFloat(accountInfo.account.data.parsed.info.tokenAmount.amount) : 0;
 
     if (tokenBalance < this.minimumTokenBalance) {
-
       await this.returnSol(senderPublicKeyString, amountReceived);
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
 
-      if (this.shouldSendMessage(this.chatId, message)) {
+      if (await this.shouldSendMessage(this.chatId, message)) {
         await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
       }
     }
