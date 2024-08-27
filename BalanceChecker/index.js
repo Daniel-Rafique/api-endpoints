@@ -270,30 +270,18 @@ class BalanceChecker {
     
     console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS);
 
-    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, {
-      programId: TOKEN_PROGRAM_ID,
-    });
 
-    console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
+    const tokenMintAddress = MINT_ADDRESS;
+    const accounts = await connection.getParsedTokenAccountsByOwner(walletAddress, { programId: TOKEN_PROGRAM_ID });
+    const accountInfo = accounts.value.find((account) => account.account.data.parsed.info.mint === tokenMintAddress.toBase58());
 
-    if (tokenAccounts.value.length === 0) {
-      return 0;
-    }
-
-    const tokenAccount = tokenAccounts.value.find(
-      account => account.account.data.parsed.info
-    );
-
-    if (!tokenAccount.mint === this.contractAddress.toString()) {
-      return 0;
-    }
-
-    console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
-    const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
+    const tokenBalance = accountInfo ? new Decimal(accountInfo.account.data.parsed.info.tokenAmount.amount) : new Decimal(0);
 
     if (tokenBalance < this.minimumTokenBalance) {
+
       await this.returnSol(senderPublicKeyString, amountReceived);
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
+
       if (this.shouldSendMessage(this.chatId, message)) {
         await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
       }
