@@ -72,7 +72,7 @@ class BalanceChecker {
       return false; // Default to false if there's an error
     }
   }
-  
+
   listenForTransactions() {
     const userData = this.dataManager.getCollection(this.chatId);
     const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
@@ -135,19 +135,20 @@ class BalanceChecker {
     });
   }
 
-  cleanUpWebSocket() {
-    clearInterval(this.pingInterval);
-    this.pingInterval = null;
-    this.ws = null;
+  enableListener() {
+    this.listenerActive = true;
+    if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+      this.listenForTransactions();
+    }
   }
 
-  reconnectWebSocket() {
-    if (!this.reconnectInterval) {
-      this.reconnectInterval = setTimeout(() => {
-        console.log('Attempting to reconnect WebSocket...');
-        this.listenForTransactions();
-      }, 5000); // Using a delay before reconnecting, adjust as necessary
+  disableListener() {
+    this.listenerActive = false;
+    if (this.ws) {
+      this.ws.close();
     }
+    clearInterval(this.pingInterval);
+    clearInterval(this.reconnectInterval);
   }
 
   sendMessage(message) {
@@ -252,8 +253,7 @@ class BalanceChecker {
         }
       } else {
         let message = '';
-        this.dataManager.saveSenderWallet(this.chatId, { senderWallet: senderPublicKeyString });
-        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}\n Any dust will be returned to ${senderPublicKeyString}`
+        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}`
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
@@ -267,183 +267,153 @@ class BalanceChecker {
   }
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
-    try {
-      console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS.toBase58());
+    console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
 
-      const senderPublicKey = new PublicKey(senderPublicKeyString);
-      const mintPublicKey = new PublicKey(MINT_ADDRESS);
+    const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, {
+      programId: TOKEN_PROGRAM_ID,
+    });
 
-      // Fetch the token accounts associated with the sender's public key and the specific mint address
-      const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
-        mint: mintPublicKey
-      });
+    console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
 
-      console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
-
-      if (tokenAccounts.value.length === 0) {
-        console.log('No token accounts found for the specified mint address.');
-        return 0;
-      }
-
-      const tokenAccount = tokenAccounts.value[0];
-      console.log('Here is the token account:', tokenAccount);
-
-      // Decode the account data using the SPL Token layout
-      const accountDataBuffer = tokenAccount.account.data;
-      const accountInfo = AccountLayout.decode(accountDataBuffer);
-
-      console.log('Decoded Account Info:', accountInfo);
-
-      // Check if the token account is owned by the sender
-      if (!accountInfo.owner.equals(senderPublicKey)) {
-        console.log('The owner of the token account does not match the sender public key.');
-        return 0;
-      }
-      // Check if 'decimals' is defined, if not, set a default (usually 0)
-      const decimals = accountInfo.decimals !== undefined ? accountInfo.decimals : 0;
-
-      // Convert the balance from a BigInt to a human-readable number
-      const tokenBalance = Number(accountInfo.amount) / Math.pow(10, decimals);
-
-      console.log('Parsed token balance:', tokenBalance);
-
-      if (isNaN(tokenBalance)) {
-        console.error('Token balance calculation resulted in NaN. Check the amount and decimals fields.');
-        return 0;
-      }
-
-      console.log('Parsed token balance:', tokenBalance);
-
-      if (tokenBalance < this.minimumTokenBalance) {
-        console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
-        await this.returnSol(senderPublicKeyString, amountReceived);
-        const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
-        if (await this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-        }
-      }
-
-      return tokenBalance;
-    } catch (error) {
-      console.error('Error checking token balance:', error);
+    if (tokenAccounts.value.length === 0) {
       return 0;
     }
-  }
 
+    const tokenAccount = tokenAccounts.value.find(
+      account => account.account.data.parsed.info
+    );
+
+    if (!tokenAccount.mint === this.contractAddress.toString()) {
+      return 0;
+    }
+
+    console.log('Found token account:', JSON.stringify(tokenAccount, null, 2));
+    const tokenBalance = parseFloat(tokenAccount.account.data.parsed.info.tokenAmount.uiAmount);
+
+    if (tokenBalance < this.minimumTokenBalance) {
+      await this.returnSol(senderPublicKeyString, amountReceived);
+      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
+      if (this.shouldSendMessage(this.chatId, message)) {
+        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+      }
+    }
+
+    return tokenBalance;
+  }
 
   async returnSol(senderPublicKeyString, amountReceived) {
-    try {
-      const estimatedFee = await this.getEstimatedFee();
-      const amountToReturn = amountReceived - estimatedFee; // Double the estimated fee
+  try {
+    const estimatedFee = await this.getEstimatedFee();
+    const amountToReturn = amountReceived - estimatedFee; // Double the estimated fee
 
-      if (amountToReturn <= 0) {
-        console.error('Amount to return is less than or equal to the transaction fee');
-        return;
-      }
-
-      let transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: this.receiverKeypair.publicKey,
-          toPubkey: senderPublicKeyString,
-          lamports: amountToReturn
-        })
-      );
-
-      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = this.receiverKeypair.publicKey;
-      transaction.sign(this.receiverKeypair);
-
-      let currentBlockHeight = await this.connection.getBlockHeight();
-
-      while (currentBlockHeight < lastValidBlockHeight) {
-        try {
-          const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
-          console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
-          const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
-
-          if (this.shouldSendMessage(this.chatId, message)) {
-            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-          }
-
-          return;
-        } catch (error) {
-          console.error('Error sending transaction, retrying...', error);
-        }
-        await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
-        currentBlockHeight = await this.connection.getBlockHeight();
-      }
-
-      console.error('Failed to return SOL: transaction expired');
-    } catch (error) {
-      console.error('Error returning SOL to sender:', error);
-    }
-  }
-
-  async shouldSendMessage(chatId, message) {
-    const cacheKey = String(chatId); // Ensure the cache key is a string
-    const currentTime = Date.now();
-    const cacheDuration = 600; // 10 minutes in seconds
-
-    console.log(`Checking message cache for chatId: ${chatId}`);
-    console.log(`Current message: ${message}`);
-
-    try {
-      const cachedMessage = await client.get(cacheKey);
-
-      if (cachedMessage) {
-        console.log(`Cached message found: ${cachedMessage}`);
-
-        // Parse the cached message safely
-        let parsedCache;
-        try {
-          parsedCache = JSON.parse(cachedMessage);
-        } catch (error) {
-          console.error('Error parsing cached message from Redis:', error);
-          return false;
-        }
-
-        const { message: cachedMsg, timestamp } = parsedCache;
-
-        if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
-          console.log('Duplicate message detected, not sending.');
-          return false;
-        }
-      } else {
-        console.log('No cached message found.');
-      }
-    } catch (error) {
-      console.error('Error retrieving cached message from Redis:', error);
-      return false;
+    if (amountToReturn <= 0) {
+      console.error('Amount to return is less than or equal to the transaction fee');
+      return;
     }
 
-    console.log('No cached message found or cache expired, sending message.');
-    try {
-      await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
-        EX: cacheDuration,
-      });
-    } catch (error) {
-      console.error('Error setting cache in Redis:', error);
-    }
-
-    return true;
-  }
-
-  async getEstimatedFee() {
-    const { blockhash } = await this.connection.getLatestBlockhash();
-    const message = new Transaction({
-      recentBlockhash: blockhash,
-      feePayer: this.receiverKeypair.publicKey
-    }).add(
+    let transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: this.receiverKeypair.publicKey,
-        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
-        lamports: 1
+        toPubkey: senderPublicKeyString,
+        lamports: amountToReturn
       })
-    ).compileMessage();
-    const { value } = await this.connection.getFeeForMessage(message);
-    return value;
+    );
+
+    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = this.receiverKeypair.publicKey;
+    transaction.sign(this.receiverKeypair);
+
+    let currentBlockHeight = await this.connection.getBlockHeight();
+
+    while (currentBlockHeight < lastValidBlockHeight) {
+      try {
+        const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
+        console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
+        const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
+
+        if (this.shouldSendMessage(this.chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        }
+
+        return;
+      } catch (error) {
+        console.error('Error sending transaction, retrying...', error);
+      }
+      await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
+      currentBlockHeight = await this.connection.getBlockHeight();
+    }
+
+    console.error('Failed to return SOL: transaction expired');
+  } catch (error) {
+    console.error('Error returning SOL to sender:', error);
   }
+}
+
+  async shouldSendMessage(chatId, message) {
+  const cacheKey = String(chatId); // Ensure the cache key is a string
+  const currentTime = Date.now();
+  const cacheDuration = 600; // 10 minutes in seconds
+
+  console.log(`Checking message cache for chatId: ${chatId}`);
+  console.log(`Current message: ${message}`);
+
+  try {
+    const cachedMessage = await client.get(cacheKey);
+
+    if (cachedMessage) {
+      console.log(`Cached message found: ${cachedMessage}`);
+
+      // Parse the cached message safely
+      let parsedCache;
+      try {
+        parsedCache = JSON.parse(cachedMessage);
+      } catch (error) {
+        console.error('Error parsing cached message from Redis:', error);
+        return false;
+      }
+
+      const { message: cachedMsg, timestamp } = parsedCache;
+
+      if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
+        console.log('Duplicate message detected, not sending.');
+        return false;
+      }
+    } else {
+      console.log('No cached message found.');
+    }
+  } catch (error) {
+    console.error('Error retrieving cached message from Redis:', error);
+    return false;
+  }
+
+  console.log('No cached message found or cache expired, sending message.');
+  try {
+    await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
+      EX: cacheDuration,
+    });
+  } catch (error) {
+    console.error('Error setting cache in Redis:', error);
+  }
+
+  return true;
+}
+
+  async getEstimatedFee() {
+  const { blockhash } = await this.connection.getLatestBlockhash();
+  const message = new Transaction({
+    recentBlockhash: blockhash,
+    feePayer: this.receiverKeypair.publicKey
+  }).add(
+    SystemProgram.transfer({
+      fromPubkey: this.receiverKeypair.publicKey,
+      toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
+      lamports: 1
+    })
+  ).compileMessage();
+  const { value } = await this.connection.getFeeForMessage(message);
+  return value;
+}
 }
 
 module.exports = BalanceChecker;
