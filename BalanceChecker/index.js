@@ -76,58 +76,62 @@ class BalanceChecker {
   listenForTransactions() {
     const userData = this.dataManager.getCollection(this.chatId);
     const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
-    console.log(publicKeyToMention)
+
+    console.log('Listening for transactions on public key:', publicKeyToMention);
+    
     if (!this.listenerActive || userData.walletsCreated) {
-      console.log('Transaction listener is inactive or wallets are already created.');
-      return;
+        console.log('Transaction listener is inactive or wallets are already created.');
+        return;
     }
 
-    console.log('Websocket endpoint', WEBSOCKET_ENDPOINT)
+    console.log('Attempting to connect to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
     this.ws.on('open', () => {
-      console.log('WebSocket connection opened');
-      this.sendMessage({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "logsSubscribe",
-        params: [{
-          mentions: [publicKeyToMention]
-        }],
-      });
+        console.log('WebSocket connection successfully opened to:', WEBSOCKET_ENDPOINT);
+        this.sendMessage({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "logsSubscribe",
+            params: [{
+                mentions: [publicKeyToMention]
+            }]
+        });
 
-      // Set up a ping interval to keep the connection alive
-      this.pingInterval = setInterval(() => {
-        if (this.ws.readyState === WebSocket.OPEN) {
-          this.ws.ping();
-        }
-      }, 10000); // Adjust the interval as needed
+        // Set up a ping interval to keep the connection alive
+        this.pingInterval = setInterval(() => {
+            if (this.ws.readyState === WebSocket.OPEN) {
+                console.log('Sending ping to WebSocket server');
+                this.ws.ping();
+            }
+        }, 10000); // Adjust the interval as needed
     });
 
     this.ws.on('message', async (data) => {
-      const response = JSON.parse(data);
-      console.log('Received WebSocket message:', response);
-      if (response.method === 'logsNotification') {
-        const transactionSignature = response.params.result.value.signature;
-        console.log(`New transaction: ${transactionSignature}`);
-        if (transactionSignature) {
-          await this.handleTransaction(transactionSignature);
+        const response = JSON.parse(data);
+        console.log('Received WebSocket message:', response);
+        if (response.method === 'logsNotification') {
+            const transactionSignature = response.params.result.value.signature;
+            console.log(`New transaction: ${transactionSignature}`);
+            if (transactionSignature) {
+                await this.handleTransaction(transactionSignature);
+            }
         }
-      }
     });
 
     this.ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-      this.cleanUpWebSocket();
-      this.reconnectWebSocket();
+        console.error('WebSocket error occurred:', error);
+        this.cleanUpWebSocket();
+        this.reconnectWebSocket();
     });
 
     this.ws.on('close', () => {
-      console.log('WebSocket connection closed');
-      this.cleanUpWebSocket();
-      this.reconnectWebSocket();
+        console.log('WebSocket connection closed');
+        this.cleanUpWebSocket();
+        this.reconnectWebSocket();
     });
-  }
+}
+
   cleanUpWebSocket() {
     clearInterval(this.pingInterval);
     this.pingInterval = null;
