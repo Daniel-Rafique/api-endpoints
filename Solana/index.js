@@ -45,19 +45,31 @@ class Solana {
         }
 
         let updatedBalance;
-
         const sendInstance = new Send(chatId);
 
         if (userData.commissionPaid === false) {
-            updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
-            // Mark the commission as paid
-            await this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ commissionPaid: true });
+            // Start the promise chain for the commission payment
+            updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData)
+                .then(() => {
+                    return this.firestore.collection(FIRESTORE_COLLECTION)
+                        .doc(chatId.toString())
+                        .update({ commissionPaid: true });
+                })
+                .then(() => {
+                    console.log('Commission sent and marked as paid.');
+                    const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
+                    return this.connection.getBalance(senderKeypair.publicKey);
+                })
+                .finally(() => {
+                    console.log('Commission process completed.');
+                });
         } else {
             const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
             updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
+            console.log('Commission already paid. Current balance:', updatedBalance);
         }
 
-        // After sending the commission, proceed to distribute the remaining Solana if there is a balance left
+        // Then, if there's a balance left, proceed to distribute Solana
         if (updatedBalance > 0) {
             const distributeInstance = new Distribute(chatId);
             const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
@@ -77,7 +89,8 @@ class Solana {
             await userDocRef.update({ distributeSolana: false });
         }
     } catch (error) {
-        console.error('Error during airdrop:', error);
+        console.error('Error during distribution:', error);
+
         if (error instanceof InsufficientBalanceError) {
             console.log('Wallet is empty:', error.message);
             const message = MESSAGES.TOPUP_SOL(userData.boostCost);
@@ -88,7 +101,8 @@ class Solana {
             console.log(error.message);
         }
     }
-  }
+}
+
 
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
