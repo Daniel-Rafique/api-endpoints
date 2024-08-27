@@ -227,7 +227,7 @@ class BalanceChecker {
 
       const senderPublicKeyString = new PublicKey(senderPublicKey);
 
-      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString.toString(), amountReceived);
+      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString, amountReceived);
       const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
 
       console.log('Token balance:', tokenBalance);
@@ -267,7 +267,8 @@ class BalanceChecker {
   }
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
-    console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS);
+    
+    console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS);
 
     const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKeyString, {
       programId: TOKEN_PROGRAM_ID,
