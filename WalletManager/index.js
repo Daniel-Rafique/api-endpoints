@@ -52,7 +52,7 @@ class WalletManager {
             });
 
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            // await this.saveWalletsToFile(chatIdStr, newWallets)
+            await this.saveWalletsToFile(chatIdStr, newWallets)
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
