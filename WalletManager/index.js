@@ -16,9 +16,9 @@ class WalletManager {
 
         this.dataManager = new DataManager;
         this.solana = new Solana;
-
+        
         this.firestore = new Firestore({
-            projectId: 'koynlabs-2f749',
+            projectId: 'koynlabs-2f749', 
             keyFilename: '.config/firebaseServiceAccountKey.json',
         });
     }
@@ -61,52 +61,23 @@ class WalletManager {
 
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
-            // Resolve the path for the file
-            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/dist/wallets.json`);
+            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/dist/wallets.json`)
 
             if (!filePath) {
                 throw new Error('Error resolving filePath.');
-            }
+              }
 
-            // Ensure the directory exists
-            const dirPath = path.dirname(filePath);
-            if (!fs.existsSync(dirPath)) {
-                fs.mkdirSync(dirPath, { recursive: true });
-                console.log(`Directory created: ${dirPath}`);
-            }
-
-            // Wait for the file to be created (if needed)
-            await this.waitForFile(filePath);
-
-            // Prepare wallet data
             const walletData = newWallets.map(wallet => ({
                 publicKey: wallet.publicKey,
-                secretKey: wallet.privateKey,
+                secretKey: wallet.privateKey
             }));
 
-            // Write wallets to file
             fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
+            // await this.solana.distributeSolana(chatIdStr);
             console.log(`Wallets saved to ${filePath}`);
-
-            // Proceed to the next step
-            await this.solana.distributeSolana(chatIdStr);
         } catch (error) {
             console.error("Error saving wallets to file:", error);
         }
-    }
-
-    async waitForFile(filePath, timeout = 300000) { // Default timeout of 30 seconds
-        const interval = 1000; // Check every 1 second
-        const startTime = Date.now();
-
-        while (!fs.existsSync(filePath)) {
-            if (Date.now() - startTime > timeout) {
-                throw new Error(`Timeout: File ${filePath} not found within ${timeout} ms`);
-            }
-            console.log(`Waiting for file ${filePath} to be created...`);
-            await new Promise(resolve => setTimeout(resolve, interval));
-        }
-        console.log(`File ${filePath} exists, continuing execution...`);
     }
 
 }
