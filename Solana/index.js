@@ -57,7 +57,12 @@ class Solana {
 
   // Function to handle Solana distribution
   async handleDistribution(chatId, userData, updatedBalance) {
+
+    console.log(`Starting distribution, userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
+
     if (userData.commissionPaid === true && userData.distributeSolana === false && updatedBalance > 0) {
+      console.log(`distribution in Progress, userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
+
       const distributeInstance = new Distribute(chatId);
       const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
       console.log('Distribution results:', results);
@@ -80,34 +85,40 @@ class Solana {
   }
 
   // Main function to orchestrate the process
-  async distributeSolana(chatId) {
-    try {
-      const userData = await this.dataManager.getCollection(chatId.toString());
+// Main function to orchestrate the process
+async distributeSolana(chatId) {
+  try {
+    const userData = await this.dataManager.getCollection(chatId.toString());
 
-      if (!userData || !userData.walletPk) {
-        throw new Error('User data or wallet private key not found');
+    if (!userData || !userData.walletPk) {
+      throw new Error('User data or wallet private key not found');
+    }
+
+    console.log('Starting commission handling...');
+    // First handle the commission
+    const updatedBalance = await this.handleCommission(chatId, userData);
+
+    console.log(`Commission handled. Updated balance: ${updatedBalance}`);
+    console.log(`userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
+
+    // Then handle the distribution
+    await this.handleDistribution(chatId, userData, updatedBalance);
+
+  } catch (error) {
+    console.error('Error during distribution:', error);
+
+    if (error instanceof InsufficientBalanceError) {
+      console.log('Wallet is empty:', error.message);
+      const message = MESSAGES.TOPUP_SOL(userData.boostCost);
+      if (this.shouldSendMessage(chatId, message)) {
+        await this.telegramNotifier.sendTelegramMessage(chatId, message);
       }
-
-      // First handle the commission
-      const updatedBalance = await this.handleCommission(chatId, userData);
-
-      // Then handle the distribution
-      await this.handleDistribution(chatId, userData, updatedBalance);
-
-    } catch (error) {
-      console.error('Error during distribution:', error);
-
-      if (error instanceof InsufficientBalanceError) {
-        console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.TOPUP_SOL(userData.boostCost);
-        if (this.shouldSendMessage(chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(chatId, message);
-        }
-      } else {
-        console.log(error.message);
-      }
+    } else {
+      console.log(error.message);
     }
   }
+}
+
 
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;
