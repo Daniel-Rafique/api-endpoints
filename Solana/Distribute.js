@@ -17,7 +17,6 @@ client.on('error', (err) => console.error('Redis Client Error', err));
   await client.connect();
 })();
 
-const BATCH_SIZE = process.env.BATCH_SIZE;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const TX_INTERVAL = 1000;
@@ -67,7 +66,7 @@ class Distribute {
         }
   
         // Process in chunks to avoid memory overload
-        const chunkSize = BATCH_SIZE; // Adjust the chunk size according to your system's memory capacity
+        const chunkSize = userData.batchSize; // Adjust the chunk size according to your system's memory capacity
         for (let i = 0; i < newWallets.length; i += chunkSize) {
           const chunk = newWallets.slice(i, i + chunkSize);
   
