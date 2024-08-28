@@ -70,7 +70,7 @@ class Solana {
         }
 
         // Then, if there's a balance left, proceed to distribute Solana
-        if (updatedBalance > 0) {
+        if (userData.commissionPaid === true && userData.distributeSolana == false && updatedBalance > 0 ) {
             const distributeInstance = new Distribute(chatId);
             const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
             console.log('Distribution results:', results);
