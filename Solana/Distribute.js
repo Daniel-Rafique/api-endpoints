@@ -50,23 +50,31 @@ class Distribute {
       try {
         const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
         const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+
+        console.log(`checking balance: ${senderBalance}`);
   
         if (senderBalance <= 0) {
           throw new InsufficientBalanceError('Insufficient balance in sender wallet');
         }
   
         const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+        console.log(`Found wallets.json: ${filePath}`);
         await this.waitForFile(filePath);
         const fileContent = await fs.readFile(filePath, 'utf8');
         const newWallets = JSON.parse(fileContent);
   
         const amountPerWallet = Math.floor(senderBalance / userData.makers);
+
+        console.log(`Calculating amount per wallet: ${amountPerWallet}`);
+
         if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
           throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
         }
   
         // Process in chunks to avoid memory overload
         const chunkSize = userData.batchSize; // Adjust the chunk size according to your system's memory capacity
+        console.log(`Calculating batches: ${chunkSize}`);
+
         for (let i = 0; i < newWallets.length; i += chunkSize) {
           const chunk = newWallets.slice(i, i + chunkSize);
   
@@ -76,6 +84,8 @@ class Distribute {
           }));
   
           const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
+          console.log(`Transaction list generated: ${transactionList}`);
+
           await this.executeTransactions(transactionList, senderKeypair, userData);
   
           console.log(`Processed chunk ${i + 1} to ${i + chunkSize} of ${Math.round(newWallets.length)}`);
