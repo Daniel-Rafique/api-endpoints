@@ -17,7 +17,7 @@ client.on('error', (err) => console.error('Redis Client Error', err));
   await client.connect();
 })();
 
-const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+const BATCH_SIZE = process.env.BATCH_SIZE;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const TX_INTERVAL = 1000;
@@ -46,42 +46,51 @@ class Distribute {
   async distributeSolana(senderPrivateKey, chatId, userData) {
     const retryLimit = 3;
     let attempt = 0;
-
+  
     while (attempt < retryLimit) {
-        try {
-            const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
-            const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
-
-            if (senderBalance <= 0) {
-                throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-            }
-
-            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
-            await this.waitForFile(filePath);
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            const newWallets = JSON.parse(fileContent);
-
-            const amountPerWallet = Math.floor(senderBalance / userData.makers);
-            if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
-                throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
-            }
-
-            const dropList = newWallets.map(wallet => ({
-                walletAddress: wallet.publicKey,
-                numLamports: amountPerWallet,
-            }));
-
-            const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
-            const txResults = await this.executeTransactions(transactionList, senderKeypair, userData);
-
-            return txResults;
-        } catch (error) {
-            console.error(`Attempt ${attempt + 1} failed during distribution:`, error.message);
-            if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
+      try {
+        const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+        const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+  
+        if (senderBalance <= 0) {
+          throw new InsufficientBalanceError('Insufficient balance in sender wallet');
         }
-        attempt++;
+  
+        const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+        await this.waitForFile(filePath);
+        const fileContent = await fs.readFile(filePath, 'utf8');
+        const newWallets = JSON.parse(fileContent);
+  
+        const amountPerWallet = Math.floor(senderBalance / userData.makers);
+        if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
+          throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
+        }
+  
+        // Process in chunks to avoid memory overload
+        const chunkSize = BATCH_SIZE; // Adjust the chunk size according to your system's memory capacity
+        for (let i = 0; i < newWallets.length; i += chunkSize) {
+          const chunk = newWallets.slice(i, i + chunkSize);
+  
+          const dropList = chunk.map(wallet => ({
+            walletAddress: wallet.publicKey,
+            numLamports: amountPerWallet,
+          }));
+  
+          const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
+          await this.executeTransactions(transactionList, senderKeypair, userData);
+  
+          console.log(`Processed chunk ${i + 1} to ${i + chunkSize} of ${Math.round(newWallets.length)}`);
+        }
+  
+        return { status: 'success' };
+      } catch (error) {
+        console.error(`Attempt ${attempt + 1} failed during distribution:`, error.message);
+        if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
+      }
+      attempt++;
     }
-}
+  }
+  
 
   // Wait for the file to exist
   async waitForFile(filePath) {

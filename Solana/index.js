@@ -46,7 +46,6 @@ class Solana {
           .update({ commissionPaid: true });
 
       console.log('Commission marked as paid in Firestore.');
-
       return updatedBalance;
     } else {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
