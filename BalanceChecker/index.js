@@ -76,79 +76,75 @@ class BalanceChecker {
   listenForTransactions() {
     const userData = this.dataManager.getCollection(this.chatId);
     const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
-    console.log(publicKeyToMention)
+
+    console.log('Listening for transactions on public key:', publicKeyToMention);
+    
     if (!this.listenerActive || userData.walletsCreated) {
-      console.log('Transaction listener is inactive or wallets are already created.');
-      return;
+        console.log('Transaction listener is inactive or wallets are already created.');
+        return;
     }
 
-    console.log('Websocket endpoint', WEBSOCKET_ENDPOINT)
+    console.log('Attempting to connect to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
     this.ws.on('open', () => {
-      console.log('WebSocket connection opened');
-      this.sendMessage({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "logsSubscribe",
-        params: [{
-          mentions: [publicKeyToMention]
-        }]
-      });
+        console.log('WebSocket connection successfully opened to:', WEBSOCKET_ENDPOINT);
+        this.sendMessage({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "logsSubscribe",
+            params: [{
+                mentions: [publicKeyToMention]
+            }]
+        });
 
-      // Set up a ping interval to keep the connection alive
-      this.pingInterval = setInterval(() => {
-        if (this.ws.readyState === WebSocket.OPEN) {
-          this.ws.ping();
-        }
-      }, 5000); // Adjust the interval as needed
+        // Set up a ping interval to keep the connection alive
+        this.pingInterval = setInterval(() => {
+            if (this.ws.readyState === WebSocket.OPEN) {
+                console.log('Sending ping to WebSocket server');
+                this.ws.ping();
+            }
+        }, 10000); // Adjust the interval as needed
     });
 
     this.ws.on('message', async (data) => {
-      const response = JSON.parse(data);
-      console.log('Received WebSocket message:', response);
-      if (response.method === 'logsNotification') {
-        const transactionSignature = response.params.result.value.signature;
-        console.log(`New transaction: ${transactionSignature}`);
-        if (transactionSignature) {
-          await this.handleTransaction(transactionSignature);
+        const response = JSON.parse(data);
+        console.log('Received WebSocket message:', response);
+        if (response.method === 'logsNotification') {
+            const transactionSignature = response.params.result.value.signature;
+            console.log(`New transaction: ${transactionSignature}`);
+            if (transactionSignature) {
+                await this.handleTransaction(transactionSignature);
+            }
         }
-      }
     });
 
     this.ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-      if (error.message.includes('429')) {
-        console.log('Received 429 error, but no other WebSocket endpoint to switch to.');
-      }
+        console.error('WebSocket error occurred:', error);
+        this.cleanUpWebSocket();
+        this.reconnectWebSocket();
     });
 
     this.ws.on('close', () => {
-      console.log('WebSocket connection closed, reconnecting...');
-      clearInterval(this.pingInterval);
-      if (!this.reconnectInterval) {
-        this.reconnectInterval = setInterval(() => {
-          console.log('Attempting to reconnect WebSocket...');
-          this.listenForTransactions();
-        }, 1000); // Adjust the interval as needed
-      }
+        console.log('WebSocket connection closed');
+        this.cleanUpWebSocket();
+        this.reconnectWebSocket();
     });
-  }
+}
 
-  enableListener() {
-    this.listenerActive = true;
-    if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
-      this.listenForTransactions();
-    }
-  }
-
-  disableListener() {
-    this.listenerActive = false;
-    if (this.ws) {
-      this.ws.close();
-    }
+  cleanUpWebSocket() {
     clearInterval(this.pingInterval);
-    clearInterval(this.reconnectInterval);
+    this.pingInterval = null;
+    this.ws = null;
+  }
+
+  reconnectWebSocket() {
+    if (!this.reconnectInterval) {
+      this.reconnectInterval = setTimeout(() => {
+        console.log('Attempting to reconnect WebSocket...');
+        this.listenForTransactions();
+      }, 5000); // Using a delay before reconnecting, adjust as necessary
+    }
   }
 
   sendMessage(message) {
@@ -163,6 +159,7 @@ class BalanceChecker {
       });
     }
   }
+
 
   waitForOpenConnection(callback) {
     const maxAttempts = 10;
@@ -253,7 +250,8 @@ class BalanceChecker {
         }
       } else {
         let message = '';
-        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}`
+        this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
+        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}\n Any dust will be returned to ${senderPublicKeyString}`
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
@@ -267,67 +265,25 @@ class BalanceChecker {
   }
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
-    try {
-      console.log('Checking token balance for wallet:', senderPublicKeyString, 'with mint:', MINT_ADDRESS.toBase58());
+    console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS.toString());
 
-      const senderPublicKey = new PublicKey(senderPublicKeyString);
-      const mintPublicKey = new PublicKey(MINT_ADDRESS);
+    const tokenMintAddress = new PublicKey(MINT_ADDRESS);
+    const senderPublicKey = new PublicKey(senderPublicKeyString); // Ensure senderPublicKey is a PublicKey object
+    const accounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKey, { programId: TOKEN_PROGRAM_ID });
+    const accountInfo = accounts.value.find((account) => account.account.data.parsed.info.mint === tokenMintAddress.toBase58());
 
-      // Fetch the token accounts associated with the sender's public key and the specific mint address
-      const tokenAccounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
-        mint: mintPublicKey
-      });
+    const tokenBalance = accountInfo ? parseFloat(accountInfo.account.data.parsed.info.tokenAmount.amount) : 0;
 
-      console.log('Fetched Token Accounts:', JSON.stringify(tokenAccounts, null, 2));
+    if (tokenBalance < this.minimumTokenBalance) {
+      await this.returnSol(senderPublicKeyString, amountReceived);
+      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
 
-      if (tokenAccounts.value.length === 0) {
-        console.log('No token accounts found for the specified mint address.');
-        return 0;
+      if (await this.shouldSendMessage(this.chatId, message)) {
+        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
       }
-
-      const tokenAccount = tokenAccounts.value[0];
-      console.log('Here is the token account:', tokenAccount);
-
-      // Decode the account data using the SPL Token layout
-      const accountDataBuffer = tokenAccount.account.data;
-      const accountInfo = AccountLayout.decode(accountDataBuffer);
-
-      console.log('Decoded Account Info:', accountInfo);
-
-      // Check if the token account is owned by the sender
-      if (!accountInfo.owner.equals(senderPublicKey)) {
-        console.log('The owner of the token account does not match the sender public key.');
-        return 0;
-      }
-      // Check if 'decimals' is defined, if not, set a default (usually 0)
-      const decimals = accountInfo.decimals !== undefined ? accountInfo.decimals : 0;
-
-      // Convert the balance from a BigInt to a human-readable number
-      const tokenBalance = Number(accountInfo.amount) / Math.pow(10, decimals);
-
-      console.log('Parsed token balance:', tokenBalance);
-
-      if (isNaN(tokenBalance)) {
-          console.error('Token balance calculation resulted in NaN. Check the amount and decimals fields.');
-          return 0;
-      }
-
-      console.log('Parsed token balance:', tokenBalance);
-
-      if (tokenBalance < this.minimumTokenBalance) {
-        console.log(`Token balance (${tokenBalance}) is below the minimum required.`);
-        await this.returnSol(senderPublicKeyString, amountReceived);
-        const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
-        if (await this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-        }
-      }
-
-      return tokenBalance;
-    } catch (error) {
-      console.error('Error checking token balance:', error);
-      return 0;
     }
+
+    return tokenBalance;
   }
 
 
@@ -389,45 +345,45 @@ class BalanceChecker {
     console.log(`Current message: ${message}`);
 
     try {
-        const cachedMessage = await client.get(cacheKey);
+      const cachedMessage = await client.get(cacheKey);
 
-        if (cachedMessage) {
-            console.log(`Cached message found: ${cachedMessage}`);
-            
-            // Parse the cached message safely
-            let parsedCache;
-            try {
-                parsedCache = JSON.parse(cachedMessage);
-            } catch (error) {
-                console.error('Error parsing cached message from Redis:', error);
-                return false;
-            }
+      if (cachedMessage) {
+        console.log(`Cached message found: ${cachedMessage}`);
 
-            const { message: cachedMsg, timestamp } = parsedCache;
-
-            if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
-                console.log('Duplicate message detected, not sending.');
-                return false;
-            }
-        } else {
-            console.log('No cached message found.');
+        // Parse the cached message safely
+        let parsedCache;
+        try {
+          parsedCache = JSON.parse(cachedMessage);
+        } catch (error) {
+          console.error('Error parsing cached message from Redis:', error);
+          return false;
         }
+
+        const { message: cachedMsg, timestamp } = parsedCache;
+
+        if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
+          console.log('Duplicate message detected, not sending.');
+          return false;
+        }
+      } else {
+        console.log('No cached message found.');
+      }
     } catch (error) {
-        console.error('Error retrieving cached message from Redis:', error);
-        return false;
+      console.error('Error retrieving cached message from Redis:', error);
+      return false;
     }
 
     console.log('No cached message found or cache expired, sending message.');
     try {
-        await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
-            EX: cacheDuration,
-        });
+      await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
+        EX: cacheDuration,
+      });
     } catch (error) {
-        console.error('Error setting cache in Redis:', error);
+      console.error('Error setting cache in Redis:', error);
     }
 
     return true;
-}
+  }
 
   async getEstimatedFee() {
     const { blockhash } = await this.connection.getLatestBlockhash();

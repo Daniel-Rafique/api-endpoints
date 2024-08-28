@@ -46,6 +46,12 @@ class WalletProcessor {
       const userData = await this.dataManager.getCollection(chatId);
       const { makers } = userData;
       try {
+
+        if (!userData.instancesCreated) {
+          console.log('Initializing market maker instance for chatId:', chatId);
+          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        }
+
         if (!userData.walletsCreated) {
           console.log('Creating wallets for chatId:', chatId);
           try {
@@ -55,12 +61,8 @@ class WalletProcessor {
             console.log(error);
           }
         }
-        if (userData.walletsCreated && !userData.instancesCreated) {
-          console.log('Initializing market maker instance for chatId:', chatId);
-          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
-        }
 
-        if (userData.instancesCreated) {
+        if (userData.instancesCreated && userData.walletsCreated) {
           console.log('Airdrop Solana for chatId:', chatId);
 
           // Add debugging statements

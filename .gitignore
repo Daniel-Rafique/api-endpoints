@@ -11,3 +11,4 @@ tests/tokenBalance.js
 tests/mockWebSocketServer.js
 tests/dockerTest.js
 utils/clearQeue.js
+.DS_Store

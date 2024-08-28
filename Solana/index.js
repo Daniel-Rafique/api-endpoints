@@ -28,67 +28,97 @@ class Solana {
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(),
-        FIRESTORE_KEYSTORE,
-        '.config/firebaseServiceAccountKey.json'),
+      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
-    this.messageCache = {}; // Initialize cache for messages
+    this.messageCache = {};
   }
 
-  async distributeSolana(chatId) {
-    try {
-        const userData = await this.dataManager.getCollection(chatId.toString());
+  // Function to handle commission payment
+  async handleCommission(chatId, userData) {
+    if (userData.commissionPaid === false && userData.walletsCreated === true) {
+      const sendInstance = new Send(chatId);
+      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
+      console.log('Commission sent successfully.');
 
-        if (!userData || !userData.walletPk) {
-            throw new Error('User data or wallet private key not found');
-        }
+      await this.firestore.collection(FIRESTORE_COLLECTION)
+          .doc(chatId.toString())
+          .update({ commissionPaid: true });
 
-        let updatedBalance;
-
-        const sendInstance = new Send(chatId);
-
-        if (userData.commissionPaid === false) {
-            updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
-            // Mark the commission as paid
-            await this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ commissionPaid: true });
-        } else {
-            const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
-            updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
-        }
-
-        // After sending the commission, proceed to distribute the remaining Solana if there is a balance left
-        if (updatedBalance > 0) {
-            const distributeInstance = new Distribute(chatId);
-            const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
-            console.log('Distribution results:', results);
-
-            const message = MESSAGES.DEPLOYMENT(updatedBalance);
-            if (this.shouldSendMessage(chatId, message)) {
-                await this.telegramNotifier.sendTelegramMessage(chatId, message);
-            }
-        } else {
-            console.log('No balance left to distribute.');
-            const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-            const userDoc = await userDocRef.get();
-            if (!userDoc.exists) {
-                throw new Error('User document does not exist');
-            }
-            await userDocRef.update({ distributeSolana: false });
-        }
-    } catch (error) {
-        console.error('Error during airdrop:', error);
-        if (error instanceof InsufficientBalanceError) {
-            console.log('Wallet is empty:', error.message);
-            const message = MESSAGES.TOPUP_SOL(userData.boostCost);
-            if (this.shouldSendMessage(chatId, message)) {
-                await this.telegramNotifier.sendTelegramMessage(chatId, message);
-            }
-        } else {
-            console.log(error.message);
-        }
+      console.log('Commission marked as paid in Firestore.');
+      return updatedBalance;
+    } else {
+      const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
+      const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
+      console.log('Commission already paid. Current balance:', updatedBalance);
+      return updatedBalance;
     }
   }
+
+  // Function to handle Solana distribution
+  async handleDistribution(chatId, userData, updatedBalance) {
+
+    console.log(`Starting distribution, userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
+
+    if (userData.commissionPaid === true && userData.distributeSolana === false && updatedBalance > 0) {
+      console.log(`distribution in Progress, userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
+
+      const distributeInstance = new Distribute(chatId);
+      const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
+      console.log('Distribution results:', results);
+
+      // Update the distributeSolana flag after successful distribution
+      await this.firestore.collection(FIRESTORE_COLLECTION)
+          .doc(chatId.toString())
+          .update({ distributeSolana: true });
+
+      const message = MESSAGES.DEPLOYMENT(updatedBalance);
+      if (this.shouldSendMessage(chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(chatId, message);
+      }
+    } else if (updatedBalance <= 0) {
+      console.log('No balance left to distribute.');
+      await this.firestore.collection(FIRESTORE_COLLECTION)
+          .doc(chatId.toString())
+          .update({ distributeSolana: false });
+    }
+  }
+
+  // Main function to orchestrate the process
+// Main function to orchestrate the process
+async distributeSolana(chatId) {
+  try {
+    const userData = await this.dataManager.getCollection(chatId.toString());
+
+    if (!userData || !userData.walletPk) {
+      throw new Error('User data or wallet private key not found');
+    }
+
+    console.log('Starting commission handling...');
+    // First handle the commission
+    const updatedBalance = await this.handleCommission(chatId, userData);
+
+    console.log(`Commission handled. Updated balance: ${updatedBalance}`);
+    console.log(`userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
+
+    // Then handle the distribution
+    await this.handleDistribution(chatId, userData, updatedBalance);
+
+  } catch (error) {
+    console.error('Error during distribution:', error);
+
+    if (error instanceof InsufficientBalanceError) {
+      console.log('Wallet is empty:', error.message);
+      const message = MESSAGES.TOPUP_SOL(userData.boostCost);
+      if (this.shouldSendMessage(chatId, message)) {
+        await this.telegramNotifier.sendTelegramMessage(chatId, message);
+      }
+    } else {
+      console.log(error.message);
+    }
+  }
+}
+
 
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;

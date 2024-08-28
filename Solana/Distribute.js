@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const fs = require('fs').promises;
 const path = require('path');
@@ -16,7 +17,6 @@ client.on('error', (err) => console.error('Redis Client Error', err));
   await client.connect();
 })();
 
-const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const TX_INTERVAL = 1000;
@@ -45,42 +45,61 @@ class Distribute {
   async distributeSolana(senderPrivateKey, chatId, userData) {
     const retryLimit = 3;
     let attempt = 0;
-
+  
     while (attempt < retryLimit) {
-        try {
-            const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
-            const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+      try {
+        const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+        const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
-            if (senderBalance <= 0) {
-                throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-            }
-
-            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
-            await this.waitForFile(filePath);
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            const newWallets = JSON.parse(fileContent);
-
-            const amountPerWallet = Math.floor(senderBalance / userData.makers);
-            if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
-                throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
-            }
-
-            const dropList = newWallets.map(wallet => ({
-                walletAddress: wallet.publicKey,
-                numLamports: amountPerWallet,
-            }));
-
-            const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
-            const txResults = await this.executeTransactions(transactionList, senderKeypair, userData);
-
-            return txResults;
-        } catch (error) {
-            console.error(`Attempt ${attempt + 1} failed during distribution:`, error.message);
-            if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
+        console.log(`checking balance: ${senderBalance}`);
+  
+        if (senderBalance <= 0) {
+          throw new InsufficientBalanceError('Insufficient balance in sender wallet');
         }
-        attempt++;
+  
+        const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+        console.log(`Found wallets.json: ${filePath}`);
+        await this.waitForFile(filePath);
+        const fileContent = await fs.readFile(filePath, 'utf8');
+        const newWallets = JSON.parse(fileContent);
+  
+        const amountPerWallet = Math.floor(senderBalance / userData.makers);
+
+        console.log(`Calculating amount per wallet: ${amountPerWallet}`);
+
+        if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
+          throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
+        }
+  
+        // Process in chunks to avoid memory overload
+        const chunkSize = userData.batchSize; // Adjust the chunk size according to your system's memory capacity
+        console.log(`Calculating batches: ${chunkSize}`);
+
+        for (let i = 0; i < newWallets.length; i += chunkSize) {
+          const chunk = newWallets.slice(i, i + chunkSize);
+  
+          const dropList = chunk.map(wallet => ({
+            walletAddress: wallet.publicKey,
+            numLamports: amountPerWallet,
+          }));
+  
+          const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
+          console.log(`Transaction list generated: ${transactionList}`);
+
+          await this.executeTransactions(transactionList, senderKeypair, userData);
+  
+          console.log(`Processed chunk ${i + 1} to ${i + chunkSize} of ${Math.round(newWallets.length)}`);
+        }
+  
+        return { status: 'success' };
+      } catch (error) {
+        console.error(`Attempt ${attempt + 1} failed during distribution:`, error.message);
+        if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
+      }
+      attempt++;
     }
-}
+  }
+  
 
   // Wait for the file to exist
   async waitForFile(filePath) {
@@ -96,6 +115,8 @@ class Distribute {
   }
 
   generateTransactions(dropList, fromWallet, userData) {
+    console.log(`Generating transactions for ${dropList.length} wallets`);
+  
     const transactions = [];
     const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
@@ -104,22 +125,29 @@ class Distribute {
         lamports: drop.numLamports,
       })
     );
-
-    const batchSize = Math.round(txInstructions.length / userData.makers);
-    const numTransactions = Math.round(txInstructions.length / batchSize);
+  
+    // Ensure batchSize is a positive number and doesn't result in 0
+    const batchSize = Math.max(1, Math.floor(txInstructions.length / userData.makers));
+    const numTransactions = Math.ceil(txInstructions.length / batchSize);
+  
+    console.log(`Batch size: ${batchSize}, Number of transactions: ${numTransactions}`);
+  
     for (let i = 0; i < numTransactions; i++) {
       const transaction = new Transaction();
       const lowerIndex = i * batchSize;
-      const upperIndex = (i + 1) * batchSize;
+      const upperIndex = Math.min((i + 1) * batchSize, txInstructions.length);
       for (let j = lowerIndex; j < upperIndex; j++) {
         if (txInstructions[j]) transaction.add(txInstructions[j]);
       }
       transactions.push(transaction);
     }
+  
     return transactions;
   }
+  
 
   async executeTransactions(transactionList, payer, userData) {
+    console.log(`Executing transactions: ${transactionList}`);
     const results = [];
     const staggeredTransactions = transactionList.map((transaction, i) => {
       return new Promise((resolve) => {
