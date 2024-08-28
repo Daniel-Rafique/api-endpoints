@@ -16,9 +16,9 @@ class WalletManager {
 
         this.dataManager = new DataManager;
         this.solana = new Solana;
-        
+
         this.firestore = new Firestore({
-            projectId: 'koynlabs-2f749', 
+            projectId: 'koynlabs-2f749',
             keyFilename: '.config/firebaseServiceAccountKey.json',
         });
     }
@@ -61,20 +61,35 @@ class WalletManager {
 
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
-            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/dist/wallets.json`)
+            // Resolve the path for the file
+            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/dist/wallets.json`);
 
             if (!filePath) {
                 throw new Error('Error resolving filePath.');
-              }
+            }
 
+            // Ensure the directory exists
+            const dirPath = path.dirname(filePath);
+            if (!fs.existsSync(dirPath)) {
+                fs.mkdirSync(dirPath, { recursive: true });
+                console.log(`Directory created: ${dirPath}`);
+            }
+
+            // Create or overwrite the wallets file
+            fs.writeFileSync(filePath, '[]', { flag: 'w' }); // Initialize the file with an empty array
+
+            // Prepare wallet data
             const walletData = newWallets.map(wallet => ({
                 publicKey: wallet.publicKey,
-                secretKey: wallet.privateKey
+                secretKey: wallet.privateKey,
             }));
 
+            // Write wallets to file
             fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
-            await this.solana.distributeSolana(chatIdStr);
             console.log(`Wallets saved to ${filePath}`);
+
+            // Proceed to the next step
+            await this.solana.distributeSolana(chatIdStr);
         } catch (error) {
             console.error("Error saving wallets to file:", error);
         }
