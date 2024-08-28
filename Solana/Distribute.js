@@ -115,6 +115,8 @@ class Distribute {
   }
 
   generateTransactions(dropList, fromWallet, userData) {
+    console.log(`Generating transactions: ${dropList}`);
+
     const transactions = [];
     const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
@@ -126,6 +128,8 @@ class Distribute {
 
     const batchSize = Math.round(txInstructions.length / userData.makers);
     const numTransactions = Math.round(txInstructions.length / batchSize);
+    console.log(`Number of transactions: ${numTransactions}`);
+
     for (let i = 0; i < numTransactions; i++) {
       const transaction = new Transaction();
       const lowerIndex = i * batchSize;
@@ -139,6 +143,7 @@ class Distribute {
   }
 
   async executeTransactions(transactionList, payer, userData) {
+    console.log(`Executing transactions: ${transactionList}`);
     const results = [];
     const staggeredTransactions = transactionList.map((transaction, i) => {
       return new Promise((resolve) => {
