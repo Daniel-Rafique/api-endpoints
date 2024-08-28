@@ -115,8 +115,8 @@ class Distribute {
   }
 
   generateTransactions(dropList, fromWallet, userData) {
-    console.log(`Generating transactions: ${dropList}`);
-
+    console.log(`Generating transactions for ${dropList.length} wallets`);
+  
     const transactions = [];
     const txInstructions = dropList.map(drop =>
       SystemProgram.transfer({
@@ -125,22 +125,26 @@ class Distribute {
         lamports: drop.numLamports,
       })
     );
-
-    const batchSize = Math.round(txInstructions.length / userData.makers);
-    const numTransactions = Math.round(txInstructions.length / batchSize);
-    console.log(`Number of transactions: ${numTransactions}`);
-
+  
+    // Ensure batchSize is a positive number and doesn't result in 0
+    const batchSize = Math.max(1, Math.floor(txInstructions.length / userData.makers));
+    const numTransactions = Math.ceil(txInstructions.length / batchSize);
+  
+    console.log(`Batch size: ${batchSize}, Number of transactions: ${numTransactions}`);
+  
     for (let i = 0; i < numTransactions; i++) {
       const transaction = new Transaction();
       const lowerIndex = i * batchSize;
-      const upperIndex = (i + 1) * batchSize;
+      const upperIndex = Math.min((i + 1) * batchSize, txInstructions.length);
       for (let j = lowerIndex; j < upperIndex; j++) {
         if (txInstructions[j]) transaction.add(txInstructions[j]);
       }
       transactions.push(transaction);
     }
+  
     return transactions;
   }
+  
 
   async executeTransactions(transactionList, payer, userData) {
     console.log(`Executing transactions: ${transactionList}`);
