@@ -35,7 +35,10 @@ class InstanceInitializer {
       this.createSymbolicLinksIndividually(this.basePath, userDir);
 
       await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
+      // Update the firestore flag to indicate that the instance has been created and distribute solana to the wallets
+      await this.updateFirestoreFlag(chatId);
 
+      // Start the market maker instance
       await this.startMarketMakerInstance(chatId, userDir);
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
@@ -60,37 +63,49 @@ class InstanceInitializer {
 
     // Ensure the original .env file is never modified
     if (fs.existsSync(parentEnvPath)) {
-        // Step 1: Copy the parent .env file to /root/devnet-api/instances/{chatId}/.env
-        if (!fs.existsSync(destEnvPath)) {
-            fs.copyFileSync(parentEnvPath, destEnvPath);
-            console.log(`Copied parent .env file to ${destEnvPath}`);
+      // Step 1: Copy the parent .env file to /root/devnet-api/instances/{chatId}/.env
+      if (!fs.existsSync(destEnvPath)) {
+        fs.copyFileSync(parentEnvPath, destEnvPath);
+        console.log(`Copied parent .env file to ${destEnvPath}`);
+      } else {
+        console.log(`.env file already exists at ${destEnvPath}, skipping copy.`);
+      }
+
+      // Step 2: Unlink the .env file from the parent directory if it's a symlink
+      try {
+        if (fs.existsSync(destEnvPath) && fs.lstatSync(destEnvPath).isSymbolicLink()) {
+          fs.unlinkSync(destEnvPath);  // Remove the symlink
+          console.log(`Removed symlink to .env at ${destEnvPath}`);
+          // Re-copy the parent .env file after unlinking
+          fs.copyFileSync(parentEnvPath, destEnvPath);
+          console.log(`Re-copied parent .env file to ${destEnvPath} after unlinking`);
         } else {
-            console.log(`.env file already exists at ${destEnvPath}, skipping copy.`);
+          console.log(`.env at ${destEnvPath} is not a symlink.`);
         }
+      } catch (error) {
+        console.error(`Failed to unlink .env at ${destEnvPath}:`, error);
+      }
 
-        // Step 2: Unlink the .env file from the parent directory if it's a symlink
-        try {
-            if (fs.existsSync(destEnvPath) && fs.lstatSync(destEnvPath).isSymbolicLink()) {
-                fs.unlinkSync(destEnvPath);  // Remove the symlink
-                console.log(`Removed symlink to .env at ${destEnvPath}`);
-                // Re-copy the parent .env file after unlinking
-                fs.copyFileSync(parentEnvPath, destEnvPath);
-                console.log(`Re-copied parent .env file to ${destEnvPath} after unlinking`);
-            } else {
-                console.log(`.env at ${destEnvPath} is not a symlink.`);
-            }
-        } catch (error) {
-            console.error(`Failed to unlink .env at ${destEnvPath}:`, error);
-        }
-
-        // Step 3: Append new parameters to the copied .env file
-        const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\nBOOST_TYPE=${boostType}\nBUY_AMOUNT=${buyAmount}\nSELL_AMOUNT=${sellAmount}\nSENDER_WALLET=${senderWallet}\n`;
-        fs.appendFileSync(destEnvPath, envContent);
-        console.log(`Appended new parameters to ${destEnvPath}`);
+      // Step 3: Append new parameters to the copied .env file
+      const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\nBOOST_TYPE=${boostType}\nBUY_AMOUNT=${buyAmount}\nSELL_AMOUNT=${sellAmount}\nSENDER_WALLET=${senderWallet}\n`;
+      fs.appendFileSync(destEnvPath, envContent);
+      console.log(`Appended new parameters to ${destEnvPath}`);
     } else {
-        console.warn(`No parent .env file found at ${parentEnvPath}.`);
+      console.warn(`No parent .env file found at ${parentEnvPath}.`);
     }
-}
+  }
+
+  async updateFirestoreFlag(chatId) {
+    try {
+      const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
+      await userDocRef.update({ instancesCreated: true });
+      // Distribute Solana tokens to the instance wallets
+      await this.solana.distributeSolana(chatId);
+      console.log(`Firestore flag updated for chatId: ${chatId}`);
+    } catch (error) {
+      console.error('Failed to update Firestore flag:', error);
+    }
+  }
 
   async startMarketMakerInstance(chatId, userDir) {
     const instanceName = `koynlabs-instance-${chatId}`;
@@ -140,23 +155,10 @@ class InstanceInitializer {
               console.log('PM2 startup script generated successfully');
             }
             pm2.disconnect();
-
-            this.updateFirestoreFlag(chatId);
           });
         });
       });
     });
-  }
-
-  async updateFirestoreFlag(chatId) {
-    try {
-      const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-      await userDocRef.update({ instancesCreated: true });
-      await this.solana.distributeSolana(chatId);
-      console.log(`Firestore flag updated for chatId: ${chatId}`);
-    } catch (error) {
-      console.error('Failed to update Firestore flag:', error);
-    }
   }
 
   runCommand(command) {
