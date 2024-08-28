@@ -51,7 +51,7 @@ class Solana {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
       const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Commission already paid. Current balance:', updatedBalance);
-      return this.handleDistribution(chatId, userData, updatedBalance);
+      return updatedBalance;
     }
   }
 
