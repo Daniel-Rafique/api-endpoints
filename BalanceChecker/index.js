@@ -182,21 +182,22 @@ class BalanceChecker {
       if (solBalance < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
         await this.returnSol(senderPublicKeyString, amountReceived);
-
         let message = '';
 
         if (solBalance < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
           message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
+          if (this.shouldSendMessage(this.chatId, message)) {
+            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          }
         }
 
         if (tokenBalance < this.minimumTokenBalance) {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
-        }
-
-        if (this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          if (this.shouldSendMessage(this.chatId, message)) {
+            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          }
         }
 
       } else {
@@ -228,11 +229,6 @@ class BalanceChecker {
     if (tokenBalance < this.minimumTokenBalance) {
       console.log('Returning SOL to sender.');
       await this.returnSol(senderPublicKeyString, amountReceived);
-      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-
-      if (await this.shouldSendMessage(this.chatId, message)) {
-        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-      }
     }
     return tokenBalance;
   }
