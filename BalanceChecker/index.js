@@ -173,7 +173,7 @@ class BalanceChecker {
       this.listenForTransactions();
     }, 5000); // Reconnect after 5 seconds
   }
-  
+
   processMessageQueue() {
     while (this.messageQueue.length > 0 && this.ws.readyState === WebSocket.OPEN) {
       const message = this.messageQueue.shift();
@@ -263,27 +263,31 @@ class BalanceChecker {
         await this.returnSol(senderPublicKeyString, amountReceived);
 
         let message = '';
+
         if (solBalance < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
           message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         }
+
         if (tokenBalance < this.minimumTokenBalance) {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         }
-        if (this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-        }
-      } else {
-        let message = '';
-        this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
-        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}\n Any dust will be returned to ${senderPublicKeyString}`
+
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
 
+      } else {
+        let message = '';
+        this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
         const chatId = this.chatId;
         await this.walletProcessor.addJob({ chatId });
+        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}\n Any dust will be returned to ${senderPublicKeyString}`
+       
+        if (this.shouldSendMessage(this.chatId, message)) {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        }
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
@@ -291,16 +295,17 @@ class BalanceChecker {
   }
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
+
     console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS.toString());
 
     const tokenMintAddress = new PublicKey(MINT_ADDRESS);
     const senderPublicKey = new PublicKey(senderPublicKeyString); // Ensure senderPublicKey is a PublicKey object
     const accounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKey, { programId: TOKEN_PROGRAM_ID });
     const accountInfo = accounts.value.find((account) => account.account.data.parsed.info.mint === tokenMintAddress.toBase58());
-
     const tokenBalance = accountInfo ? parseFloat(accountInfo.account.data.parsed.info.tokenAmount.amount) : 0;
 
     if (tokenBalance < this.minimumTokenBalance) {
+      console.log('Returning SOL to sender.');
       await this.returnSol(senderPublicKeyString, amountReceived);
       const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
 
@@ -308,7 +313,6 @@ class BalanceChecker {
         await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
       }
     }
-
     return tokenBalance;
   }
 
@@ -340,14 +344,15 @@ class BalanceChecker {
 
       while (currentBlockHeight < lastValidBlockHeight) {
         try {
+          
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
+
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
           const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
 
-          if (this.shouldSendMessage(this.chatId, message)) {
+          if (this.shouldSendMessage(this.chatId, message) && signature) {
             await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           }
-
           return;
         } catch (error) {
           console.error('Error sending transaction, retrying...', error);
@@ -355,7 +360,6 @@ class BalanceChecker {
         await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
         currentBlockHeight = await this.connection.getBlockHeight();
       }
-
       console.error('Failed to return SOL: transaction expired');
     } catch (error) {
       console.error('Error returning SOL to sender:', error);

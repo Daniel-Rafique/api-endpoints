@@ -28,18 +28,26 @@ class InstanceInitializer {
       const userData = await this.dataManager.getCollection(chatId);
       const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
       const userDir = path.join(this.instancePath, chatId.toString());
+
       if (!fs.existsSync(userDir)) {
         fs.mkdirSync(userDir, { recursive: true });
       }
 
+      // Create symbolic links for the user directory
       this.createSymbolicLinksIndividually(this.basePath, userDir);
 
+      // Copy the parent .env file to the user directory, unlink it from the parent directory, and append new parameters
       await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
+
       // Update the firestore flag to indicate that the instance has been created and distribute solana to the wallets
       await this.updateFirestoreFlag(chatId);
 
+      // Distribute Solana to the wallets
+      await this.solana.distributeSolana(chatId);
+
       // Start the market maker instance
       await this.startMarketMakerInstance(chatId, userDir);
+
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
     }
@@ -99,8 +107,6 @@ class InstanceInitializer {
     try {
       const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
       await userDocRef.update({ instancesCreated: true });
-      // Distribute Solana tokens to the instance wallets
-      await this.solana.distributeSolana(chatId);
       console.log(`Firestore flag updated for chatId: ${chatId}`);
     } catch (error) {
       console.error('Failed to update Firestore flag:', error);
