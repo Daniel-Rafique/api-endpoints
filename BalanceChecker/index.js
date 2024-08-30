@@ -38,7 +38,6 @@ class BalanceChecker {
     this.chatId = chatId;
     this.contractAddress = contractAddress;
     this.dataManager = new DataManager(chatId);
-
     this.messageQueue = [];
     this.ws = null;
     this.pingInterval = null;
@@ -47,7 +46,6 @@ class BalanceChecker {
     this.listenerActive = true; // Flag to control the listener
     this.messageCache = {};
     this.initialize();
-
     this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
     this.distributeSolana = this.getDistributeSolanaFlag(chatId);
   }
@@ -75,9 +73,6 @@ class BalanceChecker {
   }
 
   connectWebSocket() {
-    const userData = this.dataManager.getCollection(this.chatId);
-    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
-
     console.log('Connecting to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
@@ -108,6 +103,7 @@ class BalanceChecker {
   }
 
   subscribeToLogs() {
+    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
     const message = {
       jsonrpc: "2.0",
       id: 1,
