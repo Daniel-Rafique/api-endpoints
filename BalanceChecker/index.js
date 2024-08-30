@@ -99,6 +99,7 @@ class BalanceChecker {
 
     this.ws.on('close', () => {
       console.log('WebSocket connection closed.');
+      this.reconnectWebSocket();  // Reconnect automatically
     });
   }
 
@@ -114,6 +115,21 @@ class BalanceChecker {
     };
     this.ws.send(JSON.stringify(message));
     console.log('Subscribed to logs for wallet:', publicKeyToMention);
+  }
+
+  startPing() {
+    this.pingInterval = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        console.log('Sending ping to WebSocket server.');
+        this.ws.ping();  // Ping to keep the connection alive
+      }
+    }, 10000); // Ping every 10 seconds
+  }
+
+  reconnectWebSocket() {
+    setTimeout(() => {
+      this.connectWebSocket();
+    }, 1000); // Reconnect after 5 seconds
   }
 
 
