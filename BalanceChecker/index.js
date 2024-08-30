@@ -237,13 +237,13 @@ class BalanceChecker {
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
       const estimatedFee = await this.getEstimatedFee();
-      const amountToReturn = amountReceived - estimatedFee; // Double the estimated fee
-
+      const amountToReturn = amountReceived - estimatedFee;
+  
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
         return;
       }
-
+  
       let transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
@@ -251,28 +251,45 @@ class BalanceChecker {
           lamports: amountToReturn
         })
       );
-
+  
       const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
       transaction.sign(this.receiverKeypair);
-
+  
       let currentBlockHeight = await this.connection.getBlockHeight();
-
+  
       while (currentBlockHeight < lastValidBlockHeight) {
         try {
-          
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
-
+  
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
           const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
-
+  
           if (this.shouldSendMessage(this.chatId, message) && signature) {
             await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           }
           return;
         } catch (error) {
-          console.error('Error sending transaction, retrying...', error);
+          if (error.name === 'SendTransactionError') {
+            console.error('Transaction simulation failed:', error.message);
+            console.error('Transaction logs:', error.transactionLogs || 'No logs available');
+  
+            // Fetch logs directly from the connection if available
+            const recentLogs = await this.connection.getConfirmedTransaction(error.signature);
+            console.error('Fetched transaction logs:', recentLogs ? recentLogs.meta.logMessages : 'No logs found');
+  
+            // Decide whether to retry based on the specific error or logs
+            if (this.shouldRetryTransaction(error)) {
+              console.log('Retrying transaction...');
+              continue;
+            } else {
+              console.log('Not retrying transaction due to specific error condition.');
+              break;
+            }
+          } else {
+            console.error('Unexpected error during transaction:', error);
+          }
         }
         await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
         currentBlockHeight = await this.connection.getBlockHeight();
@@ -282,6 +299,17 @@ class BalanceChecker {
       console.error('Error returning SOL to sender:', error);
     }
   }
+  
+  shouldRetryTransaction(error) {
+    // Implement logic to determine whether a transaction should be retried based on the error or logs
+    // For example, you may choose to retry on network-related issues, but not on issues like "account not found"
+    if (error.message.includes('Attempt to debit an account but found no record of a prior credit')) {
+      return false; // Don't retry if the account lacks sufficient funds
+    }
+    // Add other conditions as necessary
+    return true; // Default to retrying in other cases
+  }
+  
 
   async shouldSendMessage(chatId, message) {
     const cacheKey = String(chatId); // Ensure the cache key is a string
