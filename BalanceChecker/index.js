@@ -56,11 +56,11 @@ class BalanceChecker {
     try {
       const userData = await this.dataManager.getCollection(this.chatId);
       this.distributeSolana = userData.distributeSolana ? true : false;
-      this.listenForTransactions();
+      this.connectWebSocket();
     } catch (error) {
       console.error('Failed to initialize BalanceChecker:', error);
       this.distributeSolana = false;
-      this.listenForTransactions();
+      this.connectWebSocket();
     }
   }
 
@@ -73,144 +73,53 @@ class BalanceChecker {
       return false; // Default to false if there's an error
     }
   }
-  listenForTransactions() {
-    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
 
-    if (!this.listenerActive) {
-      console.log('Listener is not active.');
-      return;
-    }
+  connectWebSocket() {
+    const userData = this.dataManager.getCollection(this.chatId);
+    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
 
     console.log('Connecting to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
-      this.subscribeToLogs(publicKeyToMention);
-      this.startPing();
-      this.processMessageQueue();
+      this.subscribeToLogs();
     });
 
     this.ws.on('message', async (data) => {
-      this.handleWebSocketMessage(data);
-    });
+      const response = JSON.parse(data);
+      console.log('Received WebSocket message:', response);
+      if (response.method === 'logsNotification') {
+          const transactionSignature = response.params.result.value.signature;
+          console.log(`New transaction: ${transactionSignature}`);
+          if (transactionSignature) {
+              await this.handleTransaction(transactionSignature);
+          }
+      }
+  });
 
     this.ws.on('error', (error) => {
       console.error('WebSocket error:', error);
-      this.cleanUpWebSocket();
-      this.reconnectWebSocket();
     });
 
     this.ws.on('close', () => {
       console.log('WebSocket connection closed.');
-      this.cleanUpWebSocket();
-      this.reconnectWebSocket();
     });
   }
 
-  subscribeToLogs(publicKey) {
-    this.sendMessage({
+  subscribeToLogs() {
+    const message = {
       jsonrpc: "2.0",
       id: 1,
       method: "logsSubscribe",
       params: [{
-        mentions: [publicKey]
+        mentions: [publicKeyToMention]
       }]
-    });
+    };
+    this.ws.send(JSON.stringify(message));
+    console.log('Subscribed to logs for wallet:', publicKeyToMention);
   }
 
-  handleWebSocketMessage(data) {
-    try {
-      const response = JSON.parse(data);
-      console.log('Received WebSocket message:', response);
-      if (response.method === 'logsNotification') {
-        const transactionSignature = response.params.result.value.signature;
-        console.log(`New transaction detected: ${transactionSignature}`);
-        if (transactionSignature) {
-          this.handleTransaction(transactionSignature);
-        }
-      }
-    } catch (error) {
-      console.error('Error processing WebSocket message:', error);
-    }
-  }
-
-  sendMessage(message) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      console.log('Sending message:', message);
-      this.ws.send(JSON.stringify(message));
-    } else {
-      console.log('WebSocket not open, queuing message:', message);
-      this.messageQueue.push(message);
-    }
-  }
-
-  startPing() {
-    this.pingInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        console.log('Sending ping to WebSocket server.');
-        this.ws.ping();
-      }
-    }, 10000); // Ping every 10 seconds
-  }
-  cleanUpWebSocket() {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-  }
-
-  reconnectWebSocket() {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-    }
-    this.reconnectTimeout = setTimeout(() => {
-      console.log('Reconnecting WebSocket...');
-      this.listenForTransactions();
-    }, 5000); // Reconnect after 5 seconds
-  }
-
-  processMessageQueue() {
-    while (this.messageQueue.length > 0 && this.ws.readyState === WebSocket.OPEN) {
-      const message = this.messageQueue.shift();
-      this.sendMessage(message);
-    }
-  }
-
-  sendMessage(message) {
-    if (this.ws.readyState === WebSocket.OPEN) {
-      console.log('Sending message:', message);
-      this.ws.send(JSON.stringify(message));
-    } else {
-      console.log('WebSocket not open, queueing message:', message);
-      this.messageQueue.push(message);
-      this.waitForOpenConnection(() => {
-        this.processMessageQueue();
-      });
-    }
-  }
-
-  waitForOpenConnection(callback) {
-    const maxAttempts = 10;
-    let attempts = 0;
-
-    const interval = setInterval(() => {
-      if (this.ws.readyState === WebSocket.OPEN) {
-        clearInterval(interval);
-        callback();
-      } else {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          clearInterval(interval);
-          console.error('Failed to open WebSocket connection.');
-        }
-      }
-    }, 1000); // Check every second
-  }
 
   async handleTransaction(signature) {
     try {
