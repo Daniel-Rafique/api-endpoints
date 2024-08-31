@@ -97,11 +97,11 @@ class BalanceChecker {
 
     this.ws.on('error', (error) => {
       console.error('WebSocket error:', error);
+      this.reconnectWebSocket();  // Reconnect automatically
     });
 
     this.ws.on('close', () => {
       console.log('WebSocket connection closed.');
-      this.startPing()
       this.reconnectWebSocket();  // Reconnect automatically
     });
   }
@@ -122,6 +122,7 @@ class BalanceChecker {
       this.ws.send(JSON.stringify(message));
       console.log('Subscribed to logs for wallet:', publicKeyToMention);
     } else {
+      this.reconnectWebSocket();  // Reconnect automatically
       console.error('WebSocket is not open. Cannot subscribe to logs.');
     }
   }
