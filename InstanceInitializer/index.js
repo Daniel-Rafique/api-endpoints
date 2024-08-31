@@ -27,6 +27,7 @@ class InstanceInitializer {
 
   async initializeMarketMakerInstance(chatId, userData) {
     try {
+      console.log('Initializing market maker instance:', chatId);
       const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
       const userDir = path.join(this.instancePath, chatId.toString());
 
@@ -64,6 +65,7 @@ class InstanceInitializer {
       const destPath = path.join(destDir, entry.name);
 
       if (!fs.existsSync(destPath)) {
+        console.log(`Creating symbolic link from ${srcPath} to ${destPath}`);
         fs.symlinkSync(srcPath, destPath, entry.isDirectory() ? 'junction' : 'file');
       }
     });
@@ -75,8 +77,10 @@ class InstanceInitializer {
 
     // Ensure the original .env file is never modified
     if (fs.existsSync(parentEnvPath)) {
+      console.log(`Parent .env file found at ${parentEnvPath}`);
       // Step 1: Copy the parent .env file to /root/devnet-api/instances/{chatId}/.env
       if (!fs.existsSync(destEnvPath)) {
+        console.log(`Copying parent .env file to ${destEnvPath}`);
         fs.copyFileSync(parentEnvPath, destEnvPath);
         console.log(`Copied parent .env file to ${destEnvPath}`);
       } else {
@@ -119,7 +123,7 @@ class InstanceInitializer {
 
   async startMarketMakerInstance(chatId, userDir) {
     const instanceName = `koynlabs-instance-${chatId}`;
-
+    console.log(`Starting market maker instance ${instanceName}...`);
     const connectToPM2 = (callback) => {
       pm2.connect((err) => {
         if (err) {

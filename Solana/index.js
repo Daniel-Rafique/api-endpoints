@@ -93,7 +93,7 @@ class Solana {
         throw new Error('User data or wallet private key not found');
       }
 
-      console.log('Starting commission handling...');
+      console.log('Starting commission payment...');
       // First handle the commission
       const updatedBalance = await this.handleCommission(chatId, userData);
 

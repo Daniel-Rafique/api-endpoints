@@ -56,6 +56,7 @@ class WalletProcessor {
   }
 
   addJob(data) {
+    console.log('Adding create wallet job to queue:', data);
     return this.walletQueue.add('createWallets', data);
   }
 }
