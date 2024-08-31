@@ -41,17 +41,24 @@ class InstanceInitializer {
       // 2. Copy the parent .env file to the user directory, unlink it from the parent directory, and append new parameters
       await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
 
-      // 3. Update the firestore flag to indicate that the instance has been created.
-      await this.updateFirestoreFlag(chatId);
-
-      // 4. Create wallets for the user and save to wallets.json
-      await this.walletProcessor.addJob({ chatId, userData });
-
-      // 5. Distribute Solana to the wallets
-      await this.solana.distributeSolana(chatId, userData);
-
-      // 6. Start the market maker instance
-      await this.startMarketMakerInstance(chatId, userDir);
+      // 3. Create wallets for the user and save to wallets.json
+      if (userData.instancesCreated) {
+        await this.walletProcessor.addJob({ chatId, userData });
+      }
+      // 4. Distribute Commission to the wallet
+      if (userData.walletsCreated) {
+        const result = await this.solana.handleCommission(chatId, userData);
+        console.log('Commission sent successfully. Remeaining balance:', result);
+        if (userData.commissionPaid) {
+          console.log('Commission paid. Current balance:', result);
+          await this.solana.handleDistribution(chatId, userData, result);
+        }
+      }
+      // 5. Start the market maker instance
+      if (userData.distributeSolana) {
+        console.log('Solana sent. Starting market maker instance...');
+        await this.startMarketMakerInstance(chatId, userDir);
+      }
 
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
@@ -106,6 +113,8 @@ class InstanceInitializer {
       const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nBATCH_SIZE=${batchSize}\nBOOST_TYPE=${boostType}\nBUY_AMOUNT=${buyAmount}\nSELL_AMOUNT=${sellAmount}\nSENDER_WALLET=${senderWallet}\n`;
       fs.appendFileSync(destEnvPath, envContent);
       console.log(`Appended new parameters to ${destEnvPath}`);
+      // Step 4. Update the firestore flag to indicate that the instance has been created.
+      await this.updateFirestoreFlag(chatId);
     } else {
       console.warn(`No parent .env file found at ${parentEnvPath}.`);
     }

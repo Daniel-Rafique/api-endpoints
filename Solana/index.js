@@ -67,7 +67,7 @@ class Solana {
       console.log(`distribution in Progress, commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
       const distributeInstance = new Distribute(chatId);
-      const results = await distributeInstance.distributeSolana(chatId, userData);
+      const results = await distributeInstance.distributeSolana(chatId, userData, updatedBalance);
       console.log('Distribution results:', results);
 
       // Update the distributeSolana flag after successful distribution
@@ -86,41 +86,6 @@ class Solana {
         .update({ distributeSolana: false });
     }
   }
-
-  // Main function to orchestrate the process
-  async distributeSolana(chatId, userData) {
-    const {walletPk, commissionPaid, distributeSolana} = userData;
-    try {
-
-      if (!userData || !walletPk) {
-        throw new Error('User data or wallet private key not found');
-      }
-
-      console.log('Starting commission payment...');
-      // First handle the commission
-      const updatedBalance = await this.handleCommission(chatId, userData);
-
-      console.log(`Commission handled. Updated balance: ${updatedBalance}`);
-      console.log(`userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
-
-      // Then handle the distribution
-      await this.handleDistribution(chatId, userData, updatedBalance);
-
-    } catch (error) {
-      console.error('Error during distribution:', error);
-
-      if (error instanceof InsufficientBalanceError) {
-        console.log('Wallet is empty:', error.message);
-        const message = MESSAGES.TOPUP_SOL(userData.boostCost);
-        if (this.shouldSendMessage(chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(chatId, message);
-        }
-      } else {
-        console.log(error.message);
-      }
-    }
-  }
-
 
   shouldSendMessage(chatId, message) {
     const cacheKey = chatId;

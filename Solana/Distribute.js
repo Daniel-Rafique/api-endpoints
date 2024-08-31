@@ -42,7 +42,7 @@ class Distribute {
     });
   }
 
-  async distributeSolana(chatId, userData) {
+  async distributeSolana(chatId, userData, updatedBalance) {
     const {batchSize, makers, walletPk } = userData;
     const retryLimit = 3;
     let attempt = 0;
@@ -50,11 +50,10 @@ class Distribute {
     while (attempt < retryLimit) {
       try {
         const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
-        const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
-        console.log(`checking balance: ${senderBalance}`);
+        console.log(`checking balance: ${updatedBalance}`);
   
-        if (senderBalance <= 0) {
+        if (updatedBalance <= 0) {
           throw new InsufficientBalanceError('Insufficient balance in sender wallet');
         }
   
@@ -64,7 +63,7 @@ class Distribute {
         const fileContent = await fs.readFile(filePath, 'utf8');
         const newWallets = JSON.parse(fileContent);
   
-        const amountPerWallet = Math.floor(senderBalance / makers);
+        const amountPerWallet = Math.floor(updatedBalance / makers);
 
         console.log(`Calculating amount per wallet: ${amountPerWallet}`);
 
