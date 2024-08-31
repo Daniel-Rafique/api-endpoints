@@ -269,7 +269,8 @@ class BalanceChecker {
           if (this.shouldSendMessage(this.chatId, message) && signature) {
             await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           }
-          return;
+          
+          return this.reconnectWebSocket();
         } catch (error) {
           if (error.name === 'SendTransactionError') {
             console.error('Transaction simulation failed:', error.message);
