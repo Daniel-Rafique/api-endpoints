@@ -111,7 +111,6 @@ app.post('/api/create', async (req, res) => {
       await solana.distributeSolana(chatId);
       res.status(200).send('Distributing SOL...');
     }
-    return websocket.connectWebSocket(chatId, receiverPublicKey);
   } catch (error) {
     console.error('Error processing request:', error);
     if (!res.headersSent) {
