@@ -101,8 +101,8 @@ class BalanceChecker {
 
     this.ws.on('close', () => {
       console.log('WebSocket connection closed.');
-      this.reconnectWebSocket();  // Reconnect automatically
       this.startPing()
+      this.reconnectWebSocket();  // Reconnect automatically
     });
   }
 
@@ -132,13 +132,13 @@ class BalanceChecker {
         console.log('Sending ping to WebSocket server.');
         this.ws.ping();  // Ping to keep the connection alive
       }
-    }, 10000); // Ping every 1 second
+    }, 1000); // Ping every 1 second
   }
 
   reconnectWebSocket() {
     setTimeout(() => {
       this.connectWebSocket();
-    }, 10000); // Reconnect after 1 second
+    }, 1000); // Reconnect after 1 second
   }
 
 
