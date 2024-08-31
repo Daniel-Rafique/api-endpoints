@@ -42,13 +42,13 @@ class Distribute {
     });
   }
 
-  async distributeSolana(senderPrivateKey, chatId, userData) {
+  async distributeSolana(chatId, userData) {
     const retryLimit = 3;
     let attempt = 0;
   
     while (attempt < retryLimit) {
       try {
-        const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+        const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
         const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
         console.log(`checking balance: ${senderBalance}`);

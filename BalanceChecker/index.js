@@ -208,9 +208,9 @@ class BalanceChecker {
         if(!userData.instancesCreated) {
         this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
         }
-        const currentTokenBalance = formatTokenAmount(tokenBalance);
+        const currentTokenBalance = formatTokenAmount(tokenBalance.toFixed());
         const currentSolBalance = amountReceived / 1_000_000_000; 
-        message += `✅ Received ${currentSolBalance.toFixed(0)} SOL from ${senderPublicKeyString} \ntoken balance is ${currentTokenBalance.toFixed(0)}\n Any dust will be returned to ${senderPublicKeyString}`
+        message += `✅ Received ${currentSolBalance.toFixed()} SOL from ${senderPublicKeyString} \ntoken balance is ${currentTokenBalance}\n Any dust will be returned to ${senderPublicKeyString}`
        
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);

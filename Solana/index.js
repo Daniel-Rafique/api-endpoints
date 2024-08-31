@@ -64,7 +64,7 @@ class Solana {
       console.log(`distribution in Progress, userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
 
       const distributeInstance = new Distribute(chatId);
-      const results = await distributeInstance.distributeSolana(userData.walletPk, chatId, userData);
+      const results = await distributeInstance.distributeSolana(chatId, userData);
       console.log('Distribution results:', results);
 
       // Update the distributeSolana flag after successful distribution
@@ -84,7 +84,6 @@ class Solana {
     }
   }
 
-  // Main function to orchestrate the process
   // Main function to orchestrate the process
   async distributeSolana(chatId, userData) {
     try {
