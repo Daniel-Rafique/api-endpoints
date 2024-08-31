@@ -105,6 +105,12 @@ app.post('/api/create', async (req, res) => {
       telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
       res.status(200).send('Checking balance...');
     } 
+
+    if (!userData?.distributeSolana) {
+      websocket.connectWebSocket(chatId, receiverPublicKey);
+      telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
+      res.status(200).send('Checking balance...');
+    } 
   } catch (error) {
     console.error('Error processing request:', error);
     if (!res.headersSent) {
