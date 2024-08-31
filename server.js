@@ -105,12 +105,15 @@ app.post('/api/create', async (req, res) => {
       telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
       res.status(200).send('Checking balance...');
     } else if (userData?.walletsCreated && !userData?.instancesCreated) {
+      websocket.connectWebSocket(chatId, receiverPublicKey);
       await instanceInitializer.initializeMarketMakerInstance(chatId);
       res.status(200).send('Instances created...');
     } else if (userData?.instancesCreated) {
+      websocket.connectWebSocket(chatId, receiverPublicKey);
       await solana.distributeSolana(chatId);
       res.status(200).send('Distributing SOL...');
     }
+    return websocket.connectWebSocket(chatId, receiverPublicKey);
   } catch (error) {
     console.error('Error processing request:', error);
     if (!res.headersSent) {
