@@ -138,7 +138,7 @@ class BalanceChecker {
   reconnectWebSocket() {
     setTimeout(() => {
       this.connectWebSocket();
-    }, 10000); // Reconnect after 1 second
+    }, 1000); // Reconnect after 1 second
   }
 
 
