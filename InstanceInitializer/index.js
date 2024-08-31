@@ -107,9 +107,9 @@ class InstanceInitializer {
     try {
       const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
       await userDocRef.update({ instancesCreated: true });
-      console.log(`Firestore flag updated for chatId: ${chatId}`);
+      console.log(`Firestore flag instances created updated for chatId: ${chatId}`);
     } catch (error) {
-      console.error('Failed to update Firestore flag:', error);
+      console.error('Failed to update Firestore flag for instances created:', error);
     }
   }
 
