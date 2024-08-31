@@ -45,36 +45,12 @@ class WalletProcessor {
       console.log('Processing job for chatId:', chatId); // Log chatId
       const userData = await this.dataManager.getCollection(chatId);
       const { makers } = userData;
+
       try {
+        const walletsArray = this.walletManager.createSolanaWallets(makers);
+        await this.walletManager.saveWallets(chatId, walletsArray);
+        console.log(`Processed wallets for chatId: ${chatId}`);
 
-        if (!userData.instancesCreated) {
-          console.log('Initializing market maker instance for chatId:', chatId);
-          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
-        }
-
-        if (!userData.walletsCreated) {
-          console.log('Creating wallets for chatId:', chatId);
-          try {
-            const walletsArray = this.walletManager.createSolanaWallets(makers);
-            await this.walletManager.saveWallets(chatId, walletsArray);
-          } catch (error) {
-            console.log(error);
-          }
-        }
-
-        if (userData.instancesCreated && userData.walletsCreated) {
-          console.log('Airdrop Solana for chatId:', chatId);
-
-          // Add debugging statements
-          console.log('ENV_PATH:', ENV_PATH);
-          console.log('chatId:', chatId);
-
-          const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
-          console.log('filePath:', filePath);
-
-          await this.solana.distributeSolana(chatId);
-        }
-        console.log(`Processed job for chatId: ${chatId}`);
       } catch (error) {
         console.error('Error processing job:', error);
       }

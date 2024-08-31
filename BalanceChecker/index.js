@@ -4,7 +4,7 @@ const bs58 = require('bs58');
 const DataManager = require('../database')
 const TelegramNotifier = require('../Telegram');
 const { formatTokenAmount } = require('../utils');
-const WalletProcessor = require('../WalletProcessor');
+const InstanceInitializer = require('../InstanceInitializer');
 const WebSocket = require('ws');
 
 const redis = require('redis');
@@ -35,7 +35,7 @@ class BalanceChecker {
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.telegramNotifier = new TelegramNotifier(telegramToken);
-    this.walletProcessor = new WalletProcessor();
+    this.instanceInitializer = new InstanceInitializer();
     this.chatId = chatId;
     this.contractAddress = contractAddress;
     this.dataManager = new DataManager(chatId);
@@ -205,7 +205,9 @@ class BalanceChecker {
         let message = '';
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
         const chatId = this.chatId;
-        await this.walletProcessor.addJob({ chatId });
+        if(!userData.instancesCreated) {
+        this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        }
         const currentTokenBalance = formatTokenAmount(tokenBalance);
         const currentSolBalance = amountReceived / 1_000_000_000; 
         message += `✅ Received ${currentSolBalance.toFixed(0)} SOL from ${senderPublicKeyString} \ntoken balance is ${currentTokenBalance.toFixed(0)}\n Any dust will be returned to ${senderPublicKeyString}`

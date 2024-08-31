@@ -6,6 +6,7 @@ const pm2 = require('pm2');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
 const Solana = require('../Solana');
+const WalletProcessor = require('../WalletProcessor');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
@@ -21,6 +22,7 @@ class InstanceInitializer {
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
     this.solana = new Solana();
+    this.walletProcessor = new WalletProcessor();
   }
 
   async initializeMarketMakerInstance(chatId) {
@@ -33,19 +35,22 @@ class InstanceInitializer {
         fs.mkdirSync(userDir, { recursive: true });
       }
 
-      // Create symbolic links for the user directory
+      // 1. Create symbolic links for the user directory
       this.createSymbolicLinksIndividually(this.basePath, userDir);
 
-      // Copy the parent .env file to the user directory, unlink it from the parent directory, and append new parameters
+      // 2. Copy the parent .env file to the user directory, unlink it from the parent directory, and append new parameters
       await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
 
-      // Update the firestore flag to indicate that the instance has been created and distribute solana to the wallets
+      // 3. Update the firestore flag to indicate that the instance has been created.
       await this.updateFirestoreFlag(chatId);
 
-      // Distribute Solana to the wallets
+      // 4. Create wallets for the user and save to wallets.json
+      await this.walletProcessor.addJob({ chatId });
+
+      // 5. Distribute Solana to the wallets
       await this.solana.distributeSolana(chatId);
 
-      // Start the market maker instance
+      // 6. Start the market maker instance
       await this.startMarketMakerInstance(chatId, userDir);
 
     } catch (error) {
