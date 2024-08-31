@@ -210,6 +210,7 @@ class BalanceChecker {
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
+        return this.reconnectWebSocket();
       }
     } catch (error) {
       console.error('Error handling transaction:', error);

@@ -5,7 +5,6 @@ const { exec } = require('child_process');
 const pm2 = require('pm2');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
-const BalanceChecker = require('../BalanceChecker');
 const Solana = require('../Solana');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
@@ -16,7 +15,6 @@ class InstanceInitializer {
   constructor() {
     this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
-    this.balanceChecker = new BalanceChecker();
     this.dataManager = new DataManager();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -49,9 +47,6 @@ class InstanceInitializer {
 
       // Start the market maker instance
       await this.startMarketMakerInstance(chatId, userDir);
-
-      // Reconnect websocket to listen for top-ups
-      return this.balanceChecker.reconnectWebSocket();
 
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
