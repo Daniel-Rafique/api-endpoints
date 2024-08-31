@@ -36,9 +36,11 @@ class Solana {
 
   // Function to handle commission payment
   async handleCommission(chatId, userData) {
-    if (userData.commissionPaid === false && userData.walletsCreated === true) {
+    const {walletPk, commissionPaid, walletsCreated} = userData;
+
+    if (commissionPaid === false && walletsCreated === true) {
       const sendInstance = new Send(chatId);
-      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData.walletPk, userData);
+      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData);
       console.log('Commission sent successfully.');
 
       await this.firestore.collection(FIRESTORE_COLLECTION)
@@ -48,7 +50,7 @@ class Solana {
       console.log('Commission marked as paid in Firestore.');
       return updatedBalance;
     } else {
-      const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
+      const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
       const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Commission already paid. Current balance:', updatedBalance);
       return updatedBalance;
@@ -57,11 +59,12 @@ class Solana {
 
   // Function to handle Solana distribution
   async handleDistribution(chatId, userData, updatedBalance) {
+    const {commissionPaid, distributeSolana} = userData;
 
-    console.log(`Starting distribution, userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
+    console.log(`Starting distribution, userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
-    if (userData.commissionPaid === true && userData.distributeSolana === false && updatedBalance > 0) {
-      console.log(`distribution in Progress, userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
+    if (commissionPaid === true && distributeSolana === false && updatedBalance > 0) {
+      console.log(`distribution in Progress, commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
       const distributeInstance = new Distribute(chatId);
       const results = await distributeInstance.distributeSolana(chatId, userData);
@@ -86,9 +89,10 @@ class Solana {
 
   // Main function to orchestrate the process
   async distributeSolana(chatId, userData) {
+    const {walletPk, commissionPaid, distributeSolana} = userData;
     try {
 
-      if (!userData || !userData.walletPk) {
+      if (!userData || !walletPk) {
         throw new Error('User data or wallet private key not found');
       }
 
@@ -97,7 +101,7 @@ class Solana {
       const updatedBalance = await this.handleCommission(chatId, userData);
 
       console.log(`Commission handled. Updated balance: ${updatedBalance}`);
-      console.log(`userData.commissionPaid: ${userData.commissionPaid}, userData.distributeSolana: ${userData.distributeSolana}`);
+      console.log(`userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
       // Then handle the distribution
       await this.handleDistribution(chatId, userData, updatedBalance);
