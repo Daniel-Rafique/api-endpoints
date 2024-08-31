@@ -42,7 +42,8 @@ class BalanceChecker {
     this.messageQueue = [];
     this.ws = null;
     this.pingInterval = null;
-    this.reconnectInterval = null;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 10;
     this.reconnectTimeout = null;
     this.listenerActive = true; // Flag to control the listener
     this.messageCache = {};
@@ -74,12 +75,14 @@ class BalanceChecker {
   }
 
   connectWebSocket() {
-    console.log('Connecting to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
-    this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
+    console.log('Connecting to WebSocket endpoint:', this.url);
+    this.ws = new WebSocket(this.url);
 
     this.ws.on('open', () => {
-      console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
+      console.log('WebSocket connection opened:', this.url);
+      this.reconnectAttempts = 0;
       this.subscribeToLogs();
+      this.startPing();
     });
 
     this.ws.on('message', async (data) => {
@@ -96,12 +99,15 @@ class BalanceChecker {
 
     this.ws.on('error', (error) => {
       console.error('WebSocket error:', error);
-      this.reconnectWebSocket();  // Reconnect automatically
     });
 
     this.ws.on('close', (code, reason) => {
       console.log(`WebSocket connection closed with code ${code} and reason: ${reason}`);
-      this.reconnectWebSocket();  // Reconnect automatically
+      if (code === 1000) {
+        console.log('Normal closure, not reconnecting.');
+      } else {
+        this.reconnectWebSocket();
+      }
     });
   }
 
@@ -119,10 +125,8 @@ class BalanceChecker {
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
       console.log('Subscribed to logs for wallet:', publicKeyToMention);
-      this.startPing();  // Start pinging only if subscription succeeds
     } else {
       console.error('WebSocket is not open. Cannot subscribe to logs.');
-      this.reconnectWebSocket();
     }
   }
 
@@ -131,19 +135,31 @@ class BalanceChecker {
     this.pingInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         console.log('Sending ping to WebSocket server.');
-        this.ws.ping();  // Ping to keep the connection alive
+        this.ws.ping();
       }
     }, 30000); // Ping every 30 seconds
   }
 
-
-  reconnectWebSocket() {
-    setTimeout(() => {
-      console.log('Attempting to reconnect WebSocket...');
-      this.connectWebSocket();
-    }, 10000); // Reconnect after 10 seconds
+  stopPing() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
   }
 
+
+  reconnectWebSocket() {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      const delay = Math.min(10000 * Math.pow(2, this.reconnectAttempts), 60000); // Exponential backoff
+      console.log(`Attempting to reconnect WebSocket in ${delay / 1000} seconds...`);
+      setTimeout(() => {
+        this.reconnectAttempts++;
+        this.connectWebSocket();
+      }, delay);
+    } else {
+      console.error('Max reconnect attempts reached. Giving up.');
+    }
+  }
 
   async handleTransaction(signature) {
     try {
