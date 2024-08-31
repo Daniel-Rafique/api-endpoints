@@ -43,12 +43,13 @@ class Distribute {
   }
 
   async distributeSolana(chatId, userData) {
+    const {batchSize, makers, walletPk } = userData;
     const retryLimit = 3;
     let attempt = 0;
   
     while (attempt < retryLimit) {
       try {
-        const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.walletPk));
+        const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
         const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
         console.log(`checking balance: ${senderBalance}`);
@@ -63,7 +64,7 @@ class Distribute {
         const fileContent = await fs.readFile(filePath, 'utf8');
         const newWallets = JSON.parse(fileContent);
   
-        const amountPerWallet = Math.floor(senderBalance / userData.makers);
+        const amountPerWallet = Math.floor(senderBalance / makers);
 
         console.log(`Calculating amount per wallet: ${amountPerWallet}`);
 
@@ -72,11 +73,10 @@ class Distribute {
         }
   
         // Process in chunks to avoid memory overload
-        const chunkSize = userData.batchSize; // Adjust the chunk size according to your system's memory capacity
-        console.log(`Calculating batches: ${chunkSize}`);
+        console.log(`Calculating batches: ${batchSize}`);
 
-        for (let i = 0; i < newWallets.length; i += chunkSize) {
-          const chunk = newWallets.slice(i, i + chunkSize);
+        for (let i = 0; i < newWallets.length; i += batchSize) {
+          const chunk = newWallets.slice(i, i + batchSize);
   
           const dropList = chunk.map(wallet => ({
             walletAddress: wallet.publicKey,

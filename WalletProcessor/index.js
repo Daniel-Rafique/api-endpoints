@@ -36,7 +36,7 @@ class WalletProcessor {
 
   initializeWorker() {
     new Worker('walletQueue', async job => {
-      const { chatId } = job.data;
+      const { chatId, userData } = job.data;
       const { makers } = userData;
       console.log('Processing job for chatId:', chatId); // Log chatId
 

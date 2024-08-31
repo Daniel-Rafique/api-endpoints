@@ -24,13 +24,15 @@ class Send {
     this.messageCache = {}; // Initialize cache for messages
   }
 
-  async sendToKoynlabsWallet(senderPrivateKey, userData) {
+  async sendToKoynlabsWallet(userData) {
+    const {walletPk} = userData;
+
     const retryLimit = 3;
     let attempt = 0;
 
     while (attempt < retryLimit) {
         try {
-            const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderPrivateKey));
+            const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
             const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
             if (senderBalance <= 0) {
