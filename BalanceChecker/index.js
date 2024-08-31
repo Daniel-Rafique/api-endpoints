@@ -75,11 +75,11 @@ class BalanceChecker {
   }
 
   connectWebSocket() {
-    console.log('Connecting to WebSocket endpoint:', this.url);
-    this.ws = new WebSocket(this.url);
+    console.log('Connecting to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
+    this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
     this.ws.on('open', () => {
-      console.log('WebSocket connection opened:', this.url);
+      console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
       this.reconnectAttempts = 0;
       this.subscribeToLogs();
       this.startPing();
