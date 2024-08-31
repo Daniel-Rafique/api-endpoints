@@ -144,7 +144,7 @@ class BalanceChecker {
 
       if (!transaction) {
         console.error('Failed to retrieve transaction');
-        return;
+        return this.reconnectWebSocket();
       }
 
       console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
@@ -155,7 +155,7 @@ class BalanceChecker {
 
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
-        return;
+        return this.reconnectWebSocket();
       }
 
       const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
@@ -166,7 +166,7 @@ class BalanceChecker {
 
       if (amountReceived <= 0) {
         console.error('Invalid transaction amount');
-        return;
+        return this.reconnectWebSocket();
       }
 
       const senderPublicKeyString = new PublicKey(senderPublicKey);
@@ -242,7 +242,7 @@ class BalanceChecker {
   
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
-        return;
+        return this.reconnectWebSocket();
       }
   
       let transaction = new Transaction().add(
