@@ -4,8 +4,6 @@ const os = require('os');
 const { Queue, Worker } = require('bullmq');
 const DataManager = require('../database');
 const WalletManager = require('../WalletManager');
-const InstanceInitializer = require('../InstanceInitializer');
-const Solana = require('../Solana');
 
 const ENV_PATH = process.env.ENV_PATH;
 
@@ -16,7 +14,6 @@ if (!ENV_PATH) {
 class WalletProcessor {
   constructor() {
     this.walletManager = new WalletManager();
-
     // Define absolute paths
     const basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
     const instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
@@ -25,9 +22,7 @@ class WalletProcessor {
       throw new Error('Error resolving basePath or instancePath.');
     }
 
-    this.instanceInitializer = new InstanceInitializer(basePath, instancePath);
     this.dataManager = new DataManager();
-    this.solana = new Solana();
 
     this.walletQueue = new Queue('walletQueue', {
       connection: {
@@ -43,8 +38,6 @@ class WalletProcessor {
     new Worker('walletQueue', async job => {
       const { chatId } = job.data;
       console.log('Processing job for chatId:', chatId); // Log chatId
-      const userData = await this.dataManager.getCollection(chatId);
-      const { makers } = userData;
 
       try {
         const walletsArray = this.walletManager.createSolanaWallets(makers);

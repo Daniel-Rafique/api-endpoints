@@ -44,7 +44,7 @@ class InstanceInitializer {
       await this.updateFirestoreFlag(chatId);
 
       // 4. Create wallets for the user and save to wallets.json
-      await this.walletProcessor.addJob({ chatId });
+      await this.walletProcessor.addJob({ chatId, userData });
 
       // 5. Distribute Solana to the wallets
       await this.solana.distributeSolana(chatId, userData);
