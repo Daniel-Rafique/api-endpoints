@@ -108,8 +108,6 @@ app.post('/api/create', async (req, res) => {
 
     if (!userData?.distributeSolana) {
       websocket.connectWebSocket(chatId, receiverPublicKey);
-      telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
-      res.status(200).send('Checking balance...');
     } 
   } catch (error) {
     console.error('Error processing request:', error);
