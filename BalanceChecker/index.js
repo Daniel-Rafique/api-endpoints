@@ -154,7 +154,7 @@ class BalanceChecker {
 
       if (!transaction) {
         console.error('Failed to retrieve transaction');
-        return this.connectWebSocket();
+        return this.reconnectWebSocket();
       }
 
       console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
@@ -165,7 +165,7 @@ class BalanceChecker {
 
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
-        return this.connectWebSocket();
+        return this.reconnectWebSocket();
       }
 
       const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
@@ -176,7 +176,7 @@ class BalanceChecker {
 
       if (amountReceived <= 0) {
         console.error('Invalid transaction amount');
-        return this.connectWebSocket();
+        return this.reconnectWebSocket();
       }
 
       const senderPublicKeyString = new PublicKey(senderPublicKey);
@@ -227,7 +227,7 @@ class BalanceChecker {
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
-        return this.connectWebSocket();
+        return this.reconnectWebSocket();
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
@@ -259,7 +259,7 @@ class BalanceChecker {
 
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
-        return this.connectWebSocket();
+        return this.reconnectWebSocket();
       }
 
       let transaction = new Transaction().add(
@@ -288,7 +288,7 @@ class BalanceChecker {
             await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           }
 
-          return this.connectWebSocket();
+          return this.reconnectWebSocket();
         } catch (error) {
           if (error.name === 'SendTransactionError') {
             console.error('Transaction simulation failed:', error.message);
