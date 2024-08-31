@@ -216,7 +216,7 @@ class BalanceChecker {
         const chatId = this.chatId;
         if (!userData.instancesCreated) {
           console.log('Creating market maker instance...');
-          // this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
+          this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
         }
         const currentTokenBalance = tokenBalance / 1_000_000_000;
         const currentSolBalance = amountReceived / 1_000_000_000;
