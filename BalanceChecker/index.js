@@ -1,9 +1,10 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, web3 } = require('@solana/web3.js');
 const { AccountLayout, u64 } = require('@solana/spl-token');
 const bs58 = require('bs58');
-const TelegramNotifier = require('../Telegram');
-const WalletProcessor = require('../WalletProcessor');
 const DataManager = require('../database')
+const TelegramNotifier = require('../Telegram');
+const { formatTokenAmount } = require('../utils');
+const WalletProcessor = require('../WalletProcessor');
 const WebSocket = require('ws');
 
 const redis = require('redis');
@@ -205,7 +206,9 @@ class BalanceChecker {
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
         const chatId = this.chatId;
         await this.walletProcessor.addJob({ chatId });
-        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}\n Any dust will be returned to ${senderPublicKeyString}`
+        const currentTokenBalance = formatTokenAmount(tokenBalance);
+        const currentSolBalance = amountReceived / 1_000_000_000; 
+        message += `✅ Received ${currentSolBalance.toFixed(0)} SOL from ${senderPublicKeyString} \ntoken balance is ${currentTokenBalance.toFixed(0)}\n Any dust will be returned to ${senderPublicKeyString}`
        
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
