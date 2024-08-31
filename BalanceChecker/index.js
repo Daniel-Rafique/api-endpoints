@@ -99,8 +99,8 @@ class BalanceChecker {
       this.reconnectWebSocket();  // Reconnect automatically
     });
 
-    this.ws.on('close', () => {
-      console.log('WebSocket connection closed.');
+    this.ws.on('close', (code, reason) => {
+      console.log(`WebSocket connection closed with code ${code} and reason: ${reason}`);
       this.reconnectWebSocket();  // Reconnect automatically
     });
   }
@@ -115,17 +115,17 @@ class BalanceChecker {
         mentions: [publicKeyToMention]
       }]
     };
-    this.ws.send(JSON.stringify(message));
-    console.log('Subscribed to logs for wallet:', publicKeyToMention);
+
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
       console.log('Subscribed to logs for wallet:', publicKeyToMention);
-      this.startPing();
+      this.startPing();  // Start pinging only if subscription succeeds
     } else {
-      this.reconnectWebSocket();  // Reconnect automatically
       console.error('WebSocket is not open. Cannot subscribe to logs.');
+      this.reconnectWebSocket();
     }
   }
+
 
   startPing() {
     this.pingInterval = setInterval(() => {
@@ -133,13 +133,15 @@ class BalanceChecker {
         console.log('Sending ping to WebSocket server.');
         this.ws.ping();  // Ping to keep the connection alive
       }
-    }, 10000); // Ping every 1 second
+    }, 30000); // Ping every 30 seconds
   }
+
 
   reconnectWebSocket() {
     setTimeout(() => {
+      console.log('Attempting to reconnect WebSocket...');
       this.connectWebSocket();
-    }, 10000); // Reconnect after 1 second
+    }, 10000); // Reconnect after 10 seconds
   }
 
 
