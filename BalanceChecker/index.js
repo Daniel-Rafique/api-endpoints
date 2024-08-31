@@ -206,7 +206,7 @@ class BalanceChecker {
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
         const chatId = this.chatId;
         if(!userData.instancesCreated) {
-        this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
         }
         const currentTokenBalance = formatTokenAmount(tokenBalance);
         const currentSolBalance = amountReceived / 1_000_000_000; 

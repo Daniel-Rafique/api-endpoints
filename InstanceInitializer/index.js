@@ -25,9 +25,8 @@ class InstanceInitializer {
     this.walletProcessor = new WalletProcessor();
   }
 
-  async initializeMarketMakerInstance(chatId) {
+  async initializeMarketMakerInstance(chatId, userData) {
     try {
-      const userData = await this.dataManager.getCollection(chatId);
       const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
       const userDir = path.join(this.instancePath, chatId.toString());
 
@@ -48,7 +47,7 @@ class InstanceInitializer {
       await this.walletProcessor.addJob({ chatId });
 
       // 5. Distribute Solana to the wallets
-      await this.solana.distributeSolana(chatId);
+      await this.solana.distributeSolana(chatId, userData);
 
       // 6. Start the market maker instance
       await this.startMarketMakerInstance(chatId, userDir);
