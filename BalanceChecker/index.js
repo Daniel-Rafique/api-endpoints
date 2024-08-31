@@ -79,7 +79,6 @@ class BalanceChecker {
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
-      this.startPing();
       this.subscribeToLogs();
     });
 
@@ -121,6 +120,7 @@ class BalanceChecker {
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
       console.log('Subscribed to logs for wallet:', publicKeyToMention);
+      this.startPing();
     } else {
       this.reconnectWebSocket();  // Reconnect automatically
       console.error('WebSocket is not open. Cannot subscribe to logs.');
