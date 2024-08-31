@@ -80,19 +80,20 @@ class BalanceChecker {
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
       this.subscribeToLogs();
+      this.startPing();
     });
 
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
       console.log('Received WebSocket message:', response);
       if (response.method === 'logsNotification') {
-          const transactionSignature = response.params.result.value.signature;
-          console.log(`New transaction: ${transactionSignature}`);
-          if (transactionSignature) {
-              await this.handleTransaction(transactionSignature);
-          }
+        const transactionSignature = response.params.result.value.signature;
+        console.log(`New transaction: ${transactionSignature}`);
+        if (transactionSignature) {
+          await this.handleTransaction(transactionSignature);
+        }
       }
-  });
+    });
 
     this.ws.on('error', (error) => {
       console.error('WebSocket error:', error);
@@ -101,6 +102,7 @@ class BalanceChecker {
     this.ws.on('close', () => {
       console.log('WebSocket connection closed.');
       this.reconnectWebSocket();  // Reconnect automatically
+      this.startPing()
     });
   }
 
@@ -116,6 +118,12 @@ class BalanceChecker {
     };
     this.ws.send(JSON.stringify(message));
     console.log('Subscribed to logs for wallet:', publicKeyToMention);
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+      console.log('Subscribed to logs for wallet:', publicKeyToMention);
+    } else {
+      console.error('WebSocket is not open. Cannot subscribe to logs.');
+    }
   }
 
   startPing() {
@@ -205,16 +213,16 @@ class BalanceChecker {
         let message = '';
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
         const chatId = this.chatId;
-        if(!userData.instancesCreated) {
-        console.log('Creating market maker instance...');  
-        // this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
+        if (!userData.instancesCreated) {
+          console.log('Creating market maker instance...');
+          // this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
         }
         const currentTokenBalance = tokenBalance / 1_000_000_000;
-        const currentSolBalance = amountReceived / 1_000_000_000; 
+        const currentSolBalance = amountReceived / 1_000_000_000;
         const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
 
         message += `✅ Received ${currentSolBalance} SOL from ${senderPublicKeyString} \ntoken balance is ${TOKEN_BALANCE}\n Any dust will be returned to ${senderPublicKeyString}`
-       
+
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
@@ -247,12 +255,12 @@ class BalanceChecker {
     try {
       const estimatedFee = await this.getEstimatedFee();
       const amountToReturn = amountReceived - estimatedFee;
-  
+
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
         return this.connectWebSocket();
       }
-  
+
       let transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
@@ -260,35 +268,35 @@ class BalanceChecker {
           lamports: amountToReturn
         })
       );
-  
+
       const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
       transaction.sign(this.receiverKeypair);
-  
+
       let currentBlockHeight = await this.connection.getBlockHeight();
-  
+
       while (currentBlockHeight < lastValidBlockHeight) {
         try {
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
-  
+
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
           const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
-  
+
           if (this.shouldSendMessage(this.chatId, message) && signature) {
             await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           }
-          
+
           return this.connectWebSocket();
         } catch (error) {
           if (error.name === 'SendTransactionError') {
             console.error('Transaction simulation failed:', error.message);
             console.error('Transaction logs:', error.transactionLogs || 'No logs available');
-  
+
             // Fetch logs directly from the connection if available
             const recentLogs = await this.connection.getConfirmedTransaction(error.signature);
             console.error('Fetched transaction logs:', recentLogs ? recentLogs.meta.logMessages : 'No logs found');
-  
+
             // Decide whether to retry based on the specific error or logs
             if (this.shouldRetryTransaction(error)) {
               console.log('Retrying transaction...');
@@ -309,7 +317,7 @@ class BalanceChecker {
       console.error('Error returning SOL to sender:', error);
     }
   }
-  
+
   shouldRetryTransaction(error) {
     // Implement logic to determine whether a transaction should be retried based on the error or logs
     // For example, you may choose to retry on network-related issues, but not on issues like "account not found"
@@ -319,7 +327,7 @@ class BalanceChecker {
     // Add other conditions as necessary
     return true; // Default to retrying in other cases
   }
-  
+
 
   async shouldSendMessage(chatId, message) {
     const cacheKey = String(chatId); // Ensure the cache key is a string
