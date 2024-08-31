@@ -14,6 +14,7 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const DataManager = require('./database');
 const BalanceChecker = require('./BalanceChecker');
+const PriceChecker = require('./PriceChecker');
 const TelegramNotifier = require('./Telegram');
 const Solana = require('./Solana');
 const InstanceInitializer = require('./InstanceInitializer');
@@ -21,6 +22,7 @@ const InstanceInitializer = require('./InstanceInitializer');
 const dataManager = new DataManager();
 const solana = new Solana();
 const instanceInitializer = new InstanceInitializer();
+const priceChecker = new PriceChecker();
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
@@ -73,10 +75,10 @@ app.post('/api/create', async (req, res) => {
       return res.status(404).send('User data not found');
     }
 
-    const minimumSolBalance = userData.boostCost;
-    const receiverPublicKey = userData.wallet;
-    const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
     const contractAddress = userData.contractAddress;
+    const receiverPublicKey = userData.wallet;
+    const minimumSolBalance = userData.boostCost;
+    const minimumTokenBalance = priceChecker.getTokenAmountForOneSOL(contractAddress);
 
     if (userData.boostType === 'ultra_boost') {
       const contractAddress = userData.contractAddress;
