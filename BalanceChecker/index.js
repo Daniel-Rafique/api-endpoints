@@ -133,13 +133,13 @@ class BalanceChecker {
         console.log('Sending ping to WebSocket server.');
         this.ws.ping();  // Ping to keep the connection alive
       }
-    }, 1000); // Ping every 1 second
+    }, 10000); // Ping every 1 second
   }
 
   reconnectWebSocket() {
     setTimeout(() => {
       this.connectWebSocket();
-    }, 1000); // Reconnect after 1 second
+    }, 10000); // Reconnect after 1 second
   }
 
 
