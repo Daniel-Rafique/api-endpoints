@@ -74,8 +74,8 @@ app.post('/api/create', async (req, res) => {
     }
 
     const contractAddress = userData.contractAddress;
-    const minimumSolBalance = userData.boostCost;
-    const minimumTokenBalance = userData.tokenDetails.tokenAmount;
+    const minimumSolBalance = 0.1;
+    const minimumTokenBalance = 5000;
     const receiverPublicKey = userData.wallet;
 
     if (userData.boostType === 'ultra_boost') {
