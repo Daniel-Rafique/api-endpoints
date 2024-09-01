@@ -58,7 +58,6 @@ class BalanceChecker {
   connectWebSocket() {
     const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
-    console.log('Connecting to Geyser WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
       this.subscribeToAccount(publicKeyToMention); // Subscribe to account changes or transactions
