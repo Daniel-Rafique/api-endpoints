@@ -62,7 +62,7 @@ class BalanceChecker {
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
     // Dummy public key to mention in logs if distributeSolana is true
-    const publicKeyToMention = userData.distributeSolana ? this.dummyPublicKey  : this.receiverKeypair.publicKey.toString();
+    const publicKeyToMention = this.dataManager.instancesCreated ? this.dummyPublicKey  : this.receiverKeypair.publicKey.toString();
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
