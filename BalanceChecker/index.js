@@ -95,8 +95,7 @@ class BalanceChecker {
         method: "logsSubscribe",
         params: [
             {
-                mentions: [publicKeyToMention],
-                commitment: "processed"  // Combined in a single map
+                mentions: [publicKeyToMention]
             }
         ]
     };
