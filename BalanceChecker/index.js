@@ -61,7 +61,6 @@ class BalanceChecker {
 
     this.ws.on('open', () => {
       this.subscribeToLogs(publicKeyToMention); // Subscribe after opening the connection
-      this.startPing(); // Start the ping mechanism
     });
 
     this.ws.on('message', async (data) => {
@@ -72,7 +71,7 @@ class BalanceChecker {
 
       if (response.method === 'logsNotification') {
         const transactionSignature = response.params.result.value.signature;
-        console.log(`New transaction: ${transactionSignature}`);
+        console.log(`New transaction detected: ${transactionSignature}`);
         if (transactionSignature) {
           await this.handleTransaction(transactionSignature);
         }
@@ -105,6 +104,7 @@ class BalanceChecker {
       this.ws.send(JSON.stringify(message));
       console.log('Subscribed to logs for wallet:', publicKeyToMention);
       console.log('Waiting for transactions...', message.params);
+      this.startPing(); // Start the ping mechanism
     } else {
       console.error('WebSocket is not open. Cannot subscribe to logs.');
     }
