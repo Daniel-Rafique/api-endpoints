@@ -60,7 +60,6 @@ class BalanceChecker {
     const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
 
     this.ws.on('open', () => {
-      console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
       this.subscribeToLogs(publicKeyToMention); // Subscribe after opening the connection
       this.startPing(); // Start the ping mechanism
     });
