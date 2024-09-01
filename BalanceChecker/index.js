@@ -89,9 +89,9 @@ class BalanceChecker {
       jsonrpc: "2.0",
       id: 1,
       method: "logsSubscribe",
-      params: {
+      params: [{
         mentions: [publicKeyToMention]
-      }
+      }]
     };
 
     if (this.ws.readyState === WebSocket.OPEN) {
