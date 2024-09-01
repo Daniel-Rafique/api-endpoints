@@ -71,7 +71,7 @@ class BalanceChecker {
       console.log('Parsed WebSocket message:', response);
 
       // Process the transaction or account change notification
-      this.handleNotification(response);
+      this.handleTransaction(response);
     });
 
     this.ws.on('error', (error) => {
