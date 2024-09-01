@@ -90,22 +90,25 @@ class BalanceChecker {
   subscribeToLogs() {
     const publicKeyToMention = this.receiverKeypair.publicKey.toString();
     const message = {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "logsSubscribe",
-      params: [{
-        mentions: [publicKeyToMention],
-        commitment: "processed"  // Adjust this commitment level if needed
-      }]
+        jsonrpc: "2.0",
+        id: 1,
+        method: "logsSubscribe",
+        params: [
+            {
+                mentions: [publicKeyToMention],
+                commitment: "processed"  // Combined in a single map
+            }
+        ]
     };
 
     if (this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
-      console.log('Subscribed to logs for wallet:', publicKeyToMention);
+        this.ws.send(JSON.stringify(message));
+        console.log('Subscribed to logs for wallet:', publicKeyToMention);
     } else {
-      console.error('WebSocket is not open. Cannot subscribe to logs.');
+        console.error('WebSocket is not open. Cannot subscribe to logs.');
     }
-  }
+}
+
 
   startPing() {
     this.pingInterval = setInterval(() => {
