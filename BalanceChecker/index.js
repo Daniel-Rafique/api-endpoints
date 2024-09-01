@@ -33,7 +33,6 @@ class BalanceChecker {
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.telegramNotifier = new TelegramNotifier(telegramToken);
-    this.walletProcessor = new WalletProcessor();
     this.chatId = chatId;
     this.contractAddress = contractAddress;
     this.dataManager = new DataManager(chatId);
