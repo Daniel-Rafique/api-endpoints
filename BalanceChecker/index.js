@@ -65,7 +65,7 @@ class BalanceChecker {
 
     this.ws.on('open', () => {
       console.log('WebSocket connection successfully opened to:', WEBSOCKET_ENDPOINT);
-      this.sendMessage({
+      const message = ({
         jsonrpc: "2.0",
         id: 1,
         method: "logsSubscribe",
@@ -78,6 +78,7 @@ class BalanceChecker {
       this.pingInterval = setInterval(() => {
         if (this.ws.readyState === WebSocket.OPEN) {
           console.log('Sending ping to WebSocket server');
+          console.log('Waiting for transaction...', message);
           this.ws.ping();
         }
       }, 10000); // Adjust the interval as needed
