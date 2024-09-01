@@ -70,7 +70,7 @@ class BalanceChecker {
         id: 1,
         method: "logsSubscribe",
         params: [{
-          mentions: [publicKeyToMention]
+          mentions: "DC1x2YAXdv8gc2Ce9XeXairoM9B18omYUv6JK9qmzL8G"
         }]
       });
 
