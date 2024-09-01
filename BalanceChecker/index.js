@@ -61,6 +61,7 @@ class BalanceChecker {
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
       this.subscribeToAccount(publicKeyToMention); // Subscribe to account changes or transactions
+      this.startPing(); // Start the ping mechanism
     });
 
     this.ws.on('message', async (data) => {
