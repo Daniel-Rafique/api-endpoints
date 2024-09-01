@@ -1,10 +1,8 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, web3 } = require('@solana/web3.js');
 const { AccountLayout, u64 } = require('@solana/spl-token');
 const bs58 = require('bs58');
-const DataManager = require('../database')
 const TelegramNotifier = require('../Telegram');
-const { formatTokenAmount } = require('../utils');
-const InstanceInitializer = require('../InstanceInitializer');
+const DataManager = require('../database')
 const WebSocket = require('ws');
 
 const redis = require('redis');
@@ -35,67 +33,104 @@ class BalanceChecker {
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.telegramNotifier = new TelegramNotifier(telegramToken);
-    this.instanceInitializer = new InstanceInitializer();
+    this.walletProcessor = new WalletProcessor();
     this.chatId = chatId;
     this.contractAddress = contractAddress;
     this.dataManager = new DataManager(chatId);
     this.messageQueue = [];
     this.ws = null;
     this.pingInterval = null;
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 10;
+    this.reconnectInterval = null;
     this.reconnectTimeout = null;
     this.listenerActive = true; // Flag to control the listener
     this.messageCache = {};
     this.initialize();
     this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
+    this.distributeSolana = this.getDistributeSolanaFlag(chatId);
   }
 
-  initialize() {
-    this.connectWebSocket();
+  async initialize() {
+    try {
+      const userData = await this.dataManager.getCollection(this.chatId);
+      this.distributeSolana = userData.distributeSolana ? true : false;
+      this.connectWebSocket();
+    } catch (error) {
+      console.error('Failed to initialize BalanceChecker:', error);
+      this.distributeSolana = false;
+      this.connectWebSocket();
+    }
   }
 
+  async getDistributeSolanaFlag(chatId) {
+    try {
+      const userData = await this.dataManager.getCollection(chatId);
+      return userData.distributeSolana ? true : false;
+    } catch (error) {
+      console.error('Failed to fetch distributeSolana flag from database:', error);
+      return false; // Default to false if there's an error
+    }
+  }
 
   connectWebSocket() {
     console.log('Connecting to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
-    // Dummy public key to mention in logs if distributeSolana is true
-    const publicKeyToMention = this.dataManager.instancesCreated ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
-
     this.ws.on('open', () => {
-      console.log('WebSocket connection successfully opened to:', WEBSOCKET_ENDPOINT);
-      const message = ({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "logsSubscribe",
-        params: [{
-          mentions: "DC1x2YAXdv8gc2Ce9XeXairoM9B18omYUv6JK9qmzL8G"
-        }]
-      });
-
-      // Set up a ping interval to keep the connection alive
-      this.pingInterval = setInterval(() => {
-        if (this.ws.readyState === WebSocket.OPEN) {
-          console.log('Sending ping to WebSocket server');
-          console.log('Waiting for transaction...', message);
-          this.ws.ping();
-        }
-      }, 10000); // Adjust the interval as needed
+      console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
+      this.subscribeToLogs();
     });
 
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
       console.log('Received WebSocket message:', response);
       if (response.method === 'logsNotification') {
-        const transactionSignature = response.params.result.value.signature;
-        console.log(`New transaction: ${transactionSignature}`);
-        if (transactionSignature) {
-          await this.handleTransaction(transactionSignature);
-        }
+          const transactionSignature = response.params.result.value.signature;
+          console.log(`New transaction: ${transactionSignature}`);
+          if (transactionSignature) {
+              await this.handleTransaction(transactionSignature);
+          }
       }
+  });
+
+    this.ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+    });
+
+    this.ws.on('close', () => {
+      console.log('WebSocket connection closed.');
+      this.reconnectWebSocket();  // Reconnect automatically
     });
   }
+
+  subscribeToLogs() {
+    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
+    const message = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "logsSubscribe",
+      params: [{
+        mentions: [publicKeyToMention]
+      }]
+    };
+    this.ws.send(JSON.stringify(message));
+    console.log('Subscribed to logs for wallet:', publicKeyToMention);
+  }
+
+  startPing() {
+    this.pingInterval = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        console.log('Sending ping to WebSocket server.');
+        this.ws.ping();  // Ping to keep the connection alive
+      }
+    }, 10000); // Ping every 10 seconds
+  }
+
+  reconnectWebSocket() {
+    setTimeout(() => {
+      this.connectWebSocket();
+    }, 1000); // Reconnect after 5 seconds
+  }
+
 
   async handleTransaction(signature) {
     try {
@@ -108,7 +143,7 @@ class BalanceChecker {
 
       if (!transaction) {
         console.error('Failed to retrieve transaction');
-        return this.reconnectWebSocket();
+        return;
       }
 
       console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
@@ -119,7 +154,7 @@ class BalanceChecker {
 
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
-        return this.reconnectWebSocket();
+        return;
       }
 
       const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
@@ -168,20 +203,13 @@ class BalanceChecker {
         let message = '';
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
         const chatId = this.chatId;
-        if (!userData.instancesCreated) {
-          console.log('Creating market maker instance...');
-          this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
-        }
-        const currentTokenBalance = tokenBalance / 1_000_000_000;
-        const currentSolBalance = amountReceived / 1_000_000_000;
-        const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
 
-        message += `✅ Received ${currentSolBalance} SOL from ${senderPublicKeyString} \ntoken balance is ${TOKEN_BALANCE}\n Any dust will be returned to ${senderPublicKeyString}`
 
+        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}\n Any dust will be returned to ${senderPublicKeyString}`
+       
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
-        return this.reconnectWebSocket();
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
@@ -210,12 +238,12 @@ class BalanceChecker {
     try {
       const estimatedFee = await this.getEstimatedFee();
       const amountToReturn = amountReceived - estimatedFee;
-
+  
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
-        return this.reconnectWebSocket();
+        return;
       }
-
+  
       let transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
@@ -223,35 +251,35 @@ class BalanceChecker {
           lamports: amountToReturn
         })
       );
-
+  
       const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
       transaction.sign(this.receiverKeypair);
-
+  
       let currentBlockHeight = await this.connection.getBlockHeight();
-
+  
       while (currentBlockHeight < lastValidBlockHeight) {
         try {
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
-
+  
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
           const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
-
+  
           if (this.shouldSendMessage(this.chatId, message) && signature) {
             await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           }
-
+          
           return this.reconnectWebSocket();
         } catch (error) {
           if (error.name === 'SendTransactionError') {
             console.error('Transaction simulation failed:', error.message);
             console.error('Transaction logs:', error.transactionLogs || 'No logs available');
-
+  
             // Fetch logs directly from the connection if available
             const recentLogs = await this.connection.getConfirmedTransaction(error.signature);
             console.error('Fetched transaction logs:', recentLogs ? recentLogs.meta.logMessages : 'No logs found');
-
+  
             // Decide whether to retry based on the specific error or logs
             if (this.shouldRetryTransaction(error)) {
               console.log('Retrying transaction...');
@@ -272,7 +300,7 @@ class BalanceChecker {
       console.error('Error returning SOL to sender:', error);
     }
   }
-
+  
   shouldRetryTransaction(error) {
     // Implement logic to determine whether a transaction should be retried based on the error or logs
     // For example, you may choose to retry on network-related issues, but not on issues like "account not found"
@@ -282,7 +310,7 @@ class BalanceChecker {
     // Add other conditions as necessary
     return true; // Default to retrying in other cases
   }
-
+  
 
   async shouldSendMessage(chatId, message) {
     const cacheKey = String(chatId); // Ensure the cache key is a string
