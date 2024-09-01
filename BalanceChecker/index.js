@@ -49,7 +49,6 @@ class BalanceChecker {
     this.messageCache = {};
     this.initialize();
     this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
-    this.distributeSolana = this.getDistributeSolanaFlag(chatId);
   }
 
   initialize() {
