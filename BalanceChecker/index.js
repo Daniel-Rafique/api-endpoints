@@ -65,13 +65,16 @@ class BalanceChecker {
       this.startPing();
     });
 
-    this.ws.on('message', (data) => {
-      console.log('Raw WebSocket message received:', data);
+    this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
-      console.log('Parsed WebSocket message:', response);
-
-      // Process the transaction or account change notification
-      this.handleTransaction(response);
+      console.log('Received WebSocket message:', response);
+      if (response.method === 'logsNotification') {
+        const transactionSignature = response.params.result.value.signature;
+        console.log(`New transaction: ${transactionSignature}`);
+        if (transactionSignature) {
+          await this.handleTransaction(transactionSignature);
+        }
+      }
     });
 
     this.ws.on('error', (error) => {
