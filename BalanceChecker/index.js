@@ -82,7 +82,6 @@ class BalanceChecker {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
       this.reconnectAttempts = 0;
       this.subscribeToLogs();
-      this.startPing();
     });
 
     this.ws.on('message', async (data) => {

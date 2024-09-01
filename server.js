@@ -100,7 +100,7 @@ app.post('/api/create', async (req, res) => {
       contractAddress
     );
 
-    websocket.connectWebSocket(chatId, receiverPublicKey);
+    websocket.connectWebSocket();
 
     if (!userData?.instancesCreated) {
       telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
