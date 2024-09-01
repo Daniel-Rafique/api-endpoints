@@ -55,7 +55,7 @@ class InstanceInitializer {
         }
       }
       // 5. Start the market maker instance
-      if (userData.distributeSolana && !userData.instancesStarted) {
+      if (!userData.instancesStarted) {
         console.log('Solana sent. Starting market maker instance...');
         await this.startMarketMakerInstance(chatId, userDir);
       }
@@ -176,7 +176,7 @@ class InstanceInitializer {
               console.error('Failed to generate PM2 startup script:', stderr);
             } else {
               console.log('PM2 startup script generated successfully');
-              return this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ instancesStarted: true });
+              this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ instancesStarted: true });
             }
             pm2.disconnect();
           });

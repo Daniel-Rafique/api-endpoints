@@ -83,9 +83,10 @@ class Solana {
       }
     } else if (updatedBalance <= 0) {
       console.log('No balance left to distribute.');
+      // Set commision paid to false and distributeSolana to false to allow for top-ups
       await this.firestore.collection(FIRESTORE_COLLECTION)
         .doc(chatId.toString())
-        .update({ distributeSolana: false });
+        .update({ distributeSolana: false, commissionPaid: false });
     }
   }
 
