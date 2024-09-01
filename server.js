@@ -97,7 +97,7 @@ app.post('/api/create', async (req, res) => {
     );
 
     if (!userData?.instancesCreated) {
-      websocket.connectWebSocket(receiverPrivateKey);
+      websocket.initialize();
       telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
       res.status(200).send('Checking balance...');
     } 

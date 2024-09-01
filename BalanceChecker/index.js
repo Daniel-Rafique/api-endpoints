@@ -52,26 +52,23 @@ class BalanceChecker {
     this.distributeSolana = this.getDistributeSolanaFlag(chatId);
   }
 
-  async initialize() {
-    try {
-      this.connectWebSocket();
-    } catch (error) {
-      console.error('Failed to initialize BalanceChecker:', error);
-      this.distributeSolana = false;
-      this.connectWebSocket();
-    }
+  initialize() {
+    this.connectWebSocket();
   }
 
-  connectWebSocket(receiverPrivateKey) {
+
+  connectWebSocket() {
     console.log('Connecting to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
-    const publicKeyToMention = userData.distributeSolana ? this.dummyPublicKey  : receiverPrivateKey;
+    // Dummy public key to mention in logs if distributeSolana is true
+    const publicKeyToMention = userData.distributeSolana ? this.dummyPublicKey  : this.receiverKeypair.publicKey.toString();
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
       this.reconnectAttempts = 0;
       this.subscribeToLogs(publicKeyToMention);
+      this.startPing();
     });
 
     this.ws.on('message', async (data) => {
@@ -92,15 +89,13 @@ class BalanceChecker {
 
     this.ws.on('close', (code, reason) => {
       console.log(`WebSocket connection closed with code ${code} and reason: ${reason}`);
-      if (code === 1000) {
-        console.log('Normal closure, not reconnecting.');
-      } else {
+      if (code !== 1000) {
         this.reconnectWebSocket();
       }
     });
   }
 
-  subscribeToLogs() {
+  subscribeToLogs(publicKeyToMention) {
     const message = {
       jsonrpc: "2.0",
       id: 1,
@@ -118,7 +113,6 @@ class BalanceChecker {
     }
   }
 
-
   startPing() {
     this.pingInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -127,14 +121,6 @@ class BalanceChecker {
       }
     }, 30000); // Ping every 30 seconds
   }
-
-  stopPing() {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-  }
-
 
   reconnectWebSocket() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
