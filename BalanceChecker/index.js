@@ -61,13 +61,26 @@ class BalanceChecker {
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
     // Dummy public key to mention in logs if distributeSolana is true
-    const publicKeyToMention = this.dataManager.instancesCreated ? this.dummyPublicKey  : this.receiverKeypair.publicKey.toString();
+    const publicKeyToMention = this.dataManager.instancesCreated ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
 
     this.ws.on('open', () => {
-      console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
-      this.reconnectAttempts = 0;
-      this.subscribeToLogs(publicKeyToMention);
-      this.startPing();
+      console.log('WebSocket connection successfully opened to:', WEBSOCKET_ENDPOINT);
+      this.sendMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "logsSubscribe",
+        params: [{
+          mentions: [publicKeyToMention]
+        }]
+      });
+
+      // Set up a ping interval to keep the connection alive
+      this.pingInterval = setInterval(() => {
+        if (this.ws.readyState === WebSocket.OPEN) {
+          console.log('Sending ping to WebSocket server');
+          this.ws.ping();
+        }
+      }, 10000); // Adjust the interval as needed
     });
 
     this.ws.on('message', async (data) => {
@@ -81,63 +94,6 @@ class BalanceChecker {
         }
       }
     });
-
-    this.ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-    });
-
-    this.ws.on('close', (code, reason) => {
-      console.log(`WebSocket connection closed with code ${code} and reason: ${reason}`);
-      if (code !== 1000) {
-        this.reconnectWebSocket();
-      }
-    });
-  }
-
-  subscribeToLogs(publicKeyToMention) {
-    const message = {
-      "jsonrpc": "2.0",
-      "id": 1,
-      "method": "accountSubscribe",
-      "params": [
-        publicKeyToMention,
-        {
-          "encoding": "jsonParsed",
-          "commitment": "processed"
-        }
-      ]
-    };
-    
-
-    if (this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
-      console.log('Subscribed to logs for wallet:', publicKeyToMention);
-      console.log('Waiting for transactions...', message);
-    } else {
-      console.error('WebSocket is not open. Cannot subscribe to logs.');
-    }
-  }
-
-  startPing() {
-    this.pingInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        console.log('Sending ping to WebSocket server.');
-        this.ws.ping();
-      }
-    }, 30000); // Ping every 30 seconds
-  }
-
-  reconnectWebSocket() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      const delay = Math.min(10000 * Math.pow(2, this.reconnectAttempts), 60000); // Exponential backoff
-      console.log(`Attempting to reconnect WebSocket in ${delay / 1000} seconds...`);
-      setTimeout(() => {
-        this.reconnectAttempts++;
-        this.connectWebSocket();
-      }, delay);
-    } else {
-      console.error('Max reconnect attempts reached. Giving up.');
-    }
   }
 
   async handleTransaction(signature) {
