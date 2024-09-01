@@ -42,20 +42,20 @@ class InstanceInitializer {
       await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
 
       // 3. Create wallets for the user and save to wallets.json
-      if (userData.instancesCreated) {
+      if (userData.instancesCreated && !userData.walletsCreated) {
         await this.walletProcessor.addJob({ chatId, userData });
       }
       // 4. Distribute Commission to the wallet
-      if (userData.walletsCreated) {
+      if (userData.walletsCreated && !userData.commissionPaid) {
         const result = await this.solana.handleCommission(chatId, userData);
         console.log('Commission sent successfully. Remeaining balance:', result);
-        if (userData.commissionPaid) {
+        if (userData.commissionPaid && !userData.distributeSolana) {
           console.log('Commission paid. Current balance:', result);
           await this.solana.handleDistribution(chatId, userData, result);
         }
       }
       // 5. Start the market maker instance
-      if (userData.distributeSolana) {
+      if (userData.distributeSolana && !userData.instancesStarted) {
         console.log('Solana sent. Starting market maker instance...');
         await this.startMarketMakerInstance(chatId, userDir);
       }
@@ -176,6 +176,7 @@ class InstanceInitializer {
               console.error('Failed to generate PM2 startup script:', stderr);
             } else {
               console.log('PM2 startup script generated successfully');
+              return this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ instancesStarted: true });
             }
             pm2.disconnect();
           });
