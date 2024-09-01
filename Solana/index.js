@@ -36,7 +36,7 @@ class Solana {
 
   // Function to handle commission payment
   async handleCommission(chatId, userData) {
-    const {walletPk, commissionPaid, walletsCreated} = userData;
+    const { walletPk, commissionPaid, walletsCreated } = userData;
 
     if (commissionPaid === false && walletsCreated === true) {
       const sendInstance = new Send(chatId);
@@ -59,22 +59,24 @@ class Solana {
 
   // Function to handle Solana distribution
   async handleDistribution(chatId, userData, updatedBalance) {
-    const {commissionPaid, distributeSolana} = userData;
+    const { commissionPaid, distributeSolana } = userData;
 
     console.log(`Starting distribution, userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
     if (commissionPaid === true && distributeSolana === false && updatedBalance > 0) {
       console.log(`distribution in Progress, commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
+      try {
+        // Update the distributeSolana flag to make sure the distribution is not returned due to low balance
+        await this.firestore.collection(FIRESTORE_COLLECTION)
+          .doc(chatId.toString())
+          .update({ distributeSolana: true });
+      } catch (error) {
+        console.error('Error updating distributeSolana flag:', error);
+      }
       const distributeInstance = new Distribute(chatId);
       const results = await distributeInstance.distributeSolana(chatId, userData, updatedBalance);
       console.log('Distribution results:', results);
-
-      // Update the distributeSolana flag after successful distribution
-      await this.firestore.collection(FIRESTORE_COLLECTION)
-        .doc(chatId.toString())
-        .update({ distributeSolana: true });
-
       const message = MESSAGES.DEPLOYMENT(updatedBalance);
       if (this.shouldSendMessage(chatId, message)) {
         await this.telegramNotifier.sendTelegramMessage(chatId, message);

@@ -54,8 +54,6 @@ class BalanceChecker {
 
   async initialize() {
     try {
-      const userData = await this.dataManager.getCollection(this.chatId);
-      this.distributeSolana = userData.distributeSolana ? true : false;
       this.connectWebSocket();
     } catch (error) {
       console.error('Failed to initialize BalanceChecker:', error);
@@ -64,24 +62,16 @@ class BalanceChecker {
     }
   }
 
-  async getDistributeSolanaFlag(chatId) {
-    try {
-      const userData = await this.dataManager.getCollection(chatId);
-      return userData.distributeSolana ? true : false;
-    } catch (error) {
-      console.error('Failed to fetch distributeSolana flag from database:', error);
-      return false; // Default to false if there's an error
-    }
-  }
-
-  connectWebSocket() {
+  connectWebSocket(receiverPrivateKey) {
     console.log('Connecting to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
+
+    const publicKeyToMention = userData.distributeSolana ? this.dummyPublicKey  : receiverPrivateKey;
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
       this.reconnectAttempts = 0;
-      this.subscribeToLogs();
+      this.subscribeToLogs(publicKeyToMention);
     });
 
     this.ws.on('message', async (data) => {
@@ -111,7 +101,6 @@ class BalanceChecker {
   }
 
   subscribeToLogs() {
-    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
     const message = {
       jsonrpc: "2.0",
       id: 1,
@@ -233,7 +222,7 @@ class BalanceChecker {
         const chatId = this.chatId;
         if (!userData.instancesCreated) {
           console.log('Creating market maker instance...');
-          // this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
+          this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
         }
         const currentTokenBalance = tokenBalance / 1_000_000_000;
         const currentSolBalance = amountReceived / 1_000_000_000;
