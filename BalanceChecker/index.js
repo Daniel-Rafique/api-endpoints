@@ -90,7 +90,7 @@ class BalanceChecker {
       id: 1,
       method: "accountsSubscribe",
       params: {
-        accounts: [publicKeyToMention],
+        accounts: publicKeyToMention,
         commitment: "finalized"  // You can choose "processed" or "confirmed" as needed
       }
     };
