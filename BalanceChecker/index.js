@@ -63,7 +63,7 @@ class BalanceChecker {
         method: "logsSubscribe",
         params: [
             {
-                mentions: publicKeyToMention
+                mentions: [publicKeyToMention]
             }
         ]
     };
