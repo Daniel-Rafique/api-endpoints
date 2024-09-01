@@ -13,7 +13,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const DataManager = require('./database');
-const WebSocket = require('./WebSocket');
+const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./Telegram');
 
 const dataManager = new DataManager();
@@ -86,7 +86,7 @@ app.post('/api/create', async (req, res) => {
     if (typeof receiverPrivateKey !== 'string') {
       throw new TypeError('Receiver private key must be a string');
     }
-    const websocket = new WebSocket(
+    const websocket = new BalanceChecker(
       chatId,
       receiverPrivateKey,
       minimumSolBalance,
@@ -96,7 +96,7 @@ app.post('/api/create', async (req, res) => {
     );
 
     if (!userData?.distributeSolana) {
-      websocket.connect();
+      websocket.initialize();
       telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
       res.status(200).send('Checking balance...');
     } 

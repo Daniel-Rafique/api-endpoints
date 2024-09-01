@@ -53,84 +53,75 @@ class BalanceChecker {
 
   initialize() {
     this.connectWebSocket();
-}
+  }
 
-connectWebSocket() {
-    console.log('Connecting to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
+  connectWebSocket() {
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
     this.ws.on('open', () => {
-        console.log('WebSocket connection successfully opened to:', WEBSOCKET_ENDPOINT);
-        this.subscribeToLogs();  // Send the subscription message after connection is established
-        this.startPing();
+      console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
+      this.subscribeToLogs(); // Subscribe after opening the connection
+      this.startPing(); // Start the ping mechanism
     });
 
     this.ws.on('message', async (data) => {
-        const response = JSON.parse(data);
-        console.log('Received WebSocket message:', response);
+      const response = JSON.parse(data);
+      console.log('Received WebSocket message:', response);
 
-        if (response.method === 'logsNotification') {
-            const transactionSignature = response.params.result.value.signature;
-            console.log(`New transaction: ${transactionSignature}`);
-            if (transactionSignature) {
-                await this.handleTransaction(transactionSignature);
-            }
+      if (response.method === 'logsNotification') {
+        const transactionSignature = response.params.result.value.signature;
+        console.log(`New transaction: ${transactionSignature}`);
+        if (transactionSignature) {
+          await this.handleTransaction(transactionSignature);
         }
+      }
     });
 
     this.ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
+      console.error('WebSocket error:', error);
     });
 
     this.ws.on('close', (code, reason) => {
-        console.log(`WebSocket connection closed with code ${code} and reason: ${reason}`);
-        if (code !== 1000) {
-            this.reconnectWebSocket();
-        }
+      console.log(`WebSocket connection closed with code ${code} and reason: ${reason}`);
+      this.reconnectWebSocket();
     });
-}
+  }
 
-subscribeToLogs() {
-    const publicKeyToMention = this.dataManager.instancesCreated ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
+  subscribeToLogs() {
+    const publicKeyToMention = this.receiverKeypair.publicKey.toString();
     const message = {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "logsSubscribe",
-        params: [{
-            mentions: [publicKeyToMention]
-        }]
+      jsonrpc: "2.0",
+      id: 1,
+      method: "logsSubscribe",
+      params: [{
+        mentions: [publicKeyToMention],
+        commitment: "processed"  // Adjust this commitment level if needed
+      }]
     };
 
     if (this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify(message));
-        console.log('Subscribed to logs for wallet:', publicKeyToMention);
+      this.ws.send(JSON.stringify(message));
+      console.log('Subscribed to logs for wallet:', publicKeyToMention);
     } else {
-        console.error('WebSocket is not open. Cannot subscribe to logs.');
+      console.error('WebSocket is not open. Cannot subscribe to logs.');
     }
-}
+  }
 
-startPing() {
+  startPing() {
     this.pingInterval = setInterval(() => {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            console.log('Sending ping to WebSocket server');
-            this.ws.ping();
-        }
-    }, 10000); // Ping every 10 seconds
-}
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        console.log('Sending ping to WebSocket server');
+        this.ws.ping();
+      }
+    }, 30000); // Ping every 30 seconds
+  }
 
-reconnectWebSocket() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-        const delay = Math.min(10000 * Math.pow(2, this.reconnectAttempts), 60000); // Exponential backoff
-        console.log(`Attempting to reconnect WebSocket in ${delay / 1000} seconds...`);
-        setTimeout(() => {
-            this.reconnectAttempts++;
-            this.connectWebSocket();
-        }, delay);
-    } else {
-        console.error('Max reconnect attempts reached. Giving up.');
-    }
-}
-
+  reconnectWebSocket() {
+    setTimeout(() => {
+      console.log('Reconnecting WebSocket...');
+      this.connectWebSocket();
+    }, 10000); // Reconnect after 10 seconds
+  }
 
   async handleTransaction(signature) {
     try {
