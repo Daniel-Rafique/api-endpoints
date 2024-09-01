@@ -57,10 +57,11 @@ class BalanceChecker {
 
   connectWebSocket() {
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
+    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
 
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
-      this.subscribeToLogs(); // Subscribe after opening the connection
+      this.subscribeToLogs(publicKeyToMention); // Subscribe after opening the connection
       this.startPing(); // Start the ping mechanism
     });
 
@@ -87,8 +88,7 @@ class BalanceChecker {
     });
   }
 
-  subscribeToLogs() {
-    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
+  subscribeToLogs(publicKeyToMention) {
     const message = {
       jsonrpc: "2.0",
       id: 1,
