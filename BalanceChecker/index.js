@@ -96,17 +96,23 @@ class BalanceChecker {
 
   subscribeToLogs(publicKeyToMention) {
     const message = {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "logsSubscribe",
-      params: [{
-        mentions: [publicKeyToMention]
-      }]
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "accountSubscribe",
+      "params": [
+        publicKeyToMention,
+        {
+          "encoding": "jsonParsed",
+          "commitment": "processed"
+        }
+      ]
     };
+    
 
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
       console.log('Subscribed to logs for wallet:', publicKeyToMention);
+      console.log('Waiting for transactions...', message);
     } else {
       console.error('WebSocket is not open. Cannot subscribe to logs.');
     }
