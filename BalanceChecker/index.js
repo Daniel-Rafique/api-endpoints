@@ -1,8 +1,10 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, web3 } = require('@solana/web3.js');
 const { AccountLayout, u64 } = require('@solana/spl-token');
 const bs58 = require('bs58');
-const TelegramNotifier = require('../Telegram');
 const DataManager = require('../database')
+const TelegramNotifier = require('../Telegram');
+const { formatTokenAmount } = require('../utils');
+const InstanceInitializer = require('../InstanceInitializer');
 const WebSocket = require('ws');
 
 const redis = require('redis');
@@ -33,102 +35,101 @@ class BalanceChecker {
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.telegramNotifier = new TelegramNotifier(telegramToken);
+    this.instanceInitializer = new InstanceInitializer();
     this.chatId = chatId;
     this.contractAddress = contractAddress;
     this.dataManager = new DataManager(chatId);
     this.messageQueue = [];
     this.ws = null;
     this.pingInterval = null;
-    this.reconnectInterval = null;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 10;
     this.reconnectTimeout = null;
     this.listenerActive = true; // Flag to control the listener
     this.messageCache = {};
     this.initialize();
     this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
-    this.distributeSolana = this.getDistributeSolanaFlag(chatId);
   }
 
-  async initialize() {
-    try {
-      const userData = await this.dataManager.getCollection(this.chatId);
-      this.distributeSolana = userData.distributeSolana ? true : false;
-      this.connectWebSocket();
-    } catch (error) {
-      console.error('Failed to initialize BalanceChecker:', error);
-      this.distributeSolana = false;
-      this.connectWebSocket();
-    }
-  }
+  initialize() {
+    this.connectWebSocket();
+}
 
-  async getDistributeSolanaFlag(chatId) {
-    try {
-      const userData = await this.dataManager.getCollection(chatId);
-      return userData.distributeSolana ? true : false;
-    } catch (error) {
-      console.error('Failed to fetch distributeSolana flag from database:', error);
-      return false; // Default to false if there's an error
-    }
-  }
-
-  connectWebSocket() {
+connectWebSocket() {
     console.log('Connecting to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
     this.ws.on('open', () => {
-      console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
-      this.subscribeToLogs();
+        console.log('WebSocket connection successfully opened to:', WEBSOCKET_ENDPOINT);
+        this.subscribeToLogs();  // Send the subscription message after connection is established
+        this.startPing();
     });
 
     this.ws.on('message', async (data) => {
-      const response = JSON.parse(data);
-      console.log('Received WebSocket message:', response);
-      if (response.method === 'logsNotification') {
-          const transactionSignature = response.params.result.value.signature;
-          console.log(`New transaction: ${transactionSignature}`);
-          if (transactionSignature) {
-              await this.handleTransaction(transactionSignature);
-          }
-      }
-  });
+        const response = JSON.parse(data);
+        console.log('Received WebSocket message:', response);
+
+        if (response.method === 'logsNotification') {
+            const transactionSignature = response.params.result.value.signature;
+            console.log(`New transaction: ${transactionSignature}`);
+            if (transactionSignature) {
+                await this.handleTransaction(transactionSignature);
+            }
+        }
+    });
 
     this.ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
+        console.error('WebSocket error:', error);
     });
 
-    this.ws.on('close', () => {
-      console.log('WebSocket connection closed.');
-      this.reconnectWebSocket();  // Reconnect automatically
+    this.ws.on('close', (code, reason) => {
+        console.log(`WebSocket connection closed with code ${code} and reason: ${reason}`);
+        if (code !== 1000) {
+            this.reconnectWebSocket();
+        }
     });
-  }
+}
 
-  subscribeToLogs() {
-    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
+subscribeToLogs() {
+    const publicKeyToMention = this.dataManager.instancesCreated ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
     const message = {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "logsSubscribe",
-      params: [{
-        mentions: [publicKeyToMention]
-      }]
+        jsonrpc: "2.0",
+        id: 1,
+        method: "logsSubscribe",
+        params: [{
+            mentions: [publicKeyToMention]
+        }]
     };
-    this.ws.send(JSON.stringify(message));
-    console.log('Subscribed to logs for wallet:', publicKeyToMention);
-  }
 
-  startPing() {
+    if (this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify(message));
+        console.log('Subscribed to logs for wallet:', publicKeyToMention);
+    } else {
+        console.error('WebSocket is not open. Cannot subscribe to logs.');
+    }
+}
+
+startPing() {
     this.pingInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        console.log('Sending ping to WebSocket server.');
-        this.ws.ping();  // Ping to keep the connection alive
-      }
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            console.log('Sending ping to WebSocket server');
+            this.ws.ping();
+        }
     }, 10000); // Ping every 10 seconds
-  }
+}
 
-  reconnectWebSocket() {
-    setTimeout(() => {
-      this.connectWebSocket();
-    }, 1000); // Reconnect after 5 seconds
-  }
+reconnectWebSocket() {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        const delay = Math.min(10000 * Math.pow(2, this.reconnectAttempts), 60000); // Exponential backoff
+        console.log(`Attempting to reconnect WebSocket in ${delay / 1000} seconds...`);
+        setTimeout(() => {
+            this.reconnectAttempts++;
+            this.connectWebSocket();
+        }, delay);
+    } else {
+        console.error('Max reconnect attempts reached. Giving up.');
+    }
+}
 
 
   async handleTransaction(signature) {
@@ -142,7 +143,7 @@ class BalanceChecker {
 
       if (!transaction) {
         console.error('Failed to retrieve transaction');
-        return;
+        return this.reconnectWebSocket();
       }
 
       console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
@@ -153,7 +154,7 @@ class BalanceChecker {
 
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
-        return;
+        return this.reconnectWebSocket();
       }
 
       const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
@@ -202,13 +203,20 @@ class BalanceChecker {
         let message = '';
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
         const chatId = this.chatId;
+        if (!userData.instancesCreated) {
+          console.log('Creating market maker instance...');
+          this.instanceInitializer.initializeMarketMakerInstance(chatId, userData);
+        }
+        const currentTokenBalance = tokenBalance / 1_000_000_000;
+        const currentSolBalance = amountReceived / 1_000_000_000;
+        const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
 
+        message += `✅ Received ${currentSolBalance} SOL from ${senderPublicKeyString} \ntoken balance is ${TOKEN_BALANCE}\n Any dust will be returned to ${senderPublicKeyString}`
 
-        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}\n Any dust will be returned to ${senderPublicKeyString}`
-       
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
+        return this.reconnectWebSocket();
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
@@ -232,17 +240,16 @@ class BalanceChecker {
     return tokenBalance;
   }
 
-
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
       const estimatedFee = await this.getEstimatedFee();
       const amountToReturn = amountReceived - estimatedFee;
-  
+
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
-        return;
+        return this.reconnectWebSocket();
       }
-  
+
       let transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
@@ -250,35 +257,35 @@ class BalanceChecker {
           lamports: amountToReturn
         })
       );
-  
+
       const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
       transaction.sign(this.receiverKeypair);
-  
+
       let currentBlockHeight = await this.connection.getBlockHeight();
-  
+
       while (currentBlockHeight < lastValidBlockHeight) {
         try {
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
-  
+
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
           const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
-  
+
           if (this.shouldSendMessage(this.chatId, message) && signature) {
             await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           }
-          
+
           return this.reconnectWebSocket();
         } catch (error) {
           if (error.name === 'SendTransactionError') {
             console.error('Transaction simulation failed:', error.message);
             console.error('Transaction logs:', error.transactionLogs || 'No logs available');
-  
+
             // Fetch logs directly from the connection if available
             const recentLogs = await this.connection.getConfirmedTransaction(error.signature);
             console.error('Fetched transaction logs:', recentLogs ? recentLogs.meta.logMessages : 'No logs found');
-  
+
             // Decide whether to retry based on the specific error or logs
             if (this.shouldRetryTransaction(error)) {
               console.log('Retrying transaction...');
@@ -299,7 +306,7 @@ class BalanceChecker {
       console.error('Error returning SOL to sender:', error);
     }
   }
-  
+
   shouldRetryTransaction(error) {
     // Implement logic to determine whether a transaction should be retried based on the error or logs
     // For example, you may choose to retry on network-related issues, but not on issues like "account not found"
@@ -309,7 +316,6 @@ class BalanceChecker {
     // Add other conditions as necessary
     return true; // Default to retrying in other cases
   }
-  
 
   async shouldSendMessage(chatId, message) {
     const cacheKey = String(chatId); // Ensure the cache key is a string

