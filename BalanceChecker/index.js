@@ -88,7 +88,7 @@ class BalanceChecker {
   }
 
   subscribeToLogs() {
-    const publicKeyToMention = this.receiverKeypair.publicKey.toString();
+    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
     const message = {
         jsonrpc: "2.0",
         id: 1,
