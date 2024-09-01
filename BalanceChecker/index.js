@@ -56,26 +56,22 @@ class BalanceChecker {
   }
 
   connectWebSocket() {
-    this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
     const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
-
+    this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
+    console.log('Connecting to Geyser WebSocket endpoint:', WEBSOCKET_ENDPOINT);
     this.ws.on('open', () => {
-      this.subscribeToLogs(publicKeyToMention); // Subscribe after opening the connection
+      console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
+      this.subscribeToAccount(publicKeyToMention); // Subscribe to account changes or transactions
+      this.startPing();
     });
 
-    this.ws.on('message', async (data) => {
+    this.ws.on('message', (data) => {
       console.log('Raw WebSocket message received:', data);
       const response = JSON.parse(data);
       console.log('Parsed WebSocket message:', response);
-      console.log('Received WebSocket message:', response);
 
-      if (response.method === 'logsNotification') {
-        const transactionSignature = response.params.result.value.signature;
-        console.log(`New transaction detected: ${transactionSignature}`);
-        if (transactionSignature) {
-          await this.handleTransaction(transactionSignature);
-        }
-      }
+      // Process the transaction or account change notification
+      this.handleNotification(response);
     });
 
     this.ws.on('error', (error) => {
@@ -88,28 +84,24 @@ class BalanceChecker {
     });
   }
 
-  subscribeToLogs(publicKeyToMention) {
+  subscribeToAccount(publicKeyToMention) {
     const message = {
       jsonrpc: "2.0",
       id: 1,
-      method: "logsSubscribe",
-      params: [
-        {
-          mentions: [publicKeyToMention]
-        }
-      ]
+      method: "accountsSubscribe",
+      params: {
+        accounts: [publicKeyToMention],
+        commitment: "finalized"  // You can choose "processed" or "confirmed" as needed
+      }
     };
 
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
-      console.log('Subscribed to logs for wallet:', publicKeyToMention);
-      console.log('Waiting for transactions...', message.params);
-      this.startPing(); // Start the ping mechanism
+      console.log('Subscribed to account updates for:', publicKeyToMention);
     } else {
-      console.error('WebSocket is not open. Cannot subscribe to logs.');
+      console.error('WebSocket is not open. Cannot subscribe to account.');
     }
   }
-
 
   startPing() {
     this.pingInterval = setInterval(() => {
