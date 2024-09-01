@@ -88,10 +88,10 @@ class BalanceChecker {
     const message = {
       jsonrpc: "2.0",
       id: 1,
-      method: "accountsSubscribe",
+      method: "logsSubscribe",
       params: {
         accounts: publicKeyToMention,
-        commitment: "finalized"  // You can choose "processed" or "confirmed" as needed
+        commitment: "confirmed"  // You can choose "processed" or "confirmed" as needed
       }
     };
 
