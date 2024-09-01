@@ -65,7 +65,9 @@ class BalanceChecker {
     });
 
     this.ws.on('message', async (data) => {
+      console.log('Raw WebSocket message received:', data);
       const response = JSON.parse(data);
+      console.log('Parsed WebSocket message:', response);
       console.log('Received WebSocket message:', response);
 
       if (response.method === 'logsNotification') {
