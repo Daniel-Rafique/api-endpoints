@@ -71,7 +71,7 @@ class BalanceChecker {
     if (this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify(message));
         console.log('Subscribed to logs for wallet:', publicKeyToMention);
-        console.log('Waiting for transactions...', message.params.mentions);
+        console.log('Waiting for transactions...', message.params);
     } else {
         console.error('WebSocket is not open. Cannot subscribe to logs.');
     }
