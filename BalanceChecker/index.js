@@ -90,7 +90,7 @@ class BalanceChecker {
       id: 1,
       method: "logsSubscribe",
       params: {
-        accounts: publicKeyToMention,
+        accounts: [publicKeyToMention],
         commitment: "confirmed"  // You can choose "processed" or "confirmed" as needed
       }
     };
