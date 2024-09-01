@@ -55,28 +55,6 @@ class BalanceChecker {
     this.connectWebSocket();
   }
 
-  subscribeToLogs() {
-    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
-    const message = {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "logsSubscribe",
-        params: [
-            {
-                mentions: [publicKeyToMention]
-            }
-        ]
-    };
-
-    if (this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify(message));
-        console.log('Subscribed to logs for wallet:', publicKeyToMention);
-        console.log('Waiting for transactions...', message.params);
-    } else {
-        console.error('WebSocket is not open. Cannot subscribe to logs.');
-    }
-}
-
   connectWebSocket() {
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
 
@@ -107,6 +85,28 @@ class BalanceChecker {
       console.log(`WebSocket connection closed with code ${code} and reason: ${reason}`);
       this.reconnectWebSocket();
     });
+  }
+
+  subscribeToLogs() {
+    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
+    const message = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "logsSubscribe",
+      params: [
+        {
+          mentions: [publicKeyToMention]
+        }
+      ]
+    };
+
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+      console.log('Subscribed to logs for wallet:', publicKeyToMention);
+      console.log('Waiting for transactions...', message.params);
+    } else {
+      console.error('WebSocket is not open. Cannot subscribe to logs.');
+    }
   }
 
 
