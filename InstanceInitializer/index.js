@@ -48,44 +48,35 @@ class InstanceInitializer {
         return;
       }
 
-      // Step 4: Process the initialization chain based on the userData status
-      if (!userData.instancesCreated) {
-        console.log('Instances not created yet, starting initialization.');
+      const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
 
-        const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
+      console.log('Saving contract address:', contractAddress);
 
-        console.log('Saving contract address:', contractAddress);
-        console.log('Saving batch size:', batchSize);
-        console.log('Saving boost type:', boostType);
-        console.log('Saving buy amount:', buyAmount);
-        console.log('Saving sell amount:', sellAmount);
-        console.log('Saving sender wallet:', senderWallet);
+      // Step 4: Copy the parent .env file to the user directory and append new parameters
+      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
 
-      // Step 5: Copy the parent .env file to the user directory and append new parameters
-        await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
-      }
-
-      // Check if wallets need to be created
-      if (!userData.walletsCreated) {
+      // Step 5: Check if wallets need to be created and await job completion
+      if (userData.instancesCreated && !userData.walletsCreated) {
         console.log('Creating wallets for chatId:', chatId);
         await this.walletProcessor.addJob({ chatId, userData });
+        await this.waitForJobCompletion(chatId);  // Wait for wallet job to finish
       }
 
-      // Check if commission needs to be paid
+      // Step 6: Distribute commission if wallets are created but commission not yet paid
       if (userData.walletsCreated && !userData.commissionPaid) {
         console.log('Wallets created. Distributing commission to the wallet...');
         const result = await this.solana.handleCommission(chatId, userData);
         console.log('Commission sent successfully. Remaining balance:', result);
+
+        // Step 7: Distribute Solana if commission has been paid but distribution not yet done
+        if (userData.commissionPaid && !userData.distributeSolana) {
+          console.log('Commission paid. Distributing Solana to the wallet...');
+          await this.solana.handleDistribution(chatId, userData, result);
+          console.log('Solana distributed successfully.');
+        }
       }
 
-      // Check if Solana needs to be distributed
-      if (userData.commissionPaid && !userData.distributeSolana) {
-        console.log('Commission paid. Distributing Solana to the wallet...');
-        await this.solana.handleDistribution(chatId, userData);
-        console.log('Solana distributed successfully.');
-      }
-
-      // Check if market maker instance needs to be started
+      // Step 8: Start the market maker instance if not already started
       if (!userData.instancesStarted) {
         console.log('Starting market maker instance...');
         await this.startMarketMakerInstance(chatId, userDir);
@@ -97,8 +88,27 @@ class InstanceInitializer {
     }
   }
 
+  // Helper function to wait for job completion
+  async waitForJobCompletion(chatId) {
+    return new Promise((resolve, reject) => {
+      // Example: Wait for job to complete
+      this.walletProcessor.walletQueue.on('completed', (job) => {
+        if (job.data.chatId === chatId) {
+          console.log(`Wallet job completed for chatId: ${chatId}`);
+          resolve();
+        }
+      });
 
-  createSymbolicLinksIndividually(srcDir, destDir) {
+      this.walletProcessor.walletQueue.on('failed', (job, err) => {
+        if (job.data.chatId === chatId) {
+          console.error(`Wallet job failed for chatId: ${chatId}`, err);
+          reject(err);
+        }
+      });
+    });
+  }
+
+  async createSymbolicLinksIndividually(srcDir, destDir) {
     const entries = fs.readdirSync(srcDir, { withFileTypes: true });
     entries.forEach(entry => {
       const srcPath = path.join(srcDir, entry.name);
