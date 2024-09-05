@@ -38,11 +38,12 @@ class InstanceInitializer {
 
       // 1. Create symbolic links for the user directory
       this.createSymbolicLinksIndividually(this.basePath, userDir);
-      const userData = this.dataManager.getCollection(chatId);
+      const userData = await this.dataManager.getCollection(chatId);
+      
       if (userData) {
 
         console.log('User data:', userData);
-        
+
         const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
         
         console.log('Saving contract address:', contractAddress);
