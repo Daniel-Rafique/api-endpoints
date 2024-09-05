@@ -25,10 +25,11 @@ class InstanceInitializer {
     this.walletProcessor = new WalletProcessor();
   }
 
-  async initializeMarketMakerInstance(chatId, userData) {
+  async initializeMarketMakerInstance(chatId) {
     try {
+      const userData = this.dataManager.getCollection(chatId);
+
       console.log('Initializing market maker instance:', chatId);
-      
       if (userData) {
         const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
         console.log('Saving contract address:', contractAddress);
@@ -37,9 +38,9 @@ class InstanceInitializer {
         console.log('Saving buy amount:', buyAmount);
         console.log('Saving sell amount:', sellAmount);
         console.log('Saving sender wallet:', senderWallet);
-    } else {
+      } else {
         console.error("userData is undefined");
-    }
+      }
 
       const userDir = path.join(this.instancePath, chatId.toString());
 
