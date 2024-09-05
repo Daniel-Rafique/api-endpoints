@@ -50,7 +50,7 @@ class InstanceInitializer {
       await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
 
       // 3. Create wallets for the user and save to wallets.json
-      if (!userData.instancesCreated && !userData.walletsCreated) {
+      if (userData.instancesCreated && !userData.walletsCreated) {
         console.log('Creating wallets for chatId:', chatId);
         await this.walletProcessor.addJob({ chatId, userData });
       }
