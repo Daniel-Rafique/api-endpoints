@@ -98,30 +98,31 @@ class WalletManager {
         try {
             // Resolve the path for the file
             const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/dist/wallets.json`);
-
+    
             if (!filePath) {
                 throw new Error('Error resolving filePath.');
             }
-
-            // Ensure the directory exists using asynchronous and efficient fs.promises.mkdir
+    
+            // Ensure the directory exists using fs.promises.mkdir
             const dirPath = path.dirname(filePath);
-            fs.mkdir(dirPath, { recursive: true });
+            await fs.promises.mkdir(dirPath, { recursive: true });
             console.log(`Directory ensured: ${dirPath}`);
-
+    
             // Prepare wallet data for saving
             const walletData = newWallets.map(wallet => ({
                 publicKey: wallet.publicKey,
                 secretKey: wallet.privateKey,
             }));
-
+    
             // Write wallets data to file asynchronously
-            fs.writeFile(filePath, JSON.stringify(walletData, null, 2));
+            await fs.promises.writeFile(filePath, JSON.stringify(walletData, null, 2));
             console.log(`Wallets saved to ${filePath}`);
         } catch (error) {
             console.error("Error saving wallets to file:", error);
             throw new Error('Failed to save wallets to file');
         }
     }
+    
 }
 
 module.exports = WalletManager;
