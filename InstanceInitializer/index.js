@@ -28,76 +28,75 @@ class InstanceInitializer {
   async initializeMarketMakerInstance(chatId) {
     try {
       console.log('Initializing market maker instance:', chatId);
-  
+
       const userDir = path.join(this.instancePath, chatId.toString());
-  
+
       // Step 1: Create the user directory if it doesn't exist
       if (!fs.existsSync(userDir)) {
         console.log(`Creating user directory at ${userDir}`);
         fs.mkdirSync(userDir, { recursive: true });
       }
-  
+
       // Step 2: Create symbolic links for the user directory
       this.createSymbolicLinksIndividually(this.basePath, userDir);
-  
+
       // Step 3: Retrieve user data from Firestore
       const userData = await this.dataManager.getCollection(chatId);
-  
+
       if (!userData) {
         console.error("userData is undefined. Stopping initialization.");
         return;
       }
-  
-      const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
-  
-      console.log('Saving contract address:', contractAddress);
-      console.log('Saving batch size:', batchSize);
-      console.log('Saving boost type:', boostType);
-      console.log('Saving buy amount:', buyAmount);
-      console.log('Saving sell amount:', sellAmount);
-      console.log('Saving sender wallet:', senderWallet);
-  
-      // Step 4: Copy the parent .env file to the user directory and append new parameters
-      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
-  
-      // Step 5: Process the initialization chain based on the userData status
+
+      // Step 4: Process the initialization chain based on the userData status
       if (!userData.instancesCreated) {
-        console.log('Instances not created yet, stopping initialization.');
-        return;
+        console.log('Instances not created yet, starting initialization.');
+
+        const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
+
+        console.log('Saving contract address:', contractAddress);
+        console.log('Saving batch size:', batchSize);
+        console.log('Saving boost type:', boostType);
+        console.log('Saving buy amount:', buyAmount);
+        console.log('Saving sell amount:', sellAmount);
+        console.log('Saving sender wallet:', senderWallet);‹
+
+      // Step 5: Copy the parent .env file to the user directory and append new parameters
+        await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
       }
-  
+
       // Check if wallets need to be created
       if (!userData.walletsCreated) {
         console.log('Creating wallets for chatId:', chatId);
         await this.walletProcessor.addJob({ chatId, userData });
       }
-  
+
       // Check if commission needs to be paid
       if (userData.walletsCreated && !userData.commissionPaid) {
         console.log('Wallets created. Distributing commission to the wallet...');
         const result = await this.solana.handleCommission(chatId, userData);
         console.log('Commission sent successfully. Remaining balance:', result);
       }
-  
+
       // Check if Solana needs to be distributed
       if (userData.commissionPaid && !userData.distributeSolana) {
         console.log('Commission paid. Distributing Solana to the wallet...');
         await this.solana.handleDistribution(chatId, userData);
         console.log('Solana distributed successfully.');
       }
-  
+
       // Check if market maker instance needs to be started
       if (!userData.instancesStarted) {
         console.log('Starting market maker instance...');
         await this.startMarketMakerInstance(chatId, userDir);
         console.log('Market maker instance started successfully.');
       }
-  
+
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
     }
   }
-  
+
 
   createSymbolicLinksIndividually(srcDir, destDir) {
     const entries = fs.readdirSync(srcDir, { withFileTypes: true });
