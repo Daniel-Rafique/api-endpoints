@@ -124,7 +124,6 @@ class BalanceChecker {
 
   async handleTransaction(signature) {
     try {
-      const userData = this.dataManager;
       console.log('Handling transaction:', signature);
 
       const transaction = await this.connection.getTransaction(signature, {
