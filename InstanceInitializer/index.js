@@ -25,74 +25,72 @@ class InstanceInitializer {
     this.walletProcessor = new WalletProcessor();
   }
 
-async initializeMarketMakerInstance(chatId) {
+  async initializeMarketMakerInstance(chatId) {
     try {
-        console.log('Initializing market maker instance:', chatId);
+      console.log('Initializing market maker instance:', chatId);
 
-        const userDir = path.join(this.instancePath, chatId.toString());
+      const userDir = path.join(this.instancePath, chatId.toString());
 
-        // Step 1: Create the user directory if it doesn't exist
-        if (!fs.existsSync(userDir)) {
-            fs.mkdirSync(userDir, { recursive: true });
+      // Step 1: Create the user directory if it doesn't exist
+      if (!fs.existsSync(userDir)) {
+        console.log(`Creating user directory at ${userDir}`);
+        fs.mkdirSync(userDir, { recursive: true });
+      }
+
+      // Step 2: Create symbolic links for the user directory
+      this.createSymbolicLinksIndividually(this.basePath, userDir);
+
+      // Step 3: Retrieve user data from Firestore
+      const userData = await this.dataManager.getCollection(chatId);
+
+      if (!userData) {
+        console.error("userData is undefined. Stopping initialization.");
+        return;
+      }
+
+      const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
+
+      console.log('Saving contract address:', contractAddress);
+      console.log('Saving batch size:', batchSize);
+      console.log('Saving boost type:', boostType);
+      console.log('Saving buy amount:', buyAmount);
+      console.log('Saving sell amount:', sellAmount);
+      console.log('Saving sender wallet:', senderWallet);
+
+      // Step 4: Copy the parent .env file to the user directory and append new parameters
+      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
+
+      // Step 5: Create wallets for the user if instances are created but wallets not yet created
+      if (userData.instancesCreated && !userData.walletsCreated) {
+        console.log('Creating wallets for chatId:', chatId);
+        await this.walletProcessor.addJob({ chatId, userData });
+      }
+
+      // Step 6: Distribute commission to the wallet if wallets are created but commission not yet paid
+      if (userData.walletsCreated && !userData.commissionPaid) {
+        console.log('Wallets created. Distributing commission to the wallet...');
+        const result = await this.solana.handleCommission(chatId, userData);
+        console.log('Commission sent successfully. Remaining balance:', result);
+
+        // Step 7: Distribute Solana if commission has been paid but distribution not yet done
+        if (userData.commissionPaid && !userData.distributeSolana) {
+          console.log('Commission paid. Distributing Solana to the wallet...');
+          await this.solana.handleDistribution(chatId, userData, result);
+          console.log('Solana distributed successfully.');
         }
+      }
 
-        // Step 2: Create symbolic links for the user directory
-        this.createSymbolicLinksIndividually(this.basePath, userDir);
-
-        // Step 3: Retrieve user data from Firestore
-        const userData = await this.dataManager.getCollection(chatId);
-
-        if (!userData) {
-            console.error("userData is undefined");
-            return;
-        }
-
-        console.log('User data:', userData);
-
-        const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
-
-        console.log('Saving contract address:', contractAddress);
-        console.log('Saving batch size:', batchSize);
-        console.log('Saving boost type:', boostType);
-        console.log('Saving buy amount:', buyAmount);
-        console.log('Saving sell amount:', sellAmount);
-        console.log('Saving sender wallet:', senderWallet);
-
-        // Step 4: Copy the parent .env file to the user directory and append new parameters
-        await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
-
-        // Step 5: Create wallets for the user if instances are created but wallets not yet created
-        if (userData.instancesCreated && !userData.walletsCreated) {
-            console.log('Creating wallets for chatId:', chatId);
-            await this.walletProcessor.addJob({ chatId, userData });
-        }
-
-        // Step 6: Distribute commission to the wallet if wallets are created but commission not yet paid
-        if (userData.walletsCreated && !userData.commissionPaid) {
-            console.log('Wallets created. Distributing commission to the wallet...');
-            const result = await this.solana.handleCommission(chatId, userData);
-            console.log('Commission sent successfully. Remaining balance:', result);
-
-            // Step 7: Distribute Solana if commission has been paid but distribution not yet done
-            if (userData.commissionPaid && !userData.distributeSolana) {
-                console.log('Commission paid. Distributing Solana to the wallet...');
-                await this.solana.handleDistribution(chatId, userData, result);
-                console.log('Solana distributed successfully.');
-            }
-        }
-
-        // Step 8: Start the market maker instance if not already started
-        if (!userData.instancesStarted) {
-            console.log('Starting market maker instance...');
-            await this.startMarketMakerInstance(chatId, userDir);
-            console.log('Market maker instance started successfully.');
-        }
+      // Step 8: Start the market maker instance if not already started
+      if (!userData.instancesStarted) {
+        console.log('Starting market maker instance...');
+        await this.startMarketMakerInstance(chatId, userDir);
+        console.log('Market maker instance started successfully.');
+      }
 
     } catch (error) {
-        console.error('Error initializing market maker instance:', error);
+      console.error('Error initializing market maker instance:', error);
     }
-}
-
+  }
 
   createSymbolicLinksIndividually(srcDir, destDir) {
     const entries = fs.readdirSync(srcDir, { withFileTypes: true });
@@ -144,7 +142,6 @@ async initializeMarketMakerInstance(chatId) {
       console.log(`Appended new parameters to ${destEnvPath}`);
       // Step 4. Update the firestore flag to indicate that the instance has been created.
       await this.updateFirestoreFlag(chatId);
-      return true;
     } else {
       console.warn(`No parent .env file found at ${parentEnvPath}.`);
       throw new Error('Parent .env file not found');
@@ -156,6 +153,7 @@ async initializeMarketMakerInstance(chatId) {
       const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
       await userDocRef.update({ instancesCreated: true });
       console.log(`Firestore flag instances created updated for chatId: ${chatId}`);
+      return true;
     } catch (error) {
       console.error('Failed to update Firestore flag for instances created:', error);
       return false;
