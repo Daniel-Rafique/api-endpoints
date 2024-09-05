@@ -27,20 +27,8 @@ class InstanceInitializer {
 
   async initializeMarketMakerInstance(chatId) {
     try {
-      const userData = this.dataManager.getCollection(chatId);
 
       console.log('Initializing market maker instance:', chatId);
-      if (userData) {
-        const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
-        console.log('Saving contract address:', contractAddress);
-        console.log('Saving batch size:', batchSize);
-        console.log('Saving boost type:', boostType);
-        console.log('Saving buy amount:', buyAmount);
-        console.log('Saving sell amount:', sellAmount);
-        console.log('Saving sender wallet:', senderWallet);
-      } else {
-        console.error("userData is undefined");
-      }
 
       const userDir = path.join(this.instancePath, chatId.toString());
 
@@ -50,32 +38,43 @@ class InstanceInitializer {
 
       // 1. Create symbolic links for the user directory
       this.createSymbolicLinksIndividually(this.basePath, userDir);
-
-      // 2. Copy the parent .env file to the user directory, unlink it from the parent directory, and append new parameters
-      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
-
-      // 3. Create wallets for the user and save to wallets.json
-      if (userData.instancesCreated && !userData.walletsCreated) {
-        console.log('Creating wallets for chatId:', chatId);
-        await this.walletProcessor.addJob({ chatId, userData });
-      }
-      // 4. Distribute Commission to the wallet
-      if (userData.walletsCreated && !userData.commissionPaid) {
-        console.log('Wallets created. Distributing commission to the wallet...');
-        const result = await this.solana.handleCommission(chatId, userData);
-        console.log('Commission sent successfully. Remeaining balance:', result);
-        if (userData.commissionPaid && !userData.distributeSolana) {
-          console.log('Commission paid. Current balance:', result);
-          console.log('Distributing Solana to the wallet...');
-          await this.solana.handleDistribution(chatId, userData, result);
-          console.log('Solana distributed successfully.');
+      const userData = this.dataManager.getCollection(chatId);
+      if (userData) {
+        const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
+        
+        console.log('Saving contract address:', contractAddress);
+        console.log('Saving batch size:', batchSize);
+        console.log('Saving boost type:', boostType);
+        console.log('Saving buy amount:', buyAmount);
+        console.log('Saving sell amount:', sellAmount);
+        console.log('Saving sender wallet:', senderWallet);
+        // 2. Copy the parent .env file to the user directory, unlink it from the parent directory, and append new parameters
+        await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
+        // 3. Create wallets for the user and save to wallets.json
+        if (userData.instancesCreated && !userData.walletsCreated) {
+          console.log('Creating wallets for chatId:', chatId);
+          await this.walletProcessor.addJob({ chatId, userData });
         }
-      }
-      // 5. Start the market maker instance
-      if (!userData.instancesStarted) {
-        console.log('Solana sent. Starting market maker instance...');
-        await this.startMarketMakerInstance(chatId, userDir);
-        console.log('Market maker instance started successfully.');
+        // 4. Distribute Commission to the wallet
+        if (userData.walletsCreated && !userData.commissionPaid) {
+          console.log('Wallets created. Distributing commission to the wallet...');
+          const result = await this.solana.handleCommission(chatId, userData);
+          console.log('Commission sent successfully. Remeaining balance:', result);
+          if (userData.commissionPaid && !userData.distributeSolana) {
+            console.log('Commission paid. Current balance:', result);
+            console.log('Distributing Solana to the wallet...');
+            await this.solana.handleDistribution(chatId, userData, result);
+            console.log('Solana distributed successfully.');
+          }
+        }
+        // 5. Start the market maker instance
+        if (!userData.instancesStarted) {
+          console.log('Solana sent. Starting market maker instance...');
+          await this.startMarketMakerInstance(chatId, userDir);
+          console.log('Market maker instance started successfully.');
+        }
+      } else {
+        console.error("userData is undefined");
       }
 
     } catch (error) {
