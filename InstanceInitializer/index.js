@@ -29,6 +29,14 @@ class InstanceInitializer {
     try {
       console.log('Initializing market maker instance:', chatId);
       const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
+
+      console.log('Saving contract address:', contractAddress);
+      console.log('Saving batch size:', batchSize);
+      console.log('Saving boost type:', boostType);
+      console.log('Saving buy amount:', buyAmount);
+      console.log('Saving sell amount:', sellAmount);
+      console.log('Saving sender wallet:', senderWallet);
+
       const userDir = path.join(this.instancePath, chatId.toString());
 
       if (!fs.existsSync(userDir)) {
@@ -42,22 +50,27 @@ class InstanceInitializer {
       await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
 
       // 3. Create wallets for the user and save to wallets.json
-      if (userData.instancesCreated && !userData.walletsCreated) {
+      if (!userData.instancesCreated && !userData.walletsCreated) {
+        console.log('Creating wallets for chatId:', chatId);
         await this.walletProcessor.addJob({ chatId, userData });
       }
       // 4. Distribute Commission to the wallet
       if (userData.walletsCreated && !userData.commissionPaid) {
+        console.log('Wallets created. Distributing commission to the wallet...');
         const result = await this.solana.handleCommission(chatId, userData);
         console.log('Commission sent successfully. Remeaining balance:', result);
         if (userData.commissionPaid && !userData.distributeSolana) {
           console.log('Commission paid. Current balance:', result);
+          console.log('Distributing Solana to the wallet...');
           await this.solana.handleDistribution(chatId, userData, result);
+          console.log('Solana distributed successfully.');
         }
       }
       // 5. Start the market maker instance
       if (!userData.instancesStarted) {
         console.log('Solana sent. Starting market maker instance...');
         await this.startMarketMakerInstance(chatId, userDir);
+        console.log('Market maker instance started successfully.');
       }
 
     } catch (error) {
