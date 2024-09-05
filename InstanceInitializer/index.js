@@ -48,45 +48,67 @@ class InstanceInitializer {
         return;
       }
 
-      const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
+      // Step 4: Process each stage using a switch statement
+      let currentStep = "CHECK_INSTANCES_CREATED";
+      const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet, instancesCreated, walletsCreated, commissionPaid, distributeSolana, instancesStarted } = userData;
+      switch (currentStep) {
+        case "CHECK_INSTANCES_CREATED":
+          if (!instancesCreated) {
+            console.log("Instances not created, stopping initialization.");
+            // Deconstruct userData
+            console.log('Saving contract address:', contractAddress);
 
-      console.log('Saving contract address:', contractAddress);
+            // Copy and append .env file
+            await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
+          }
+          currentStep = "CHECK_WALLETS_CREATED";
+        // No break to continue to the next case
 
-      // Step 4: Copy the parent .env file to the user directory and append new parameters
-      await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
+        case "CHECK_WALLETS_CREATED":
+          if (!walletsCreated) {
+            console.log('Creating wallets for chatId:', chatId);
+            await this.walletProcessor.addJob({ chatId, userData });
+            await this.waitForJobCompletion(chatId);  // Wait for wallet job to finish
+            console.log('Wallets created.');
+          }
+          currentStep = "CHECK_COMMISSION_PAID";
+        // No break to continue to the next case
 
-      // Step 5: Check if wallets need to be created and await job completion
-      if (userData.instancesCreated && !userData.walletsCreated) {
-        console.log('Creating wallets for chatId:', chatId);
-        await this.walletProcessor.addJob({ chatId, userData });
-        await this.waitForJobCompletion(chatId);  // Wait for wallet job to finish
-      }
+        case "CHECK_COMMISSION_PAID":
+          if (walletsCreated && !commissionPaid) {
+            console.log('Wallets created. Distributing commission to the wallet...');
+            const result = await this.solana.handleCommission(chatId, userData);
+            console.log('Commission sent successfully. Remaining balance:', result);
+          }
+          currentStep = "CHECK_SOLANA_DISTRIBUTION";
+        // No break to continue to the next case
 
-      // Step 6: Distribute commission if wallets are created but commission not yet paid
-      if (userData.walletsCreated && !userData.commissionPaid) {
-        console.log('Wallets created. Distributing commission to the wallet...');
-        const result = await this.solana.handleCommission(chatId, userData);
-        console.log('Commission sent successfully. Remaining balance:', result);
+        case "CHECK_SOLANA_DISTRIBUTION":
+          if (commissionPaid && !distributeSolana) {
+            console.log('Commission paid. Distributing Solana to the wallet...');
+            await this.solana.handleDistribution(chatId, userData);
+            console.log('Solana distributed successfully.');
+          }
+          currentStep = "CHECK_INSTANCES_STARTED";
+        // No break to continue to the next case
 
-        // Step 7: Distribute Solana if commission has been paid but distribution not yet done
-        if (userData.commissionPaid && !userData.distributeSolana) {
-          console.log('Commission paid. Distributing Solana to the wallet...');
-          await this.solana.handleDistribution(chatId, userData, result);
-          console.log('Solana distributed successfully.');
-        }
-      }
+        case "CHECK_INSTANCES_STARTED":
+          if (!instancesStarted) {
+            console.log('Starting market maker instance...');
+            await this.startMarketMakerInstance(chatId, userDir);
+            console.log('Market maker instance started successfully.');
+          }
+          break;
 
-      // Step 8: Start the market maker instance if not already started
-      if (!userData.instancesStarted) {
-        console.log('Starting market maker instance...');
-        await this.startMarketMakerInstance(chatId, userDir);
-        console.log('Market maker instance started successfully.');
+        default:
+          console.error('Unknown step');
       }
 
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
     }
   }
+
 
   // Helper function to wait for job completion
   async waitForJobCompletion(chatId) {
