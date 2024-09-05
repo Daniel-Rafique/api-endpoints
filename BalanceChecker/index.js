@@ -18,6 +18,7 @@ client.on('error', (err) => console.error('Redis Client Error', err));
 
 const WEBSOCKET_ENDPOINT = process.env.WEBSOCKET_ENDPOINT; // Only one WebSocket endpoint is used now
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
+const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
 const PROGRAM_ID = process.env.PROGRAM_ID;
 const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
 const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
@@ -31,6 +32,7 @@ class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
     this.receiverKeypairString = receiverPrivateKey.toString();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
+    this.connection2 = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
@@ -210,62 +212,20 @@ class BalanceChecker {
   }
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
-    try {
-      console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS.toString());
 
-      const tokenMintAddress = new PublicKey(MINT_ADDRESS);
-      const senderPublicKey = new PublicKey(senderPublicKeyString); // Ensure senderPublicKey is a PublicKey object
+    console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS.toString());
 
-      const tokenProgramId = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'); // Solana Token Program
+    const tokenMintAddress = new PublicKey(MINT_ADDRESS);
+    const senderPublicKey = new PublicKey(senderPublicKeyString); // Ensure senderPublicKey is a PublicKey object
+    const accounts = await this.connection2.getParsedTokenAccountsByOwner(senderPublicKey, { programId: TOKEN_PROGRAM_ID });
+    const accountInfo = accounts.value.find((account) => account.account.data.parsed.info.mint === tokenMintAddress.toBase58());
+    const tokenBalance = accountInfo ? parseFloat(accountInfo.account.data.parsed.info.tokenAmount.amount) : 0;
 
-      // Use getProgramAccounts to fetch token accounts associated with the user's public key
-      const accounts = await this.connection.getProgramAccounts(tokenProgramId, {
-        filters: [
-          // Filter by owner
-          {
-            memcmp: {
-              offset: 32, // Offset to the owner field in token account
-              bytes: senderPublicKey.toBase58(), // The sender's public key
-            },
-          },
-          // Filter by token mint
-          {
-            memcmp: {
-              offset: 0, // Offset to the mint field in the token account
-              bytes: tokenMintAddress.toBase58(), // The token mint address
-            },
-          },
-          {
-            dataSize: 165, // Size of a token account
-          },
-        ],
-      });
-
-      if (accounts.length === 0) {
-        console.log('No token accounts found for the given mint address.');
-        return 0;
-      }
-
-      // Extract the token balance from the fetched account
-      const accountInfo = accounts[0]; // Assuming we're working with the first account
-
-      const accountData = accountInfo.account.data;
-      const tokenBalance = Buffer.from(accountData).readBigInt64LE(64); // Token balance stored at offset 64
-      const tokenBalanceFloat = Number(tokenBalance) / 10 ** 9; // Convert balance to readable format (assuming 9 decimals)
-
-      console.log('Token balance:', tokenBalanceFloat);
-
-      // Check if the token balance is below the minimum threshold and return SOL if needed
-      if (tokenBalanceFloat < this.minimumTokenBalance) {
-        console.log('Token balance is below minimum. Returning SOL to sender.');
-        await this.returnSol(senderPublicKeyString, amountReceived);
-      }
-
-      return tokenBalanceFloat;
-    } catch (error) {
-      console.error('Error checking token balance:', error);
-      return 0;
+    if (tokenBalance < this.minimumTokenBalance) {
+      console.log('Returning SOL to sender.');
+      await this.returnSol(senderPublicKeyString, amountReceived);
     }
+    return tokenBalance;
   }
 
   async returnSol(senderPublicKeyString, amountReceived) {
