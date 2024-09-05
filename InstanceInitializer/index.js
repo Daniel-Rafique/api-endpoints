@@ -59,7 +59,7 @@ class InstanceInitializer {
         console.log('Saving boost type:', boostType);
         console.log('Saving buy amount:', buyAmount);
         console.log('Saving sell amount:', sellAmount);
-        console.log('Saving sender wallet:', senderWallet);‹
+        console.log('Saving sender wallet:', senderWallet);
 
       // Step 5: Copy the parent .env file to the user directory and append new parameters
         await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
