@@ -42,21 +42,41 @@ class WalletManager {
             if (!chatId) {
                 throw new Error('Invalid chatId');
             }
+    
+            if (!newWallets || newWallets.length === 0) {
+                throw new Error('Invalid wallets data');
+            }
+    
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
             const docRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
-            await this.saveWalletsToFile(chatIdStr, newWallets)
+            
+            // Step 1: Save wallets to file (assuming this is a necessary step)
+            await this.saveWalletsToFile(chatIdStr, newWallets);
+    
             console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            // Add new wallets to the existing array
+    
+            // Step 2: Retrieve the current document from Firestore to check its state
+            const docSnapshot = await docRef.get();
+            if (!docSnapshot.exists) {
+                console.error(`Document for chatId ${chatIdStr} not found in Firestore.`);
+                throw new Error('Document not found in Firestore');
+            }
+    
+            // Step 3: Add new wallets to the existing array and update the `walletsCreated` flag
             await docRef.update({
                 wallets: Firestore.FieldValue.arrayUnion(...newWallets),
-                walletsCreated: true
+                walletsCreated: true // Set the flag to true after successfully adding wallets
             });
+    
+            console.log(`Successfully updated Firestore for chatId: ${chatIdStr}`);
             return true;
+    
         } catch (error) {
-            console.error('Error saving to Firestore:', error);
+            console.error('Error saving to Firestore:', error.message || error);
             throw new Error('Failed to save wallets');
         }
     }
+    
 
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
