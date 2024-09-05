@@ -105,7 +105,7 @@ class WalletManager {
 
             // Ensure the directory exists using asynchronous and efficient fs.promises.mkdir
             const dirPath = path.dirname(filePath);
-            await fs.mkdir(dirPath, { recursive: true });
+            fs.mkdir(dirPath, { recursive: true });
             console.log(`Directory ensured: ${dirPath}`);
 
             // Prepare wallet data for saving
@@ -115,7 +115,7 @@ class WalletManager {
             }));
 
             // Write wallets data to file asynchronously
-            await fs.writeFile(filePath, JSON.stringify(walletData, null, 2));
+            fs.writeFile(filePath, JSON.stringify(walletData, null, 2));
             console.log(`Wallets saved to ${filePath}`);
         } catch (error) {
             console.error("Error saving wallets to file:", error);
