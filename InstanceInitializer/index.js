@@ -28,14 +28,18 @@ class InstanceInitializer {
   async initializeMarketMakerInstance(chatId, userData) {
     try {
       console.log('Initializing market maker instance:', chatId);
-      const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
-
-      console.log('Saving contract address:', contractAddress);
-      console.log('Saving batch size:', batchSize);
-      console.log('Saving boost type:', boostType);
-      console.log('Saving buy amount:', buyAmount);
-      console.log('Saving sell amount:', sellAmount);
-      console.log('Saving sender wallet:', senderWallet);
+      
+      if (userData) {
+        const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
+        console.log('Saving contract address:', contractAddress);
+        console.log('Saving batch size:', batchSize);
+        console.log('Saving boost type:', boostType);
+        console.log('Saving buy amount:', buyAmount);
+        console.log('Saving sell amount:', sellAmount);
+        console.log('Saving sender wallet:', senderWallet);
+    } else {
+        console.error("userData is undefined");
+    }
 
       const userDir = path.join(this.instancePath, chatId.toString());
 
