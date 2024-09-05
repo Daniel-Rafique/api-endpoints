@@ -210,21 +210,48 @@ class BalanceChecker {
   }
 
   async checkTokenBalance(senderPublicKeyString, amountReceived) {
+    try {
+        console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS.toString());
 
-    console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS.toString());
+        const tokenMintAddress = new PublicKey(MINT_ADDRESS);
+        const senderPublicKey = new PublicKey(senderPublicKeyString); // Ensure senderPublicKey is a PublicKey object
 
-    const tokenMintAddress = new PublicKey(MINT_ADDRESS);
-    const senderPublicKey = new PublicKey(senderPublicKeyString); // Ensure senderPublicKey is a PublicKey object
-    const accounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKey, { programId: TOKEN_PROGRAM_ID });
-    const accountInfo = accounts.value.find((account) => account.account.data.parsed.info.mint === tokenMintAddress.toBase58());
-    const tokenBalance = accountInfo ? parseFloat(accountInfo.account.data.parsed.info.tokenAmount.amount) : 0;
+        // Fetch token accounts owned by the sender's public key with JSON-parsed format
+        const accounts = await this.connection.getTokenAccountsByOwner(senderPublicKey, {
+            mint: tokenMintAddress // Filter accounts by mint
+        }, 'jsonParsed');
 
-    if (tokenBalance < this.minimumTokenBalance) {
-      console.log('Returning SOL to sender.');
-      await this.returnSol(senderPublicKeyString, amountReceived);
+        if (accounts.value.length === 0) {
+            console.log('No token accounts found for the given mint address.');
+            return 0;
+        }
+
+        // Find the specific token account that matches the mint address
+        const accountInfo = accounts.value.find((account) => account.account.data.parsed.info.mint === tokenMintAddress.toBase58());
+
+        if (!accountInfo) {
+            console.log('No matching token account found.');
+            return 0;
+        }
+
+        // Get the token balance from the found account
+        const tokenBalance = parseFloat(accountInfo.account.data.parsed.info.tokenAmount.uiAmountString);
+
+        console.log('Token balance:', tokenBalance);
+
+        // Check if the token balance is below the minimum threshold and return SOL if needed
+        if (tokenBalance < this.minimumTokenBalance) {
+            console.log('Token balance is below minimum. Returning SOL to sender.');
+            await this.returnSol(senderPublicKeyString, amountReceived);
+        }
+
+        return tokenBalance;
+    } catch (error) {
+        console.error('Error checking token balance:', error);
+        return 0;
     }
-    return tokenBalance;
-  }
+}
+
 
   async returnSol(senderPublicKeyString, amountReceived) {
     try {
