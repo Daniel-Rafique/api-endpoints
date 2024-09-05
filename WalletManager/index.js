@@ -96,6 +96,11 @@ class WalletManager {
 
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
+            // Check if newWallets is an array
+            if (!Array.isArray(newWallets)) {
+                throw new Error('newWallets must be an array');
+            }
+    
             // Resolve the path for the file
             const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/dist/wallets.json`);
     
@@ -122,6 +127,7 @@ class WalletManager {
             throw new Error('Failed to save wallets to file');
         }
     }
+    
     
 }
 

@@ -41,7 +41,7 @@ class WalletProcessor {
       console.log('Processing job for chatId:', chatId); // Log chatId
 
       try {
-        const walletsArray = this.walletManager.createSolanaWallets(makers);
+        const walletsArray = await this.walletManager.createSolanaWallets(makers);
         await this.walletManager.saveWallets(chatId, walletsArray);
         console.log(`Processed wallets for chatId: ${chatId}`);
         return true;
