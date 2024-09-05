@@ -40,6 +40,9 @@ class InstanceInitializer {
       this.createSymbolicLinksIndividually(this.basePath, userDir);
       const userData = this.dataManager.getCollection(chatId);
       if (userData) {
+
+        console.log('User data:', userData);
+        
         const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
         
         console.log('Saving contract address:', contractAddress);
