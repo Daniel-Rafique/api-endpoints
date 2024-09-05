@@ -44,15 +44,14 @@ class WalletManager {
             }
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
             const docRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
-
+            await this.saveWalletsToFile(chatIdStr, newWallets)
+            console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
             // Add new wallets to the existing array
             await docRef.update({
                 wallets: Firestore.FieldValue.arrayUnion(...newWallets),
                 walletsCreated: true
             });
-
-            console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            await this.saveWalletsToFile(chatIdStr, newWallets)
+            return;
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
@@ -87,7 +86,6 @@ class WalletManager {
             // Write wallets to file
             fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
             console.log(`Wallets saved to ${filePath}`);
-
         } catch (error) {
             console.error("Error saving wallets to file:", error);
         }

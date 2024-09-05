@@ -39,7 +39,7 @@ class InstanceInitializer {
       // 1. Create symbolic links for the user directory
       this.createSymbolicLinksIndividually(this.basePath, userDir);
       const userData = await this.dataManager.getCollection(chatId);
-      
+
       if (userData) {
 
         console.log('User data:', userData);
@@ -198,8 +198,10 @@ class InstanceInitializer {
             } else {
               console.log('PM2 startup script generated successfully');
               this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ instancesStarted: true });
+              return;
             }
             pm2.disconnect();
+            return;
           });
         });
       });
