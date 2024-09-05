@@ -193,8 +193,9 @@ class BalanceChecker {
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
         const chatId = this.chatId;
         this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        const currentTokenBalance = tokenBalance / 1_000_000_000;
         const currentSolBalance = amountReceived / 1_000_000_000;
-        const TOKEN_BALANCE = formatTokenAmount(tokenBalance);
+        const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
 
         message += `✅ Received ${currentSolBalance} SOL from ${senderPublicKeyString} \ntoken balance is ${TOKEN_BALANCE}\n Any dust will be returned to ${senderPublicKeyString}`
 
