@@ -82,14 +82,14 @@ class Solana {
       if (this.shouldSendMessage(chatId, message)) {
         await this.telegramNotifier.sendTelegramMessage(chatId, message);
       }
-      return;
+      return true;
     } else if (updatedBalance <= 0) {
       console.log('No balance left to distribute.');
       // Set commision paid to false and distributeSolana to false to allow for top-ups
       await this.firestore.collection(FIRESTORE_COLLECTION)
         .doc(chatId.toString())
         .update({ distributeSolana: false, commissionPaid: false });
-        return;
+        return false;
     }
   }
 

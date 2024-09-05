@@ -25,66 +25,74 @@ class InstanceInitializer {
     this.walletProcessor = new WalletProcessor();
   }
 
-  async initializeMarketMakerInstance(chatId) {
+async initializeMarketMakerInstance(chatId) {
     try {
+        console.log('Initializing market maker instance:', chatId);
 
-      console.log('Initializing market maker instance:', chatId);
+        const userDir = path.join(this.instancePath, chatId.toString());
 
-      const userDir = path.join(this.instancePath, chatId.toString());
+        // Step 1: Create the user directory if it doesn't exist
+        if (!fs.existsSync(userDir)) {
+            fs.mkdirSync(userDir, { recursive: true });
+        }
 
-      if (!fs.existsSync(userDir)) {
-        fs.mkdirSync(userDir, { recursive: true });
-      }
+        // Step 2: Create symbolic links for the user directory
+        this.createSymbolicLinksIndividually(this.basePath, userDir);
 
-      // 1. Create symbolic links for the user directory
-      this.createSymbolicLinksIndividually(this.basePath, userDir);
-      const userData = await this.dataManager.getCollection(chatId);
+        // Step 3: Retrieve user data from Firestore
+        const userData = await this.dataManager.getCollection(chatId);
 
-      if (userData) {
+        if (!userData) {
+            console.error("userData is undefined");
+            return;
+        }
 
         console.log('User data:', userData);
 
         const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet } = userData;
-        
+
         console.log('Saving contract address:', contractAddress);
         console.log('Saving batch size:', batchSize);
         console.log('Saving boost type:', boostType);
         console.log('Saving buy amount:', buyAmount);
         console.log('Saving sell amount:', sellAmount);
         console.log('Saving sender wallet:', senderWallet);
-        // 2. Copy the parent .env file to the user directory, unlink it from the parent directory, and append new parameters
+
+        // Step 4: Copy the parent .env file to the user directory and append new parameters
         await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
-        // 3. Create wallets for the user and save to wallets.json
+
+        // Step 5: Create wallets for the user if instances are created but wallets not yet created
         if (userData.instancesCreated && !userData.walletsCreated) {
-          console.log('Creating wallets for chatId:', chatId);
-          await this.walletProcessor.addJob({ chatId, userData });
+            console.log('Creating wallets for chatId:', chatId);
+            await this.walletProcessor.addJob({ chatId, userData });
         }
-        // 4. Distribute Commission to the wallet
+
+        // Step 6: Distribute commission to the wallet if wallets are created but commission not yet paid
         if (userData.walletsCreated && !userData.commissionPaid) {
-          console.log('Wallets created. Distributing commission to the wallet...');
-          const result = await this.solana.handleCommission(chatId, userData);
-          console.log('Commission sent successfully. Remeaining balance:', result);
-          if (userData.commissionPaid && !userData.distributeSolana) {
-            console.log('Commission paid. Current balance:', result);
-            console.log('Distributing Solana to the wallet...');
-            await this.solana.handleDistribution(chatId, userData, result);
-            console.log('Solana distributed successfully.');
-          }
+            console.log('Wallets created. Distributing commission to the wallet...');
+            const result = await this.solana.handleCommission(chatId, userData);
+            console.log('Commission sent successfully. Remaining balance:', result);
+
+            // Step 7: Distribute Solana if commission has been paid but distribution not yet done
+            if (userData.commissionPaid && !userData.distributeSolana) {
+                console.log('Commission paid. Distributing Solana to the wallet...');
+                await this.solana.handleDistribution(chatId, userData, result);
+                console.log('Solana distributed successfully.');
+            }
         }
-        // 5. Start the market maker instance
+
+        // Step 8: Start the market maker instance if not already started
         if (!userData.instancesStarted) {
-          console.log('Solana sent. Starting market maker instance...');
-          await this.startMarketMakerInstance(chatId, userDir);
-          console.log('Market maker instance started successfully.');
+            console.log('Starting market maker instance...');
+            await this.startMarketMakerInstance(chatId, userDir);
+            console.log('Market maker instance started successfully.');
         }
-      } else {
-        console.error("userData is undefined");
-      }
 
     } catch (error) {
-      console.error('Error initializing market maker instance:', error);
+        console.error('Error initializing market maker instance:', error);
     }
-  }
+}
+
 
   createSymbolicLinksIndividually(srcDir, destDir) {
     const entries = fs.readdirSync(srcDir, { withFileTypes: true });
@@ -136,8 +144,10 @@ class InstanceInitializer {
       console.log(`Appended new parameters to ${destEnvPath}`);
       // Step 4. Update the firestore flag to indicate that the instance has been created.
       await this.updateFirestoreFlag(chatId);
+      return true;
     } else {
       console.warn(`No parent .env file found at ${parentEnvPath}.`);
+      throw new Error('Parent .env file not found');
     }
   }
 
@@ -148,6 +158,7 @@ class InstanceInitializer {
       console.log(`Firestore flag instances created updated for chatId: ${chatId}`);
     } catch (error) {
       console.error('Failed to update Firestore flag for instances created:', error);
+      return false;
     }
   }
 
@@ -159,7 +170,7 @@ class InstanceInitializer {
         if (err) {
           console.error('Failed to connect to PM2:', err);
           setTimeout(() => connectToPM2(callback), 1000);
-          return;
+          throw new Error('Failed to connect to PM2');
         }
         callback();
       });
@@ -178,7 +189,6 @@ class InstanceInitializer {
         if (err) {
           console.error(`Failed to start market maker instance ${instanceName}:`, err);
           pm2.disconnect();
-          return;
         }
 
         console.log(`Market maker instance ${instanceName} started successfully`);
@@ -187,7 +197,6 @@ class InstanceInitializer {
           if (err) {
             console.error('Failed to save PM2 process list:', stderr);
             pm2.disconnect();
-            return;
           }
 
           console.log('PM2 process list saved successfully');
@@ -198,10 +207,9 @@ class InstanceInitializer {
             } else {
               console.log('PM2 startup script generated successfully');
               this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ instancesStarted: true });
-              return;
+              return true;
             }
             pm2.disconnect();
-            return;
           });
         });
       });

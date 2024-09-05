@@ -51,7 +51,7 @@ class WalletManager {
                 wallets: Firestore.FieldValue.arrayUnion(...newWallets),
                 walletsCreated: true
             });
-            return;
+            return true;
         } catch (error) {
             console.error('Error saving to Firestore:', error);
             throw new Error('Failed to save wallets');
@@ -86,8 +86,10 @@ class WalletManager {
             // Write wallets to file
             fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
             console.log(`Wallets saved to ${filePath}`);
+            return true;
         } catch (error) {
             console.error("Error saving wallets to file:", error);
+            throw new Error('Failed to save wallets to file ');
         }
     }
 

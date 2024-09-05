@@ -44,9 +44,12 @@ class WalletProcessor {
         const walletsArray = this.walletManager.createSolanaWallets(makers);
         await this.walletManager.saveWallets(chatId, walletsArray);
         console.log(`Processed wallets for chatId: ${chatId}`);
+        return true;
 
       } catch (error) {
         console.error('Error processing job:', error);
+        throw new Error('Failed to process job');
+
       }
     }, {
       connection: {
