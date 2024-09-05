@@ -63,7 +63,7 @@ class Solana {
 
     console.log(`Starting distribution, userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
-    if (commissionPaid === true && distributeSolana === false && updatedBalance > 0) {
+    if (commissionPaid && !distributeSolana && updatedBalance > 0) {
       console.log(`distribution in Progress, commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
       try {
@@ -89,7 +89,7 @@ class Solana {
       await this.firestore.collection(FIRESTORE_COLLECTION)
         .doc(chatId.toString())
         .update({ distributeSolana: false, commissionPaid: false });
-        return false;
+        return;
     }
   }
 
