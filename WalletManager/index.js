@@ -39,38 +39,50 @@ class WalletManager {
     async saveWallets(chatId, newWallets) {
         try {
             console.log("Saving wallets");
-
+    
             // Step 1: Validation checks
             if (!chatId) {
                 throw new Error('Invalid chatId');
             }
-
+    
             if (!newWallets || newWallets.length === 0) {
                 throw new Error('Invalid wallets data');
             }
-
+    
             const chatIdStr = chatId.toString(); // Ensure chatId is a string
             const docRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
-
-            // Step 2: Save wallets to file (assuming this is a necessary step)
-            // Parallelizing file save operation
-            const fileSavePromise = this.saveWalletsToFile(chatIdStr, newWallets);
-
-            // Step 3: Retrieve the current document from Firestore to check its state
+    
+            // Step 2: Retrieve the current document from Firestore to check its state
             const docSnapshot = await docRef.get();
             if (!docSnapshot.exists) {
                 console.error(`Document for chatId ${chatIdStr} not found in Firestore.`);
                 throw new Error('Document not found in Firestore');
             }
-
-            // Step 4: Split wallets into batches to stay within Firestore's limits
+    
+            // Step 3: Check the current number of wallets
+            const existingWallets = docSnapshot.data().wallets || [];
+            const totalWalletCount = existingWallets.length + newWallets.length;
+    
+            if (totalWalletCount > 100) {
+                console.error(`Cannot add wallets: total wallet count exceeds 100 for chatId: ${chatIdStr}`);
+                throw new Error('Cannot add more than 100 wallets');
+            }
+    
+            // Step 4: Limit the number of new wallets if the total exceeds 100
+            const walletsToAdd = newWallets.slice(0, 100 - existingWallets.length);
+    
+            // Step 5: Save wallets to file (assuming this is a necessary step)
+            // Parallelizing file save operation
+            const fileSavePromise = this.saveWalletsToFile(chatIdStr, walletsToAdd);
+    
+            // Step 6: Split wallets into batches to stay within Firestore's limits (if needed)
             const batchSize = 500; // Firestore's batch write limit
             const walletBatches = [];
-            for (let i = 0; i < newWallets.length; i += batchSize) {
-                walletBatches.push(newWallets.slice(i, i + batchSize));
+            for (let i = 0; i < walletsToAdd.length; i += batchSize) {
+                walletBatches.push(walletsToAdd.slice(i, i + batchSize));
             }
-
-            // Step 5: Perform batch writes for each group of wallets
+    
+            // Step 7: Perform batch writes for each group of wallets
             for (const batchWallets of walletBatches) {
                 const batch = this.firestore.batch();
                 batch.update(docRef, {
@@ -79,18 +91,19 @@ class WalletManager {
                 });
                 await batch.commit();
             }
-
-            // Step 6: Wait for file saving to complete
+    
+            // Step 8: Wait for file saving to complete
             await fileSavePromise;
-
+    
             console.log(`Successfully saved and updated Firestore for chatId: ${chatIdStr}`);
             return true;
-
+    
         } catch (error) {
             console.error('Error saving to Firestore:', error.message || error);
             throw new Error('Failed to save wallets');
         }
     }
+    
 
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
