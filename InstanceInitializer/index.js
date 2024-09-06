@@ -78,7 +78,7 @@ class InstanceInitializer {
             case "CHECK_COMMISSION_PAID":
               if (userData.walletsCreated && !userData.commissionPaid) {
                 const result = await this.solana.handleCommission(chatId, userData);
-                console.log('Commission sent successfully. Remaining balance:', result);
+                console.log('Commission sent successfully. Remaining balance:');
                 await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
               }
               break;

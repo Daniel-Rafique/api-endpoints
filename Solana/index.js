@@ -41,8 +41,7 @@ class Solana {
     if (!commissionPaid && walletsCreated) {
       try {
         const sendInstance = new Send(chatId);
-        const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData);
-        return updatedBalance;
+        await sendInstance.sendToKoynlabsWallet(userData);
       } catch (error) {
         console.error('Error sending commission:', error);
       }
@@ -71,7 +70,6 @@ class Solana {
           if (this.shouldSendMessage(chatId, message)) {
             await this.telegramNotifier.sendTelegramMessage(chatId, message);
           }
-          return true;
         } catch (error) {
           console.error('Error updating distributeSolana flag:', error);
         }
@@ -82,7 +80,6 @@ class Solana {
         await this.firestore.collection(FIRESTORE_COLLECTION)
           .doc(chatId.toString())
           .update({ distributeSolana: false, commissionPaid: false });
-        return;
       }
     }
 
