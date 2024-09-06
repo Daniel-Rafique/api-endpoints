@@ -5,10 +5,10 @@ const { exec } = require('child_process');
 const pm2 = require('pm2');
 const DataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
-const Solana = require('../Solana');
 const WalletProcessor = require('../WalletProcessor');
+const Commission = require('../Solana/Commission');
+const Distribute = require('../Solana/Distribute');
 
-const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const ENV_PATH = process.env.ENV_PATH;
 
@@ -21,7 +21,10 @@ class InstanceInitializer {
       projectId: 'koynlabs-2f749',
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
-    this.solana = new Solana();
+
+    this.distributeSolana = new Distribute();
+    this.commissionPaid = new Commission();
+
     this.walletProcessor = new WalletProcessor();
   }
 
@@ -77,15 +80,15 @@ class InstanceInitializer {
   
             case "CHECK_COMMISSION_PAID":
               if (userData.walletsCreated && !userData.commissionPaid) {
-                const result = await this.solana.handleCommission(chatId, userData);
-                console.log('Commission sent successfully. Remaining balance:');
+                await this.commissionPaid.sendToCommissionWallet(userData);
                 await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
+                console.log('Commission sent successfully.');
               }
               break;
   
             case "CHECK_SOLANA_DISTRIBUTION":
               if (userData.commissionPaid && !userData.distributeSolana) {
-                await this.solana.handleDistribution(chatId, userData);
+                await this.distributeSolana.distributeSolana(chatId, userData);
                 await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
                 console.log('Solana sent successfully');
               }

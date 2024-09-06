@@ -3,7 +3,7 @@ const bs58 = require('bs58');
 const path = require('path');
 const os = require('os');
 const { Connection, Keypair } = require('@solana/web3.js'); // Import Keypair
-const Send = require('./Send');
+const Send = require('./Commission');
 const Distribute = require('./Distribute');
 const { MESSAGES } = require('../constants');
 const DataManager = require('../database');
@@ -53,8 +53,11 @@ class Solana {
   }
 
   // Function to handle Solana distribution
-  async handleDistribution(chatId, userData, updatedBalance) {
-      const { commissionPaid, distributeSolana } = userData;
+  async handleDistribution(chatId, userData) {
+      const { commissionPaid, distributeSolana,  walletPk} = userData;
+
+      const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
+      const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
       console.log(`Starting distribution, userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 

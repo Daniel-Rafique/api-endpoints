@@ -58,7 +58,8 @@ class Send {
         transaction.sign(senderKeypair);
   
         await sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
-  
+        console.log(`Commission of ${amountToSend} SOL sent to KoynLabs wallet.`, KOYNLABS_WALLET , senderKeypair.publicKey);
+        return;
       } catch (error) {
         console.error(`Attempt ${attempt + 1} failed during commission transaction:`, error.message);
         if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
