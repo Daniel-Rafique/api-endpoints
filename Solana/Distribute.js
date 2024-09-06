@@ -44,12 +44,12 @@ class Distribute {
 
   async distributeSolana(chatId, userData) {
     
-
     const {batchSize, makers, walletPk } = userData;
     const retryLimit = 3;
     let attempt = 0;
     const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
     const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
+    
     while (attempt < retryLimit) {
       try {
         const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
