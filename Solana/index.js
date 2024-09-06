@@ -38,17 +38,14 @@ class Solana {
   async handleCommission(chatId, userData) {
     const { walletPk, commissionPaid, walletsCreated } = userData;
 
-    if (commissionPaid === false && walletsCreated === true) {
-      const sendInstance = new Send(chatId);
-      const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData);
-      console.log('Commission sent successfully.');
-
-      await this.firestore.collection(FIRESTORE_COLLECTION)
-        .doc(chatId.toString())
-        .update({ commissionPaid: true });
-
-      console.log('Commission marked as paid in Firestore.');
-      return updatedBalance;
+    if (commissionPaid && walletsCreated) {
+      try {
+        const sendInstance = new Send(chatId);
+        const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData);
+        return updatedBalance;
+      } catch (error) {
+        console.error('Error sending commission:', error);
+      }
     } else {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
       const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
@@ -59,66 +56,62 @@ class Solana {
 
   // Function to handle Solana distribution
   async handleDistribution(chatId, userData, updatedBalance) {
-    const { commissionPaid, distributeSolana } = userData;
+      const { commissionPaid, distributeSolana } = userData;
 
-    console.log(`Starting distribution, userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
+      console.log(`Starting distribution, userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
-    if (commissionPaid && !distributeSolana && updatedBalance > 0) {
-      console.log(`distribution in Progress, commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
+      if (commissionPaid && !distributeSolana && updatedBalance > 0) {
+        console.log(`distribution in Progress, commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
 
-      try {
-        // Update the distributeSolana flag to make sure the distribution is not returned due to low balance
+        try {
+          const distributeInstance = new Distribute(chatId);
+          const results = await distributeInstance.distributeSolana(chatId, userData, updatedBalance);
+          console.log('Distribution results:', results);
+          const message = MESSAGES.DEPLOYMENT(updatedBalance);
+          if (this.shouldSendMessage(chatId, message)) {
+            await this.telegramNotifier.sendTelegramMessage(chatId, message);
+          }
+          return true;
+        } catch (error) {
+          console.error('Error updating distributeSolana flag:', error);
+        }
+
+      } else if (updatedBalance <= 0) {
+        console.log('No balance left to distribute.');
+        // Set commission paid to false and distributeSolana to false to allow for top-ups
         await this.firestore.collection(FIRESTORE_COLLECTION)
           .doc(chatId.toString())
-          .update({ distributeSolana: true });
-      } catch (error) {
-        console.error('Error updating distributeSolana flag:', error);
-      }
-      const distributeInstance = new Distribute(chatId);
-      const results = await distributeInstance.distributeSolana(chatId, userData, updatedBalance);
-      console.log('Distribution results:', results);
-      const message = MESSAGES.DEPLOYMENT(updatedBalance);
-
-      if (this.shouldSendMessage(chatId, message)) {
-        await this.telegramNotifier.sendTelegramMessage(chatId, message);
-      }
-      return true;
-    } else if (updatedBalance <= 0) {
-      console.log('No balance left to distribute.');
-      // Set commision paid to false and distributeSolana to false to allow for top-ups
-      await this.firestore.collection(FIRESTORE_COLLECTION)
-        .doc(chatId.toString())
-        .update({ distributeSolana: false, commissionPaid: false });
+          .update({ distributeSolana: false, commissionPaid: false });
         return;
+      }
     }
-  }
 
-  shouldSendMessage(chatId, message) {
-    const cacheKey = chatId;
-    const currentTime = Date.now();
-    const cacheDuration = 60 * 10000; // 10 minutes
+    shouldSendMessage(chatId, message) {
+      const cacheKey = chatId;
+      const currentTime = Date.now();
+      const cacheDuration = 60 * 10000; // 10 minutes
 
-    console.log(`Checking message cache for chatId: ${chatId}`);
-    console.log(`Current message: ${message}`);
-    console.log(`Message cache:`, this.messageCache);
+      console.log(`Checking message cache for chatId: ${chatId}`);
+      console.log(`Current message: ${message}`);
+      console.log(`Message cache:`, this.messageCache);
 
-    if (!this.messageCache[cacheKey]) {
-      console.log('No cached message found, sending message.');
+      if (!this.messageCache[cacheKey]) {
+        console.log('No cached message found, sending message.');
+        this.messageCache[cacheKey] = { message, timestamp: currentTime };
+        return true;
+      }
+
+      const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
+
+      if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
+        console.log('Duplicate message detected, not sending.');
+        return false;
+      }
+
+      console.log('Message cache expired or different message, sending message.');
       this.messageCache[cacheKey] = { message, timestamp: currentTime };
       return true;
     }
-
-    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
-
-    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
-      console.log('Duplicate message detected, not sending.');
-      return false;
-    }
-
-    console.log('Message cache expired or different message, sending message.');
-    this.messageCache[cacheKey] = { message, timestamp: currentTime };
-    return true;
   }
-}
 
 module.exports = Solana;

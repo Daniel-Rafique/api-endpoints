@@ -28,84 +28,100 @@ class InstanceInitializer {
   async initializeMarketMakerInstance(chatId) {
     try {
       console.log('Initializing market maker instance:', chatId);
-
+  
       const userDir = path.join(this.instancePath, chatId.toString());
-
+  
       // Step 1: Create the user directory if it doesn't exist
       if (!fs.existsSync(userDir)) {
         console.log(`Creating user directory at ${userDir}`);
         fs.mkdirSync(userDir, { recursive: true });
       }
-
+  
       // Step 2: Create symbolic links for the user directory
-      this.createSymbolicLinksIndividually(this.basePath, userDir);
-
+      await this.createSymbolicLinksIndividually(this.basePath, userDir);
+  
       // Step 3: Retrieve user data from Firestore
-      const userData = await this.dataManager.getCollection(chatId);
-
+      let userData = await this.dataManager.getCollection(chatId);
+  
       if (!userData) {
         console.error("userData is undefined. Stopping initialization.");
         return;
       }
+  
+      // Step 4: Process each stage
+      const steps = [
+        "CHECK_INSTANCES_CREATED",
+        "CHECK_WALLETS_CREATED",
+        "CHECK_COMMISSION_PAID",
+        "CHECK_SOLANA_DISTRIBUTION",
+        "CHECK_INSTANCES_STARTED"
+      ];
+  
+      for (const step of steps) {
+        console.log(`Processing step: ${step}`);
+        
+        switch (step) {
+          case "CHECK_INSTANCES_CREATED":
+            if (!userData.instancesCreated) {
+              console.log("Instances not created, creating now.");
+              await this.copyUnlinkAndAppendEnv(userDir, userData);
+              userData.instancesCreated = true;
+              await this.dataManager.updateCollection(chatId, { instancesCreated: true });
+            }
+            break;
+  
+          case "CHECK_WALLETS_CREATED":
+            if (!userData.walletsCreated) {
+              console.log('Creating wallets for chatId:', chatId);
+              await this.walletProcessor.addJob({ chatId, userData });
+              await this.waitForJobCompletion(chatId);
+              console.log('Wallets created.');
+              userData.walletsCreated = true;
+              await this.dataManager.updateCollection(chatId, { walletsCreated: true });
+            }
+            break;
+  
+          case "CHECK_COMMISSION_PAID":
+            if (userData.walletsCreated && !userData.commissionPaid) {
+              await this.dataManager.updateCollection(chatId, { commissionPaid: true });
+              console.log('Wallets created. Distributing commission to the wallet...');
+              const result = await this.solana.handleCommission(chatId, userData);
+              console.log('Commission sent successfully. Remaining balance:', result);
+              userData.commissionPaid = true;
+            }
+            break;
+  
+          case "CHECK_SOLANA_DISTRIBUTION":
+            if (userData.commissionPaid && !userData.distributeSolana) {
+              await this.dataManager.updateCollection(chatId, { distributeSolana: true });
+              console.log('Commission paid. Distributing Solana to the wallet...');
+              await this.solana.handleDistribution(chatId, userData);
+              console.log('Solana distributed successfully.');
+              userData.distributeSolana = true;
+            }
+            break;
+  
+          case "CHECK_INSTANCES_STARTED":
+            if (!userData.instancesStarted) {
+              console.log('Starting market maker instance...');
+              await this.startMarketMakerInstance(chatId, userDir);
+              console.log('Market maker instance started successfully.');
+              userData.instancesStarted = true;
+              await this.dataManager.updateCollection(chatId, {instancesStarted: true, commissionPaid: false,  distributeSolana: false });
 
-      // Step 4: Process each stage using a switch statement
-      let currentStep = "CHECK_INSTANCES_CREATED";
-      const { contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet, instancesCreated, walletsCreated, commissionPaid, distributeSolana, instancesStarted } = userData;
-      switch (currentStep) {
-        case "CHECK_INSTANCES_CREATED":
-          if (!instancesCreated) {
-            console.log("Instances not created, stopping initialization.");
-            // Deconstruct userData
-            console.log('Saving contract address:', contractAddress);
-
-            // Copy and append .env file
-            await this.copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet });
-          }
-          currentStep = "CHECK_WALLETS_CREATED";
-        // No break to continue to the next case
-
-        case "CHECK_WALLETS_CREATED":
-          if (!walletsCreated) {
-            console.log('Creating wallets for chatId:', chatId);
-            await this.walletProcessor.addJob({ chatId, userData });
-            await this.waitForJobCompletion(chatId);  // Wait for wallet job to finish
-            console.log('Wallets created.');
-          }
-          currentStep = "CHECK_COMMISSION_PAID";
-        // No break to continue to the next case
-
-        case "CHECK_COMMISSION_PAID":
-          if (walletsCreated && !commissionPaid) {
-            console.log('Wallets created. Distributing commission to the wallet...');
-            const result = await this.solana.handleCommission(chatId, userData);
-            console.log('Commission sent successfully. Remaining balance:', result);
-          }
-          currentStep = "CHECK_SOLANA_DISTRIBUTION";
-        // No break to continue to the next case
-
-        case "CHECK_SOLANA_DISTRIBUTION":
-          if (commissionPaid && !distributeSolana) {
-            console.log('Commission paid. Distributing Solana to the wallet...');
-            await this.solana.handleDistribution(chatId, userData);
-            console.log('Solana distributed successfully.');
-          }
-          currentStep = "CHECK_INSTANCES_STARTED";
-        // No break to continue to the next case
-
-        case "CHECK_INSTANCES_STARTED":
-          if (!instancesStarted) {
-            console.log('Starting market maker instance...');
-            await this.startMarketMakerInstance(chatId, userDir);
-            console.log('Market maker instance started successfully.');
-          }
-          break;
-
-        default:
-          console.error('Unknown step');
+            }
+            break;
+  
+          default:
+            console.error('Unknown step:', step);
+        }
       }
-
+  
+      console.log('Market maker instance initialization completed successfully.');
+  
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
+      throw error; // Re-throw the error for higher-level error handling
     }
   }
 
@@ -179,7 +195,6 @@ class InstanceInitializer {
       fs.appendFileSync(destEnvPath, envContent);
       console.log(`Appended new parameters to ${destEnvPath}`);
       // Step 4. Update the firestore flag to indicate that the instance has been created.
-      await this.updateFirestoreFlag(chatId);
     } else {
       console.warn(`No parent .env file found at ${parentEnvPath}.`);
       throw new Error('Parent .env file not found');
@@ -242,7 +257,6 @@ class InstanceInitializer {
               console.error('Failed to generate PM2 startup script:', stderr);
             } else {
               console.log('PM2 startup script generated successfully');
-              this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).update({ instancesStarted: true });
               return true;
             }
             pm2.disconnect();
