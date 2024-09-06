@@ -132,7 +132,6 @@ class BalanceChecker {
 
       if (!transaction) {
         console.error('Failed to retrieve transaction');
-        return this.reconnectWebSocket();
       }
 
       console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
@@ -143,7 +142,6 @@ class BalanceChecker {
 
       if (!senderPublicKey) {
         console.error('Sender public key not found in the transaction');
-        return this.reconnectWebSocket();
       }
 
       const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
@@ -202,7 +200,6 @@ class BalanceChecker {
         if (this.shouldSendMessage(this.chatId, message)) {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         }
-        return this.reconnectWebSocket();
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
