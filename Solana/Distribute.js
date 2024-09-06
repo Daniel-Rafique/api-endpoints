@@ -90,7 +90,7 @@ class Distribute {
 
           await this.executeTransactions(transactionList, senderKeypair, userData);
   
-          console.log(`Processed chunk ${i + 1} to ${i + chunkSize} of ${Math.round(newWallets.length)}`);
+          console.log(`Processed chunk ${i + 1} to ${i + chunk} of ${Math.round(newWallets.length)}`);
         }
   
       } catch (error) {
