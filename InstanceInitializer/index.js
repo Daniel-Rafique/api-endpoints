@@ -59,6 +59,7 @@ class InstanceInitializer {
   
       for (const step of steps) {
         console.log(`Processing step: ${step}`);
+        const chatIdStr = chatId.toString(); // Ensure chatId is a string
         
         switch (step) {
           case "CHECK_INSTANCES_CREATED":
@@ -66,7 +67,7 @@ class InstanceInitializer {
               console.log("Instances not created, creating now.");
               await this.copyUnlinkAndAppendEnv(userDir, userData);
               userData.instancesCreated = true;
-              await this.dataManager.updateCollection(chatId, { instancesCreated: true });
+              await this.dataManager.updateCollection(chatIdStr, { instancesCreated: true });
             }
             break;
   
@@ -77,13 +78,13 @@ class InstanceInitializer {
               await this.waitForJobCompletion(chatId);
               console.log('Wallets created.');
               userData.walletsCreated = true;
-              await this.dataManager.updateCollection(chatId, { walletsCreated: true });
+              await this.dataManager.updateCollection(chatIdStr, { walletsCreated: true });
             }
             break;
   
           case "CHECK_COMMISSION_PAID":
             if (userData.walletsCreated && !userData.commissionPaid) {
-              await this.dataManager.updateCollection(chatId, { commissionPaid: true });
+              await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
               console.log('Wallets created. Distributing commission to the wallet...');
               const result = await this.solana.handleCommission(chatId, userData);
               console.log('Commission sent successfully. Remaining balance:', result);
@@ -93,7 +94,7 @@ class InstanceInitializer {
   
           case "CHECK_SOLANA_DISTRIBUTION":
             if (userData.commissionPaid && !userData.distributeSolana) {
-              await this.dataManager.updateCollection(chatId, { distributeSolana: true });
+              await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
               console.log('Commission paid. Distributing Solana to the wallet...');
               await this.solana.handleDistribution(chatId, userData);
               console.log('Solana distributed successfully.');
@@ -107,7 +108,7 @@ class InstanceInitializer {
               await this.startMarketMakerInstance(chatId, userDir);
               console.log('Market maker instance started successfully.');
               userData.instancesStarted = true;
-              await this.dataManager.updateCollection(chatId, {instancesStarted: true, commissionPaid: false,  distributeSolana: false });
+              await this.dataManager.updateCollection(chatIdStr, {instancesStarted: true, commissionPaid: false,  distributeSolana: false });
 
             }
             break;

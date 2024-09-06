@@ -92,8 +92,6 @@ class WalletManager {
         }
     }
 
-
-
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
             // Check if newWallets is an array
