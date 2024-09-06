@@ -77,17 +77,17 @@ class InstanceInitializer {
   
             case "CHECK_COMMISSION_PAID":
               if (userData.walletsCreated && !userData.commissionPaid) {
-                await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
                 const result = await this.solana.handleCommission(chatId, userData);
                 console.log('Commission sent successfully. Remaining balance:', result);
+                await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
               }
               break;
   
             case "CHECK_SOLANA_DISTRIBUTION":
               if (userData.commissionPaid && !userData.distributeSolana) {
-                await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
                 await this.solana.handleDistribution(chatId, userData);
-                console.log('Commission sent successfully. Remaining balance:', result);
+                await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
+                console.log('Solana sent successfully');
               }
               break;
   

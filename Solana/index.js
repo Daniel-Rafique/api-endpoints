@@ -38,7 +38,7 @@ class Solana {
   async handleCommission(chatId, userData) {
     const { walletPk, commissionPaid, walletsCreated } = userData;
 
-    if (commissionPaid && walletsCreated) {
+    if (!commissionPaid && walletsCreated) {
       try {
         const sendInstance = new Send(chatId);
         const updatedBalance = await sendInstance.sendToKoynlabsWallet(userData);
