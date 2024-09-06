@@ -30,6 +30,7 @@ class InstanceInitializer {
       console.log('Initializing market maker instance:', chatId);
   
       const userDir = path.join(this.instancePath, chatId.toString());
+      const chatIdStr = chatId.toString();
   
       // Step 1: Create the user directory if it doesn't exist
       if (!fs.existsSync(userDir)) {
@@ -40,15 +41,6 @@ class InstanceInitializer {
       // Step 2: Create symbolic links for the user directory
       await this.createSymbolicLinksIndividually(this.basePath, userDir);
   
-      // Step 3: Retrieve user data from Firestore
-      let userData = await this.dataManager.getCollection(chatId);
-  
-      if (!userData) {
-        console.error("userData is undefined. Stopping initialization.");
-        return;
-      }
-  
-      // Step 4: Process each stage
       const steps = [
         "CHECK_INSTANCES_CREATED",
         "CHECK_WALLETS_CREATED",
@@ -59,62 +51,65 @@ class InstanceInitializer {
   
       for (const step of steps) {
         console.log(`Processing step: ${step}`);
-        const chatIdStr = chatId.toString(); // Ensure chatId is a string
         
-        switch (step) {
-          case "CHECK_INSTANCES_CREATED":
-            if (!userData.instancesCreated) {
-              console.log("Instances not created, creating now.");
-              await this.copyUnlinkAndAppendEnv(userDir, userData);
-              userData.instancesCreated = true;
-              await this.dataManager.updateCollection(chatIdStr, { instancesCreated: true });
-            }
-            break;
+        // Fetch fresh user data before each step
+        let userData = await this.dataManager.getCollection(chatId);
+        if (!userData) {
+          throw new Error("userData is undefined. Stopping initialization.");
+        }
   
-          case "CHECK_WALLETS_CREATED":
-            if (!userData.walletsCreated) {
-              console.log('Creating wallets for chatId:', chatId);
-              await this.walletProcessor.addJob({ chatId, userData });
-              await this.waitForJobCompletion(chatId);
-              console.log('Wallets created.');
-              userData.walletsCreated = true;
-              await this.dataManager.updateCollection(chatIdStr, { walletsCreated: true });
-            }
-            break;
+        try {
+          switch (step) {
+            case "CHECK_INSTANCES_CREATED":
+              if (!userData.instancesCreated) {
+                await this.copyUnlinkAndAppendEnv(userDir, userData);
+                await this.dataManager.updateCollection(chatIdStr, { instancesCreated: true });
+              }
+              break;
   
-          case "CHECK_COMMISSION_PAID":
-            if (userData.walletsCreated && !userData.commissionPaid) {
-              await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
-              console.log('Wallets created. Distributing commission to the wallet...');
-              const result = await this.solana.handleCommission(chatId, userData);
-              console.log('Commission sent successfully. Remaining balance:', result);
-              userData.commissionPaid = true;
-            }
-            break;
+            case "CHECK_WALLETS_CREATED":
+              if (!userData.walletsCreated) {
+                await this.walletProcessor.addJob({ chatId, userData });
+                await this.waitForJobCompletion(chatId);
+                await this.dataManager.updateCollection(chatIdStr, { walletsCreated: true });
+              }
+              break;
   
-          case "CHECK_SOLANA_DISTRIBUTION":
-            if (userData.commissionPaid && !userData.distributeSolana) {
-              await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
-              console.log('Commission paid. Distributing Solana to the wallet...');
-              await this.solana.handleDistribution(chatId, userData);
-              console.log('Solana distributed successfully.');
-              userData.distributeSolana = true;
-            }
-            break;
+            case "CHECK_COMMISSION_PAID":
+              if (userData.walletsCreated && !userData.commissionPaid) {
+                await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
+                const result = await this.solana.handleCommission(chatId, userData);
+                console.log('Commission sent successfully. Remaining balance:', result);
+              }
+              break;
   
-          case "CHECK_INSTANCES_STARTED":
-            if (!userData.instancesStarted) {
-              console.log('Starting market maker instance...');
-              await this.startMarketMakerInstance(chatId, userDir);
-              console.log('Market maker instance started successfully.');
-              userData.instancesStarted = true;
-              await this.dataManager.updateCollection(chatIdStr, {instancesStarted: true, commissionPaid: false,  distributeSolana: false });
-
-            }
-            break;
+            case "CHECK_SOLANA_DISTRIBUTION":
+              if (userData.commissionPaid && !userData.distributeSolana) {
+                await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
+                await this.solana.handleDistribution(chatId, userData);
+                console.log('Commission sent successfully. Remaining balance:', result);
+              }
+              break;
   
-          default:
-            console.error('Unknown step:', step);
+            case "CHECK_INSTANCES_STARTED":
+              if (!userData.instancesStarted) {
+                await this.startMarketMakerInstance(chatId, userDir);
+                await this.dataManager.updateCollection(chatIdStr, {
+                  instancesStarted: true,
+                  commissionPaid: false,
+                  distributeSolana: false
+                });
+              }
+              break;
+  
+            default:
+              console.error('Unknown step:', step);
+          }
+        } catch (stepError) {
+          console.error(`Error in step ${step}:`, stepError);
+          // Optionally, you might want to update Firestore with the error state
+          await this.dataManager.updateCollection(chatIdStr, { lastError: `Error in ${step}: ${stepError.message}` });
+          throw stepError; // Re-throw to stop the process
         }
       }
   
@@ -122,28 +117,39 @@ class InstanceInitializer {
   
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
-      throw error; // Re-throw the error for higher-level error handling
+      throw error;
     }
   }
-
-
-  // Helper function to wait for job completion
-  async waitForJobCompletion(chatId) {
+  
+  // Modify waitForJobCompletion to include a timeout
+  async waitForJobCompletion(chatId, timeout = 300000) { // 5 minutes timeout
     return new Promise((resolve, reject) => {
-      // Example: Wait for job to complete
-      this.walletProcessor.walletQueue.on('completed', (job) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Wallet job for chatId ${chatId} timed out after ${timeout}ms`));
+      }, timeout);
+  
+      const completionHandler = (job) => {
         if (job.data.chatId === chatId) {
+          clearTimeout(timer);
+          this.walletProcessor.walletQueue.removeListener('completed', completionHandler);
+          this.walletProcessor.walletQueue.removeListener('failed', failureHandler);
           console.log(`Wallet job completed for chatId: ${chatId}`);
           resolve();
         }
-      });
-
-      this.walletProcessor.walletQueue.on('failed', (job, err) => {
+      };
+  
+      const failureHandler = (job, err) => {
         if (job.data.chatId === chatId) {
+          clearTimeout(timer);
+          this.walletProcessor.walletQueue.removeListener('completed', completionHandler);
+          this.walletProcessor.walletQueue.removeListener('failed', failureHandler);
           console.error(`Wallet job failed for chatId: ${chatId}`, err);
           reject(err);
         }
-      });
+      };
+  
+      this.walletProcessor.walletQueue.on('completed', completionHandler);
+      this.walletProcessor.walletQueue.on('failed', failureHandler);
     });
   }
 

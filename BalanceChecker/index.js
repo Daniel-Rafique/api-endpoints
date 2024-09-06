@@ -58,7 +58,7 @@ class BalanceChecker {
   }
 
   connectWebSocket() {
-    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
+    const publicKeyToMention = this.dataManager.getCollection(this.chatId).commissionPaid ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
