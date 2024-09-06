@@ -42,11 +42,14 @@ class Distribute {
     });
   }
 
-  async distributeSolana(chatId, userData, updatedBalance) {
+  async distributeSolana(chatId, userData) {
+    
+
     const {batchSize, makers, walletPk } = userData;
     const retryLimit = 3;
     let attempt = 0;
-  
+    const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
+    const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
     while (attempt < retryLimit) {
       try {
         const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
@@ -90,7 +93,6 @@ class Distribute {
           console.log(`Processed chunk ${i + 1} to ${i + chunkSize} of ${Math.round(newWallets.length)}`);
         }
   
-        return { status: 'success' };
       } catch (error) {
         console.error(`Attempt ${attempt + 1} failed during distribution:`, error.message);
         if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error

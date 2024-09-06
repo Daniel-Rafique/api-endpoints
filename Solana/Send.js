@@ -24,52 +24,47 @@ class Send {
     this.messageCache = {}; // Initialize cache for messages
   }
 
-  async sendToKoynlabsWallet(userData) {
-    const {walletPk} = userData;
-
+  async sendToCommissionWallet(userData) {
+    const { walletPk } = userData;
+    const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
     const retryLimit = 3;
-    let attempt = 0;
-
-    while (attempt < retryLimit) {
-        try {
-            const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
-            const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
-
-            if (senderBalance <= 0) {
-                throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-            }
-
-            const amountToSend = Math.floor(senderBalance * 0.30);
-            const estimatedFee = await this.getEstimatedFee(senderKeypair);
-            const remainingBalance = senderBalance - amountToSend - estimatedFee;
-
-            if (remainingBalance < 0) {
-                throw new InsufficientBalanceError('Insufficient balance to pay commission and cover fees.');
-            }
-
-            const transaction = new Transaction().add(
-                SystemProgram.transfer({
-                    fromPubkey: senderKeypair.publicKey,
-                    toPubkey: new PublicKey(KOYNLABS_WALLET),
-                    lamports: amountToSend,
-                })
-            );
-
-            transaction.feePayer = senderKeypair.publicKey;
-            transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
-            transaction.sign(senderKeypair);
-
-            await sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
-
-            const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
-            return updatedBalance; // This balance will be used for distribution
-        } catch (error) {
-            console.error(`Attempt ${attempt + 1} failed during commission transaction:`, error.message);
-            if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
+  
+    for (let attempt = 0; attempt < retryLimit; attempt++) {
+      try {
+        const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+  
+        if (senderBalance <= 0) {
+          throw new InsufficientBalanceError('Insufficient balance in sender wallet');
         }
-        attempt++;
+  
+        const amountToSend = Math.floor(senderBalance * KOYNLABS_COMMS);
+        const estimatedFee = await this.getEstimatedFee(senderKeypair);
+        const remainingBalance = senderBalance - amountToSend - estimatedFee;
+  
+        if (remainingBalance < 0) {
+          throw new InsufficientBalanceError('Insufficient balance to pay commission and cover fees.');
+        }
+  
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: senderKeypair.publicKey,
+            toPubkey: new PublicKey(KOYNLABS_WALLET),
+            lamports: amountToSend,
+          })
+        );
+  
+        transaction.feePayer = senderKeypair.publicKey;
+        transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
+        transaction.sign(senderKeypair);
+  
+        await sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
+  
+      } catch (error) {
+        console.error(`Attempt ${attempt + 1} failed during commission transaction:`, error.message);
+        if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
+      }
     }
-}
+  }
 
   async getEstimatedFee(senderKeypair) {
     const { blockhash } = await this.connection.getLatestBlockhash();

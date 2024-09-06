@@ -41,7 +41,7 @@ class Solana {
     if (!commissionPaid && walletsCreated) {
       try {
         const sendInstance = new Send(chatId);
-        await sendInstance.sendToKoynlabsWallet(userData);
+        await sendInstance.sendToCommissionWallet(userData);
       } catch (error) {
         console.error('Error sending commission:', error);
       }
@@ -49,7 +49,6 @@ class Solana {
       const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
       const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
       console.log('Commission already paid. Current balance:', updatedBalance);
-      return updatedBalance;
     }
   }
 
