@@ -89,8 +89,8 @@ class InstanceInitializer {
             case "CHECK_COMMISSION_PAID":
               if (userData.walletsCreated && !userData.commissionPaid) {
                 console.log('Commission not paid. Sending commission...');
-                await this.commissionPaid.sendToCommissionWallet(userData);
                 await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
+                await this.commissionPaid.sendToCommissionWallet(userData);
                 console.log('Commission sent successfully.');
               } else {
                 console.log('Commission already paid.');
@@ -100,8 +100,8 @@ class InstanceInitializer {
             case "CHECK_SOLANA_DISTRIBUTION":
               if (userData.commissionPaid && !userData.distributeSolana) {
                 console.log('Distributing Solana...');
-                await this.distributeSolana.distributeSolana(chatId, userData);
                 await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
+                await this.distributeSolana.distributeSolana(chatId, userData);
                 console.log('Solana distributed successfully.');
               } else {
                 console.log('Solana already distributed.');
@@ -114,8 +114,8 @@ class InstanceInitializer {
                 await this.startMarketMakerInstance(chatId, userDir);
                 await this.dataManager.updateCollection(chatIdStr, {
                   instancesStarted: true,
-                  commissionPaid: false, // Reset for future transactions
-                  distributeSolana: false // Reset for future distributions
+                  commissionPaid: true, // Reset for future transactions
+                  distributeSolana: true // Reset for future distributions
                 });
                 console.log('Market maker instance started successfully.');
               } else {
