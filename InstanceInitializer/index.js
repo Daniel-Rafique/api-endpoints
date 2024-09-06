@@ -31,19 +31,19 @@ class InstanceInitializer {
   async initializeMarketMakerInstance(chatId) {
     try {
       console.log('Initializing market maker instance:', chatId);
-  
+
       const userDir = path.join(this.instancePath, chatId.toString());
       const chatIdStr = chatId.toString();
-  
+
       // Step 1: Create the user directory if it doesn't exist
       if (!fs.existsSync(userDir)) {
         console.log(`Creating user directory at ${userDir}`);
         fs.mkdirSync(userDir, { recursive: true });
       }
-  
+
       // Step 2: Create symbolic links for the user directory
       await this.createSymbolicLinksIndividually(this.basePath, userDir);
-  
+
       const steps = [
         "CHECK_INSTANCES_CREATED",
         "CHECK_WALLETS_CREATED",
@@ -51,86 +51,105 @@ class InstanceInitializer {
         "CHECK_SOLANA_DISTRIBUTION",
         "CHECK_INSTANCES_STARTED"
       ];
-  
+
       for (const step of steps) {
         console.log(`Processing step: ${step}`);
-        
+
         // Fetch fresh user data before each step
         let userData = await this.dataManager.getCollection(chatId);
         if (!userData) {
           throw new Error("userData is undefined. Stopping initialization.");
         }
-  
+
         try {
           switch (step) {
             case "CHECK_INSTANCES_CREATED":
               if (!userData.instancesCreated) {
+                console.log('Instances not created. Creating now...');
                 await this.copyUnlinkAndAppendEnv(userDir, userData);
                 await this.dataManager.updateCollection(chatIdStr, { instancesCreated: true });
+                console.log('Instances created.');
+              } else {
+                console.log('Instances already created.');
               }
               break;
-  
+
             case "CHECK_WALLETS_CREATED":
               if (!userData.walletsCreated) {
+                console.log('Wallets not created. Creating wallets...');
                 await this.walletProcessor.addJob({ chatId, userData });
                 await this.waitForJobCompletion(chatId);
                 await this.dataManager.updateCollection(chatIdStr, { walletsCreated: true });
+                console.log('Wallets created.');
+              } else {
+                console.log('Wallets already created.');
               }
               break;
-  
+
             case "CHECK_COMMISSION_PAID":
               if (userData.walletsCreated && !userData.commissionPaid) {
+                console.log('Commission not paid. Sending commission...');
                 await this.commissionPaid.sendToCommissionWallet(userData);
                 await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
                 console.log('Commission sent successfully.');
+              } else {
+                console.log('Commission already paid.');
               }
               break;
-  
+
             case "CHECK_SOLANA_DISTRIBUTION":
               if (userData.commissionPaid && !userData.distributeSolana) {
+                console.log('Distributing Solana...');
                 await this.distributeSolana.distributeSolana(chatId, userData);
                 await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
-                console.log('Solana sent successfully');
+                console.log('Solana distributed successfully.');
+              } else {
+                console.log('Solana already distributed.');
               }
               break;
-  
+
             case "CHECK_INSTANCES_STARTED":
               if (!userData.instancesStarted) {
+                console.log('Starting market maker instance...');
                 await this.startMarketMakerInstance(chatId, userDir);
                 await this.dataManager.updateCollection(chatIdStr, {
                   instancesStarted: true,
-                  commissionPaid: false,
-                  distributeSolana: false
+                  commissionPaid: false, // Reset for future transactions
+                  distributeSolana: false // Reset for future distributions
                 });
+                console.log('Market maker instance started successfully.');
+              } else {
+                console.log('Market maker instance already started.');
               }
               break;
-  
+
             default:
               console.error('Unknown step:', step);
           }
         } catch (stepError) {
           console.error(`Error in step ${step}:`, stepError);
-          // Optionally, you might want to update Firestore with the error state
+          // Optionally, update Firestore with the error state
           await this.dataManager.updateCollection(chatIdStr, { lastError: `Error in ${step}: ${stepError.message}` });
           throw stepError; // Re-throw to stop the process
         }
       }
-  
+
       console.log('Market maker instance initialization completed successfully.');
-  
+
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
       throw error;
     }
   }
-  
+
+
   // Modify waitForJobCompletion to include a timeout
   async waitForJobCompletion(chatId, timeout = 300000) { // 5 minutes timeout
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`Wallet job for chatId ${chatId} timed out after ${timeout}ms`));
       }, timeout);
-  
+
       const completionHandler = (job) => {
         if (job.data.chatId === chatId) {
           clearTimeout(timer);
@@ -140,7 +159,7 @@ class InstanceInitializer {
           resolve();
         }
       };
-  
+
       const failureHandler = (job, err) => {
         if (job.data.chatId === chatId) {
           clearTimeout(timer);
@@ -150,7 +169,7 @@ class InstanceInitializer {
           reject(err);
         }
       };
-  
+
       this.walletProcessor.walletQueue.on('completed', completionHandler);
       this.walletProcessor.walletQueue.on('failed', failureHandler);
     });
