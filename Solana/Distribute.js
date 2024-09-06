@@ -169,42 +169,6 @@ class Distribute {
     results.push(...await Promise.allSettled(staggeredTransactions));
     return results;
   }
-
-  async shouldSendMessage(chatId, message) {
-    const cacheKey = chatId;
-    const currentTime = Date.now();
-    const cacheDuration = 600; // 10 minutes in seconds
-
-    console.log(`Checking message cache for chatId: ${chatId}`);
-    console.log(`Current message: ${message}`);
-
-    const cachedMessage = await client.get(cacheKey);
-
-    if (cachedMessage) {
-      const { message: cachedMsg, timestamp } = JSON.parse(cachedMessage);
-      if (message === cachedMsg && currentTime - timestamp < cacheDuration * 1000) {
-        console.log('Duplicate message detected, not sending.');
-        return false;
-      }
-    }
-
-    console.log('No cached message found or cache expired, sending message.');
-    await client.set(cacheKey, JSON.stringify({ message, timestamp: currentTime }), {
-      EX: cacheDuration,
-    });
-
-    return true;
-  }
-  async retryOperation(operation, retries = 3) {
-    for (let attempt = 0; attempt < retries; attempt++) {
-      try {
-        return await operation();
-      } catch (error) {
-        console.error(`Attempt ${attempt + 1} failed: ${error.message}`);
-        if (attempt === retries - 1) throw error; // Throw the error if it's the last attempt
-      }
-    }
-  }
 }
 
 module.exports = Distribute;

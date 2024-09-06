@@ -59,7 +59,6 @@ class Send {
   
         await sendAndConfirmTransaction(this.connection, transaction, [senderKeypair]);
         console.log(`Commission of ${amountToSend} SOL sent to KoynLabs wallet.`, KOYNLABS_WALLET , senderKeypair.publicKey);
-        return;
       } catch (error) {
         console.error(`Attempt ${attempt + 1} failed during commission transaction:`, error.message);
         if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
@@ -81,43 +80,6 @@ class Send {
     ).compileMessage();
     const { value } = await this.connection.getFeeForMessage(message);
     return value;
-  }
-
-  shouldSendMessage(chatId, message) {
-    const cacheKey = chatId;
-    const currentTime = Date.now();
-    const cacheDuration = 60 * 10000; // 10 minutes
-
-    console.log(`Checking message cache for chatId: ${chatId}`);
-    console.log(`Current message: ${message}`);
-    console.log(`Message cache:`, this.messageCache);
-
-    if (!this.messageCache[cacheKey]) {
-      console.log('No cached message found, sending message.');
-      this.messageCache[cacheKey] = { message, timestamp: currentTime };
-      return true;
-    }
-
-    const { message: cachedMessage, timestamp } = this.messageCache[cacheKey];
-
-    if (message === cachedMessage && currentTime - timestamp < cacheDuration) {
-      console.log('Duplicate message detected, not sending.');
-      return false;
-    }
-
-    console.log('Message cache expired or different message, sending message.');
-    this.messageCache[cacheKey] = { message, timestamp: currentTime };
-    return true;
-  }
-  async retryOperation(operation, retries = 3) {
-    for (let attempt = 0; attempt < retries; attempt++) {
-      try {
-        return await operation();
-      } catch (error) {
-        console.error(`Attempt ${attempt + 1} failed: ${error.message}`);
-        if (attempt === retries - 1) throw error; // Throw the error if it's the last attempt
-      }
-    }
   }
 }
 
