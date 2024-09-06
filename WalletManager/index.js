@@ -96,7 +96,6 @@ class WalletManager {
             await fileSavePromise;
     
             console.log(`Successfully saved and updated Firestore for chatId: ${chatIdStr}`);
-            return true;
     
         } catch (error) {
             console.error('Error saving to Firestore:', error.message || error);

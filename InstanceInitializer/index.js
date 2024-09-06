@@ -202,18 +202,6 @@ class InstanceInitializer {
     }
   }
 
-  async updateFirestoreFlag(chatId) {
-    try {
-      const userDocRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
-      await userDocRef.update({ instancesCreated: true });
-      console.log(`Firestore flag instances created updated for chatId: ${chatId}`);
-      return true;
-    } catch (error) {
-      console.error('Failed to update Firestore flag for instances created:', error);
-      return false;
-    }
-  }
-
   async startMarketMakerInstance(chatId, userDir) {
     const instanceName = `koynlabs-instance-${chatId}`;
     console.log(`Starting market maker instance ${instanceName}...`);
