@@ -58,7 +58,8 @@ class BalanceChecker {
   }
 
   connectWebSocket() {
-    const publicKeyToMention = this.dataManager.getCollection(this.chatId).commissionPaid ? this.dummyPublicKey : this.receiverKeypair.publicKey.toString();
+    const publicKeyToMention = this.receiverKeypair.publicKey.toString();
+    const commissionPaid = this.dataManager.getCollection(this.chatId).commissionPaid;
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
@@ -72,7 +73,7 @@ class BalanceChecker {
       if (response.method === 'logsNotification') {
         const transactionSignature = response.params.result.value.signature;
         console.log(`New transaction: ${transactionSignature}`);
-        if (transactionSignature) {
+        if (transactionSignature && !commissionPaid) {
           await this.handleTransaction(transactionSignature);
         }
       }
