@@ -66,7 +66,7 @@ class InstanceInitializer {
             case "CHECK_INSTANCES_CREATED":
               if (!userData.instancesCreated) {
                 console.log('Instances not created. Creating now...');
-                await this.copyUnlinkAndAppendEnv(userDir, userData);
+                await this.copyUnlinkAndAppendEnv(userDir, chatId, userData);
                 await this.dataManager.updateCollection(chatIdStr, { instancesCreated: true });
                 console.log('Instances created.');
               } else {
@@ -188,7 +188,7 @@ class InstanceInitializer {
     });
   }
 
-  async copyUnlinkAndAppendEnv(userDir, { chatId, contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet }) {
+  async copyUnlinkAndAppendEnv(userDir, chatId, {contractAddress, batchSize, boostType, buyAmount, sellAmount, senderWallet }) {
     const parentEnvPath = path.join(this.basePath, '.env');
     const destEnvPath = path.join(userDir, '.env');
 
