@@ -5,7 +5,7 @@ const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
 
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
-const KOYNLABS_COMMS = process.env.KOYNLABS_COMMS || 0.3;
+const KOYNLABS_COMMS = process.env.KOYNLABS_COMMS || 0.2;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
