@@ -59,6 +59,14 @@ class Send {
       console.log(`Commission of ${amountToSend} SOL sent to KoynLabs wallet.`, KOYNLABS_WALLET, senderKeypair.publicKey);
     } catch (error) {
       console.error(`Attemptfailed during commission transaction:`, error.message);
+      if (retries > 0) {
+        console.log(`Retrying... (${retries} attempts left)`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before retrying
+        return this.sendToCommissionWallet(userData, retries - 1);
+      } else {
+        console.error('Max retries reached. Commission transaction failed.');
+        throw error; // Rethrow the error after max retries
+      }
     }
   }
 
