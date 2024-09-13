@@ -70,8 +70,8 @@ app.post('/api/create', async (req, res) => {
     }
 
     const contractAddress = userData.contractAddress;
-    const minimumSolBalance = 0.1;
-    const minimumTokenBalance = 5000;
+    const minimumSolBalance = userData.boostCost;
+    const minimumTokenBalance = userData.tokenDetails.tokenAmount;
 
     if (userData.boostType === 'ultra_boost') {
       const contractAddress = userData.contractAddress;
