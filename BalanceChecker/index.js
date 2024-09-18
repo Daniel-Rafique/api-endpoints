@@ -29,7 +29,7 @@ const telegramToken = process.env.TELEGRAM_TOKEN;
 const TOKEN = process.env.TOKEN;
 
 class BalanceChecker {
-  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
+  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress, platform) {
     this.receiverKeypairString = receiverPrivateKey.toString();
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.connection2 = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
@@ -51,6 +51,7 @@ class BalanceChecker {
     this.messageCache = {};
     this.initialize();
     this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
+    this.platform = platform;
   }
 
   initialize() {
@@ -174,8 +175,11 @@ class BalanceChecker {
         if (solBalance < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
           message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
-          if (this.shouldSendMessage(this.chatId, message)) {
-            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          
+          if (this.platform === 'telegram') {
+            if (this.shouldSendMessage(this.chatId, message)) {
+              await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            }
           }
         }
 

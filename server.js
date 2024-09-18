@@ -72,6 +72,7 @@ app.post('/api/create', async (req, res) => {
     const contractAddress = userData.contractAddress;
     const minimumSolBalance = userData.boostCost;
     const minimumTokenBalance = userData.tokenDetails.tokenAmount;
+    const platform = userData.platform;
 
     if (userData.boostType === 'ultra_boost') {
       const contractAddress = userData.contractAddress;
@@ -92,12 +93,15 @@ app.post('/api/create', async (req, res) => {
       minimumSolBalance,
       minimumTokenBalance,
       telegramToken,
-      contractAddress
+      contractAddress,
+      platform
     );
 
     if (!userData?.distributeSolana) {
       websocket.initialize();
-      telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
+      if(platform === 'telegram'){
+        telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
+      }
       res.status(200).send('Checking balance...');
     } 
   } catch (error) {
