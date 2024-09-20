@@ -8,7 +8,7 @@ class InstanceStop {
 
     stopInstance(chatId) {
         return new Promise((resolve, reject) => {
-            const instanceName = `koynlabs-instance-${chatId}`;
+            const instanceName = `marketMaker`;
 
             this.pm2.connect((err) => {
                 if (err) {
