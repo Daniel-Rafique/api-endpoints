@@ -19,6 +19,10 @@ class InstanceStop {
 
                 this.pm2.stop(instanceName, (err) => {
                     if (err) {
+                        console.log("Stopping now", instanceName)
+                        console.log("Stopping rign now", err)
+
+
                         console.error(`Failed to stop market maker instance ${instanceName}:`, err);
                         this.pm2.disconnect();
                         reject(err);
