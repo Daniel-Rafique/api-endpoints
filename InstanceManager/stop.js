@@ -1,7 +1,7 @@
 const pm2 = require('pm2');
 const { exec } = require('child_process');
 
-class InstanceManager {
+class InstanceStop {
     constructor() {
         this.pm2 = pm2;
     }
@@ -20,17 +20,18 @@ class InstanceManager {
     stopInstance(chatId) {
         return new Promise((resolve, reject) => {
             this.connectToPM2(() => {
+                // Use chatId or specific process name/ID to stop the correct instance
                 pm2.stop("MarketMaker", (err) => {
                     if (err) {
                         console.error(`Failed to stop MarketMaker instance:`, err);
                         pm2.disconnect();
-                        reject(err);
+                        reject(err); // Reject the promise if stop fails
                         return;
                     }
 
                     console.log(`MarketMaker instance stopped successfully`);
-                    this.savePM2Config();
-                    resolve();
+                    pm2.disconnect(); // Always disconnect from PM2 after operations
+                    resolve(); // Resolve the promise
                 });
             });
         });
@@ -50,10 +51,21 @@ class InstanceManager {
                 } else {
                     console.log('PM2 startup script generated successfully');
                 }
-                pm2.disconnect();
             });
         });
     }
+
+    async stopAndSaveInstance(chatId) {
+        try {
+            // First, stop the instance
+            await this.stopInstance(chatId);
+
+            // Once the instance is stopped, save PM2 config
+            this.savePM2Config();
+        } catch (error) {
+            console.error('Error while stopping the instance and saving PM2 config:', error);
+        }
+    }
 }
 
-module.exports = InstanceManager;
+module.exports = InstanceStop;

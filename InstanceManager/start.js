@@ -1,7 +1,7 @@
 const pm2 = require('pm2');
 const { exec } = require('child_process');
 
-class InstanceManager {
+class InstanceStart {
     constructor() {
         this.pm2 = pm2;
     }
@@ -18,20 +18,25 @@ class InstanceManager {
     }
 
     startInstance(chatId) {
-        this.connectToPM2(() => {
-            pm2.start({
-                script: '~/MarketMaker/dist/index.js',
-                name: `MarketMaker`,
-                args: [chatId]
-            }, (err) => {
-                if (err) {
-                    console.error(`Failed to start market maker instance for chat ${chatId}:`, err);
-                    pm2.disconnect();
-                    return;
-                }
+        return new Promise((resolve, reject) => {
+            this.connectToPM2(() => {
+                pm2.start({
+                    script: '~/MarketMaker/dist/index.js',
+                    name: `MarketMaker`,
+                    args: [chatId]
+                }, (err) => {
+                    if (err) {
+                        console.error(`Failed to start market maker instance for chat ${chatId}:`, err);
+                        pm2.disconnect();
+                        reject(err);  // Reject the promise on failure
+                        return;
+                    }
 
-                console.log(`Market maker instance for chat ${chatId} stopped successfully`);
-                this.savePM2Config();
+                    console.log(`Market maker instance for chat ${chatId} started successfully`);
+                    this.savePM2Config();
+                    pm2.disconnect();  // Disconnect after starting the instance
+                    resolve();  // Resolve the promise on success
+                });
             });
         });
     }
@@ -43,17 +48,8 @@ class InstanceManager {
             } else {
                 console.log('PM2 process list saved successfully');
             }
-
-            exec('pm2 startup', (err, stdout, stderr) => {
-                if (err) {
-                    console.error('Failed to generate PM2 startup script:', stderr);
-                } else {
-                    console.log('PM2 startup script generated successfully');
-                }
-                pm2.disconnect();
-            });
         });
     }
 }
 
-module.exports = InstanceManager;
+module.exports = InstanceStart;
