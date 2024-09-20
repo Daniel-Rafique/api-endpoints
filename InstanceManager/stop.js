@@ -8,7 +8,7 @@ class InstanceStop {
 
     stopInstance(chatId) {
         return new Promise((resolve, reject) => {
-            const instanceName = `marketMaker`;
+            const instanceName = `MarketMaker`;
 
             this.pm2.connect((err) => {
                 if (err) {
