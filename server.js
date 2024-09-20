@@ -15,6 +15,9 @@ const crypto = require('crypto');
 const DataManager = require('./database');
 const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./Telegram');
+const StartInstance = require('./InstanceManager/start')
+const StopInstance = require('./InstanceManager/stop')
+
 
 const dataManager = new DataManager();
 
@@ -99,16 +102,107 @@ app.post('/api/create', async (req, res) => {
 
     if (!userData?.distributeSolana) {
       websocket.initialize();
-      if(platform === 'telegram'){
+      if (platform === 'telegram') {
         telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
       }
       res.status(200).send('Checking balance...');
-    } 
+    }
   } catch (error) {
     console.error('Error processing request:', error);
     if (!res.headersSent) {
       res.status(500).send('Internal Server Error');
     }
+  }
+});
+
+// Start the bot
+app.post('/api/start', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
+  }
+
+  return await StartInstance.startMarketMakerInstance(chatId)
+});
+
+// Stop the bot
+app.post('/api/stop', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
+  }
+  return await StopInstance.stopMarketMakerInstance(chatId)
+
+});
+
+app.post('/api/balance', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
+  }
+});
+
+app.post('/api/liquidate', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
+  }
+});
+
+app.post('/api/top-up', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
   }
 });
 
