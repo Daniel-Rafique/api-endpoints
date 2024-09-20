@@ -1,14 +1,14 @@
 const pm2 = require('pm2');
 
 class InstanceStop {
-    constructor(chatId) {
+    constructor() {
         this.pm2 = pm2;
         this.chatId = chatId;
     }
 
     stopInstance(chatId) {
         return new Promise((resolve, reject) => {
-            const instanceName = `MarketMaker`;
+            const instanceName = "MarketMaker";
 
             this.pm2.connect((err) => {
                 if (err) {
