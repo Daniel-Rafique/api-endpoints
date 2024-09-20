@@ -3,7 +3,6 @@ const pm2 = require('pm2');
 class InstanceStop {
     constructor() {
         this.pm2 = pm2;
-        this.chatId = chatId;
     }
 
     stopInstance(chatId) {
