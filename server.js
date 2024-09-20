@@ -151,6 +151,7 @@ app.post('/api/stop', async (req, res) => {
     console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
     return res.status(403).send('Invalid request signature');
   }
+  console.log('stopping instance', chatId)
   return await StopInstance.stopMarketMakerInstance(chatId)
 
 });

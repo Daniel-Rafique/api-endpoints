@@ -3,7 +3,7 @@ const pm2 = require('pm2');
 module.exports = {
     stopMarketMakerInstance(chatId) {
         return new Promise((resolve, reject) => {
-            const instanceName = `koynlabs-instance-${chatId}`;
+            const instanceName = `marketMaker`;
 
             pm2.connect((err) => {
                 if (err) {
