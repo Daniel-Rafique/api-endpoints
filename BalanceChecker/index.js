@@ -4,7 +4,7 @@ const bs58 = require('bs58');
 const DataManager = require('../database')
 const TelegramNotifier = require('../Telegram');
 const { formatTokenAmount } = require('../utils');
-const InstanceInitializer = require('../InstanceInitializer');
+const InstanceManager = require('../InstanceManager');
 const WebSocket = require('ws');
 
 const redis = require('redis');
@@ -37,7 +37,7 @@ class BalanceChecker {
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.telegramNotifier = new TelegramNotifier(telegramToken);
-    this.instanceInitializer = new InstanceInitializer();
+    this.instanceManager = new InstanceManager();
     this.chatId = chatId;
     this.contractAddress = contractAddress;
     this.dataManager = new DataManager(chatId);
@@ -196,7 +196,7 @@ class BalanceChecker {
         let message = '';
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
         const chatId = this.chatId;
-        this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        this.instanceManager.initializeMarketMakerInstance(chatId);
         const currentTokenBalance = tokenBalance / 1_000_000_000;
         const currentSolBalance = amountReceived / 1_000_000_000;
         const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);

@@ -13,7 +13,7 @@ const TopUp = require('../Solana/TopUp');
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const ENV_PATH = process.env.ENV_PATH;
 
-class InstanceInitializer {
+class InstanceManager {
   constructor() {
     this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
@@ -312,4 +312,4 @@ class InstanceInitializer {
   }
 }
 
-module.exports = InstanceInitializer;
+module.exports = InstanceManager;
