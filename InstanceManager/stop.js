@@ -19,7 +19,7 @@ class InstanceManager {
 
     stopInstance(chatId) {
         this.connectToPM2(() => {
-            pm2.stop(`MarketMaker`, (err) => {
+            pm2.stop("MarketMaker", (err) => {
                 if (err) {
                     console.error(`Failed to stop market maker instance for chat ${chatId}:`, err);
                     pm2.disconnect();
