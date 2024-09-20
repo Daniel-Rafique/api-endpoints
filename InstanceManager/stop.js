@@ -1,41 +1,76 @@
 const pm2 = require('pm2');
+const { exec } = require('child_process');
 
-class InstanceStop {
+class InstanceManager {
     constructor() {
         this.pm2 = pm2;
     }
 
-    stopInstance(chatId) {
-        return new Promise((resolve, reject) => {
-            const instanceName = "MarketMaker";
-            console.log("Stopping rign now", instanceName)
+    connectToPM2(callback) {
+        pm2.connect((err) => {
+            if (err) {
+                console.error('Failed to connect to PM2:', err);
+                setTimeout(() => this.connectToPM2(callback), 1000);
+                return;
+            }
+            callback();
+        });
+    }
 
-            this.pm2.connect((err) => {
+    startInstance(chatId) {
+        this.connectToPM2(() => {
+            pm2.start({
+                name: `MarketMaker`,
+                env: {
+                    NODE_ENV: 'production',
+                    CHAT_ID: chatId,
+                }
+            }, (err) => {
                 if (err) {
-                    console.error('Failed to connect to PM2:', err);
-                    reject(err);
+                    console.error(`Failed to start market maker instance for chat ${chatId}:`, err);
+                    pm2.disconnect();
                     return;
                 }
 
-                this.pm2.stop(instanceName, (err) => {
-                    if (err) {
-                        console.log("Stopping now", instanceName)
-                        console.log("Stopping rign now", err)
+                console.log(`Market maker instance for chat ${chatId} started successfully`);
+                this.savePM2Config();
+            });
+        });
+    }
 
+    stopInstance(chatId) {
+        this.connectToPM2(() => {
+            pm2.stop(`MarketMaker-${chatId}`, (err) => {
+                if (err) {
+                    console.error(`Failed to stop market maker instance for chat ${chatId}:`, err);
+                    pm2.disconnect();
+                    return;
+                }
 
-                        console.error(`Failed to stop market maker instance ${instanceName}:`, err);
-                        this.pm2.disconnect();
-                        reject(err);
-                        return;
-                    }
+                console.log(`Market maker instance for chat ${chatId} stopped successfully`);
+                this.savePM2Config();
+            });
+        });
+    }
 
-                    console.log(`Market maker instance ${instanceName} stopped successfully`);
-                    this.pm2.disconnect();
-                    resolve();
-                });
+    savePM2Config() {
+        exec('pm2 save', (err, stdout, stderr) => {
+            if (err) {
+                console.error('Failed to save PM2 process list:', stderr);
+            } else {
+                console.log('PM2 process list saved successfully');
+            }
+
+            exec('pm2 startup', (err, stdout, stderr) => {
+                if (err) {
+                    console.error('Failed to generate PM2 startup script:', stderr);
+                } else {
+                    console.log('PM2 startup script generated successfully');
+                }
+                pm2.disconnect();
             });
         });
     }
 }
 
-module.exports = InstanceStop;
+module.exports = InstanceManager;
