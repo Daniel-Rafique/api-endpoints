@@ -18,16 +18,20 @@ class InstanceManager {
     }
 
     stopInstance(chatId) {
-        this.connectToPM2(() => {
-            pm2.stop("MarketMaker", (err) => {
-                if (err) {
-                    console.error(`Failed to stop market maker instance for chat ${chatId}:`, err);
-                    pm2.disconnect();
-                    return;
-                }
+        return new Promise((resolve, reject) => {
+            this.connectToPM2(() => {
+                pm2.stop("MarketMaker", (err) => {
+                    if (err) {
+                        console.error(`Failed to stop MarketMaker instance:`, err);
+                        pm2.disconnect();
+                        reject(err);
+                        return;
+                    }
 
-                console.log(`Market maker instance for chat ${chatId} stopped successfully`);
-                this.savePM2Config();
+                    console.log(`MarketMaker instance stopped successfully`);
+                    this.savePM2Config();
+                    resolve();
+                });
             });
         });
     }
