@@ -17,21 +17,42 @@ class InstanceStop {
         });
     }
 
-    stopInstance(chatId) {
+    async stopInstance(chatId) {
         return new Promise((resolve, reject) => {
             this.connectToPM2(() => {
-                // Use chatId or specific process name/ID to stop the correct instance
-                pm2.stop("MarketMaker", (err) => {
+                // First, list all PM2 processes to ensure the process exists
+                pm2.list((err, processList) => {
                     if (err) {
-                        console.error(`Failed to stop MarketMaker instance:`, err);
+                        console.error('Failed to list PM2 processes:', err);
                         pm2.disconnect();
-                        reject(err); // Reject the promise if stop fails
+                        reject(err);
                         return;
                     }
 
-                    console.log(`MarketMaker instance stopped successfully`);
-                    pm2.disconnect(); // Always disconnect from PM2 after operations
-                    resolve(); // Resolve the promise
+                    // Find the process that matches "MarketMaker"
+                    const targetProcess = processList.find(proc => proc.name === "MarketMaker");
+
+                    if (!targetProcess) {
+                        console.error(`No MarketMaker instance found to stop for chat ${chatId}`);
+                        pm2.disconnect();
+                        reject(new Error('Process not found'));
+                        return;
+                    }
+
+                    // Now stop the instance
+                    pm2.stop("MarketMaker", (err) => {
+                        if (err) {
+                            console.error(`Failed to stop MarketMaker instance for chat ${chatId}:`, err);
+                            pm2.disconnect();
+                            reject(err);
+                            return;
+                        }
+
+                        console.log(`MarketMaker instance for chat ${chatId} stopped successfully`);
+                        this.savePM2Config();
+                        pm2.disconnect();
+                        resolve();
+                    });
                 });
             });
         });
@@ -44,27 +65,7 @@ class InstanceStop {
             } else {
                 console.log('PM2 process list saved successfully');
             }
-
-            exec('pm2 startup', (err, stdout, stderr) => {
-                if (err) {
-                    console.error('Failed to generate PM2 startup script:', stderr);
-                } else {
-                    console.log('PM2 startup script generated successfully');
-                }
-            });
         });
-    }
-
-    async stopAndSaveInstance(chatId) {
-        try {
-            // First, stop the instance
-            await this.stopInstance(chatId);
-
-            // Once the instance is stopped, save PM2 config
-            this.savePM2Config();
-        } catch (error) {
-            console.error('Error while stopping the instance and saving PM2 config:', error);
-        }
     }
 }
 
