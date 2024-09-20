@@ -17,30 +17,9 @@ class InstanceManager {
         });
     }
 
-    startInstance(chatId) {
-        this.connectToPM2(() => {
-            pm2.start({
-                name: `MarketMaker`,
-                env: {
-                    NODE_ENV: 'production',
-                    CHAT_ID: chatId,
-                }
-            }, (err) => {
-                if (err) {
-                    console.error(`Failed to start market maker instance for chat ${chatId}:`, err);
-                    pm2.disconnect();
-                    return;
-                }
-
-                console.log(`Market maker instance for chat ${chatId} started successfully`);
-                this.savePM2Config();
-            });
-        });
-    }
-
     stopInstance(chatId) {
         this.connectToPM2(() => {
-            pm2.stop(`MarketMaker-${chatId}`, (err) => {
+            pm2.stop(`MarketMaker`, (err) => {
                 if (err) {
                     console.error(`Failed to stop market maker instance for chat ${chatId}:`, err);
                     pm2.disconnect();

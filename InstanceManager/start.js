@@ -1,37 +1,59 @@
 const pm2 = require('pm2');
+const { exec } = require('child_process');
 
-class InstanceStart {
-    constructor(chatId) {
+class InstanceManager {
+    constructor() {
         this.pm2 = pm2;
-        this.chatId = chatId;
     }
 
-    startInstance() {
-        return new Promise((resolve, reject) => {
-            const instanceName = `marketMaker-${this.chatId}`;
+    connectToPM2(callback) {
+        pm2.connect((err) => {
+            if (err) {
+                console.error('Failed to connect to PM2:', err);
+                setTimeout(() => this.connectToPM2(callback), 1000);
+                return;
+            }
+            callback();
+        });
+    }
 
-            this.pm2.connect((err) => {
+    startInstance(chatId) {
+        this.connectToPM2(() => {
+            pm2.start({
+                script: '~/MarketMaker/dist/index.js',
+                name: `MarketMaker`,
+                args: [chatId]
+            }, (err) => {
                 if (err) {
-                    console.error('Failed to connect to PM2:', err);
-                    reject(err);
+                    console.error(`Failed to start market maker instance for chat ${chatId}:`, err);
+                    pm2.disconnect();
                     return;
                 }
 
-                this.pm2.start(instanceName, (err) => {
-                    if (err) {
-                        console.error(`Failed to start market maker instance ${instanceName}:`, err);
-                        this.pm2.disconnect();
-                        reject(err);
-                        return;
-                    }
+                console.log(`Market maker instance for chat ${chatId} stopped successfully`);
+                this.savePM2Config();
+            });
+        });
+    }
 
-                    console.log(`Market maker instance ${instanceName} started successfully`);
-                    this.pm2.disconnect();
-                    resolve();
-                });
+    savePM2Config() {
+        exec('pm2 save', (err, stdout, stderr) => {
+            if (err) {
+                console.error('Failed to save PM2 process list:', stderr);
+            } else {
+                console.log('PM2 process list saved successfully');
+            }
+
+            exec('pm2 startup', (err, stdout, stderr) => {
+                if (err) {
+                    console.error('Failed to generate PM2 startup script:', stderr);
+                } else {
+                    console.log('PM2 startup script generated successfully');
+                }
+                pm2.disconnect();
             });
         });
     }
 }
 
-module.exports = InstanceStart;
+module.exports = InstanceManager;
