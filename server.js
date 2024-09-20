@@ -131,7 +131,6 @@ app.post('/api/start', async (req, res) => {
     console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
     return res.status(403).send('Invalid request signature');
   }
-  const Start = require('./InstanceManager/start');
   // ... in your route handler ...
   const startInstance = new InstanceStart(chatId);
   return startInstance.startInstance(chatId);
@@ -154,7 +153,6 @@ app.post('/api/stop', async (req, res) => {
     return res.status(403).send('Invalid request signature');
   }
   console.log('stopping instance', chatId)
-  const Start = require('./InstanceManager/start');
 
   // ... in your route handler ...
   const stopInstance = new InstanceStop(chatId);
