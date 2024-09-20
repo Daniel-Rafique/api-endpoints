@@ -8,6 +8,7 @@ const { Firestore } = require('@google-cloud/firestore');
 const WalletProcessor = require('../WalletProcessor');
 const Commission = require('../Solana/Commission');
 const Distribute = require('../Solana/Distribute');
+const TopUp = require('../Solana/TopUp');
 
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const ENV_PATH = process.env.ENV_PATH;
@@ -22,10 +23,10 @@ class InstanceInitializer {
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
 
+    this.walletProcessor = new WalletProcessor();
     this.distributeSolana = new Distribute();
     this.commissionPaid = new Commission();
-
-    this.walletProcessor = new WalletProcessor();
+    this.topUp = new TopUp();
   }
 
   async initializeMarketMakerInstance(chatId) {
@@ -49,7 +50,8 @@ class InstanceInitializer {
         "CHECK_WALLETS_CREATED",
         "CHECK_COMMISSION_PAID",
         "CHECK_SOLANA_DISTRIBUTION",
-        "CHECK_INSTANCES_STARTED"
+        "CHECK_INSTANCES_STARTED",
+        "CHECK_TOPUP_STATE"
       ];
 
       for (const step of steps) {
@@ -114,12 +116,26 @@ class InstanceInitializer {
                 await this.startMarketMakerInstance(chatId, userDir);
                 await this.dataManager.updateCollection(chatIdStr, {
                   instancesStarted: true,
-                  commissionPaid: false, // Reset for future transactions
-                  distributeSolana: false // Reset for future distributions
+                  commissionPaid: true,
+                  distributeSolana: true,
+                  topUpState: false
                 });
                 console.log('Market maker instance started successfully.');
               } else {
                 console.log('Market maker instance already started.');
+              }
+              break;
+
+            case "CHECK_TOPUP_STATE":
+              if (userData.topUpState) {
+                console.log('Distributing topup...');
+                await this.topUp.handleCommission(chatId, userData);
+                await this.dataManager.updateCollection(chatIdStr, {
+                  topUpState: false
+                });
+                console.log('Market makers topped up.');
+              } else {
+                console.log('Market maker already topped up.');
               }
               break;
 
@@ -188,7 +204,7 @@ class InstanceInitializer {
     });
   }
 
-  async copyUnlinkAndAppendEnv(userDir, chatId, {contractAddress, tokenDetails ,batchSize, boostType, buyAmount, sellAmount, senderWallet }) {
+  async copyUnlinkAndAppendEnv(userDir, chatId, { contractAddress, tokenDetails, batchSize, boostType, buyAmount, sellAmount, senderWallet }) {
     const parentEnvPath = path.join(this.basePath, '.env');
     const destEnvPath = path.join(userDir, '.env');
 

@@ -60,7 +60,8 @@ class BalanceChecker {
 
   connectWebSocket() {
     const publicKeyToMention = this.receiverKeypair.publicKey.toString();
-    const commissionPaid = this.dataManager.getCollection(this.chatId).commissionPaid;
+    const balanceState = this.dataManager.getCollection(this.chatId);
+    console.log('Current Top-up state', balanceState.topUpState)
     this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
     this.ws.on('open', () => {
       console.log('WebSocket connection opened:', WEBSOCKET_ENDPOINT);
@@ -71,7 +72,7 @@ class BalanceChecker {
     this.ws.on('message', async (data) => {
       const response = JSON.parse(data);
       console.log('Received WebSocket message:', response);
-      if (response.method === 'logsNotification' && !commissionPaid) {
+      if (response.method === 'logsNotification' && (!balanceState.commissionPaid || balanceState.topUpState)) {
         const transactionSignature = response.params.result.value.signature;
         console.log(`New transaction: ${transactionSignature}`);
         if (transactionSignature) {
@@ -175,7 +176,7 @@ class BalanceChecker {
         if (solBalance < this.minimumSolBalance * 1_000_000_000) {
           console.log('Sending insufficient SOL balance message.');
           message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
-          
+
           if (this.platform === 'telegram') {
             if (this.shouldSendMessage(this.chatId, message)) {
               await this.telegramNotifier.sendTelegramMessage(this.chatId, message);

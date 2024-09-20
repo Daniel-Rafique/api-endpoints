@@ -18,6 +18,8 @@ const MESSAGES = {
   UNEXPECTED_ERROR: (message) => `\n⚠️ Unexpected error during balance check: ${message}`,
   ERROR_DURING_CHECK: (message) => `\n⚠️ Error during balance check: ${message}`,
   RETURNED_SOL_FAILURE: (balance) => `\n❌ Failed to return ${balance.toFixed(2)} SOL`,
+  TOPUP_SUCCESS: (amount) => `🎉 Top-up Successful! 🎉\nWe've received your deposit of ${amount} SOL. Your account balance has been updated.
+Current balance: [Insert updated balance here] SOL`,
 };
 
 module.exports = {
