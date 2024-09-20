@@ -15,8 +15,8 @@ const crypto = require('crypto');
 const DataManager = require('./database');
 const BalanceChecker = require('./BalanceChecker');
 const TelegramNotifier = require('./Telegram');
-const StartInstance = require('./InstanceManager/start')
-const StopInstance = require('./InstanceManager/stop')
+const InstanceStart = require('./InstanceManager/start')
+const InstanceStop = require('./InstanceManager/stop')
 
 
 const dataManager = new DataManager();
@@ -131,8 +131,10 @@ app.post('/api/start', async (req, res) => {
     console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
     return res.status(403).send('Invalid request signature');
   }
-
-  return await StartInstance.startMarketMakerInstance(chatId)
+  const Start = require('./InstanceManager/start');
+  // ... in your route handler ...
+  const startInstance = new InstanceStart(chatId);
+  return startInstance.startInstance(chatId);
 });
 
 // Stop the bot
@@ -152,7 +154,11 @@ app.post('/api/stop', async (req, res) => {
     return res.status(403).send('Invalid request signature');
   }
   console.log('stopping instance', chatId)
-  return await StopInstance.stopMarketMakerInstance(chatId)
+  const Start = require('./InstanceManager/start');
+
+  // ... in your route handler ...
+  const stopInstance = new InstanceStop(chatId);
+  return stopInstance.stopInstance(chatId);
 
 });
 

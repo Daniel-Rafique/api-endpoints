@@ -1,30 +1,37 @@
 const pm2 = require('pm2');
 
-module.exports = {
-    startMarketMakerInstance(chatId) {
-        return new Promise((resolve, reject) => {
-            const instanceName = `koynlabs-instance-${chatId}`;
+class InstanceStart {
+    constructor(chatId) {
+        this.pm2 = pm2;
+        this.chatId = chatId;
+    }
 
-            pm2.connect((err) => {
+    startInstance() {
+        return new Promise((resolve, reject) => {
+            const instanceName = `marketMaker-${this.chatId}`;
+
+            this.pm2.connect((err) => {
                 if (err) {
                     console.error('Failed to connect to PM2:', err);
                     reject(err);
                     return;
                 }
 
-                pm2.start(instanceName, (err) => {
+                this.pm2.start(instanceName, (err) => {
                     if (err) {
-                        console.error(`Failed to stop market maker instance ${instanceName}:`, err);
-                        pm2.disconnect();
+                        console.error(`Failed to start market maker instance ${instanceName}:`, err);
+                        this.pm2.disconnect();
                         reject(err);
                         return;
                     }
 
-                    console.log(`Market maker instance ${instanceName} stopped successfully`);
-                    pm2.disconnect();
+                    console.log(`Market maker instance ${instanceName} started successfully`);
+                    this.pm2.disconnect();
                     resolve();
                 });
             });
         });
     }
-};
+}
+
+module.exports = InstanceStart;
