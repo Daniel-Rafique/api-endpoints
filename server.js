@@ -133,6 +133,7 @@ app.post('/api/start', async (req, res) => {
   }
   // ... in your route handler ...
   const startInstance = new InstanceStart(chatId);
+  console.log('Endpoint for start instance', chatId)
   return startInstance.startInstance(chatId);
 });
 
