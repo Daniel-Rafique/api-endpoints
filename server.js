@@ -131,10 +131,16 @@ app.post('/api/start', async (req, res) => {
     console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
     return res.status(403).send('Invalid request signature');
   }
-  // ... in your route handler ...
-  const startInstance = new InstanceStart(chatId);
-  console.log('Endpoint for start instance', chatId)
-  return startInstance.startInstance(chatId);
+
+  try {
+    const startInstance = new InstanceStart(chatId);
+    console.log('Endpoint for start instance', chatId);
+    await startInstance.startInstance(chatId);
+    res.status(200).send('Instance started successfully');
+  } catch (error) {
+    console.error('Error starting instance:', error);
+    res.status(500).send('Internal Server Error');
+  }
 });
 
 // Stop the bot
