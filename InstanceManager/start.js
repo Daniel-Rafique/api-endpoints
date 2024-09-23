@@ -20,6 +20,7 @@ class InstanceStart {
     startInstance(chatId) {
         return new Promise((resolve, reject) => {
             this.connectToPM2(() => {
+                console.log('Starting instance', chatId)
                 pm2.start({
                     script: '~/devnet-api/MarketMaker/dist/index.js',
                     name: `MarketMaker`,
