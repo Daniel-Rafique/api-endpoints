@@ -204,97 +204,92 @@ class InstanceManager {
     });
   }
 
-  async copyUnlinkAndAppendEnv(userDir, chatId, { contractAddress, tokenDetails, batchSize, boostType, buyAmount, sellAmount, senderWallet, tradeSettings }) {
+  async copyUnlinkAndAppendEnv(userDir, chatId, userData) {
     const parentEnvPath = path.join(this.basePath, '.env');
     const destEnvPath = path.join(userDir, '.env');
 
-    // Ensure the original .env file is never modified
     if (fs.existsSync(parentEnvPath)) {
       console.log(`Parent .env file found at ${parentEnvPath}`);
-      // Step 1: Copy the parent .env file to /root/devnet-api/instances/{chatId}/.env
+
       if (!fs.existsSync(destEnvPath)) {
         console.log(`Copying parent .env file to ${destEnvPath}`);
         fs.copyFileSync(parentEnvPath, destEnvPath);
-        console.log(`Copied parent .env file to ${destEnvPath}`);
-      } else {
-        console.log(`.env file already exists at ${destEnvPath}, skipping copy.`);
       }
 
-      // Step 2: Unlink the .env file from the parent directory if it's a symlink
       try {
         if (fs.existsSync(destEnvPath) && fs.lstatSync(destEnvPath).isSymbolicLink()) {
-          fs.unlinkSync(destEnvPath);  // Remove the symlink
-          console.log(`Removed symlink to .env at ${destEnvPath}`);
-          // Re-copy the parent .env file after unlinking
+          fs.unlinkSync(destEnvPath);
           fs.copyFileSync(parentEnvPath, destEnvPath);
-          console.log(`Re-copied parent .env file to ${destEnvPath} after unlinking`);
-        } else {
-          console.log(`.env at ${destEnvPath} is not a symlink.`);
         }
       } catch (error) {
         console.error(`Failed to unlink .env at ${destEnvPath}:`, error);
       }
 
-      // Step 3: Append new parameters to the copied .env file
-      const solAmount = tradeSettings.amount ? tradeSettings.amount : buyAmount;
-      const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nTOKEN_DECIMALS=${tokenDetails.decimals}\nTOKEN_SYMBOL=${tokenDetails.symbol}\nBATCH_SIZE=${batchSize}\nBOOST_TYPE=${boostType}\nBUY_AMOUNT=${solAmount}\nSELL_AMOUNT=${sellAmount}\nSENDER_WALLET=${senderWallet}\n`;
+      // Add sol_spl trade type and other parameters
+      const solAmount = userData.tradeSettings?.amount || userData.buyAmount;
+      const envContent = `
+CHAT_ID=${chatId}
+TRADE_TYPE=sol_spl
+CONTRACT_ADDRESS=${userData.contractAddress}
+TOKEN_DECIMALS=${userData.tokenDetails.decimals}
+TOKEN_SYMBOL=${userData.tokenDetails.symbol}
+BATCH_SIZE=${userData.batchSize}
+BOOST_TYPE=${userData.boostType}
+BUY_AMOUNT=${solAmount}
+SELL_AMOUNT=${userData.sellAmount}
+SENDER_WALLET=${userData.senderWallet}
+`;
       fs.appendFileSync(destEnvPath, envContent);
-      console.log(`Appended new parameters to ${destEnvPath}`);
-      // Step 4. Update the firestore flag to indicate that the instance has been created.
+      console.log(`Appended sol_spl configuration to ${destEnvPath}`);
     } else {
-      console.warn(`No parent .env file found at ${parentEnvPath}.`);
       throw new Error('Parent .env file not found');
     }
   }
 
   async startMarketMakerInstance(chatId, userDir) {
-    const instanceName = `koynlabs-instance-${chatId}`;
-    console.log(`Starting market maker instance ${instanceName}...`);
-    const connectToPM2 = (callback) => {
+    const instanceName = `market-maker-${chatId}`;
+    console.log(`Starting sol_spl market maker instance ${instanceName}...`);
+
+    return new Promise((resolve, reject) => {
       pm2.connect((err) => {
         if (err) {
           console.error('Failed to connect to PM2:', err);
-          setTimeout(() => connectToPM2(callback), 1000);
-          throw new Error('Failed to connect to PM2');
-        }
-        callback();
-      });
-    };
-
-    connectToPM2(() => {
-      pm2.start({
-        script: path.join(userDir, 'dist', 'index.js'),
-        name: instanceName,
-        cwd: userDir,
-        env: {
-          NODE_ENV: 'production',
-          CHAT_ID: chatId,
-        }
-      }, (err) => {
-        if (err) {
-          console.error(`Failed to start market maker instance ${instanceName}:`, err);
-          pm2.disconnect();
+          reject(new Error('Failed to connect to PM2'));
+          return;
         }
 
-        console.log(`Market maker instance ${instanceName} started successfully`);
-
-        exec('pm2 save', (err, stdout, stderr) => {
+        pm2.start({
+          script: path.join(userDir, 'dist', 'index.js'),
+          name: instanceName,
+          cwd: userDir,
+          env: {
+            NODE_ENV: 'production',
+            CHAT_ID: chatId,
+            TRADE_TYPE: 'sol_spl'
+          },
+          watch: ['dist'],
+          ignore_watch: ['node_modules', '*.log'],
+          autorestart: true,
+          max_memory_restart: '1G'
+        }, async (err) => {
           if (err) {
-            console.error('Failed to save PM2 process list:', stderr);
+            console.error(`Failed to start market maker instance ${instanceName}:`, err);
             pm2.disconnect();
+            reject(err);
+            return;
           }
 
-          console.log('PM2 process list saved successfully');
-
-          exec('pm2 startup', (err, stdout, stderr) => {
-            if (err) {
-              console.error('Failed to generate PM2 startup script:', stderr);
-            } else {
-              console.log('PM2 startup script generated successfully');
-              return true;
-            }
+          try {
+            await this.runCommand('pm2 save');
+            await this.runCommand('pm2 startup');
+            console.log(`Market maker instance ${instanceName} started and saved successfully`);
+            resolve(true);
+          } catch (error) {
+            console.error('Failed to save PM2 configuration:', error);
+            reject(error);
+          } finally {
             pm2.disconnect();
-          });
+          }
         });
       });
     });

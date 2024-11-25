@@ -7,6 +7,7 @@ const bs58 = require('bs58');
 const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
 const { Firestore } = require('@google-cloud/firestore');
+const Discord = require('../Discord');
 
 const redis = require('redis');
 const client = redis.createClient();
@@ -32,141 +33,168 @@ class InsufficientBalanceError extends Error {
 
 class Distribute {
   constructor(chatId) {
-    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.chatId = chatId;
+    this.connection = new Connection(SOLANA_RPC_ENDPOINT, {
+      commitment: 'confirmed',
+      confirmTransactionInitialTimeout: 60000,
+      wsEndpoint: process.env.SOLANA_WEBSOCKET
+    });
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
-    this.messageCache = {}; // Initialize cache for messages
+    this.discordNotifier = new Discord();
+    this.messageCache = new Map();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
-      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'), // Corrected path
+      keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
   }
 
+  async sendNotification(userData, message) {
+    try {
+      if (userData.platform === 'discord') {
+        await this.discordNotifier.sendMessage(this.chatId, message);
+      } else {
+        await this.telegramNotifier.sendMessage(this.chatId, message);
+      }
+    } catch (error) {
+      console.error(`Failed to send notification: ${error.message}`);
+    }
+  }
+
   async distributeSolana(chatId, userData) {
+    if (!chatId || !userData) {
+      throw new Error('Missing required parameters');
+    }
 
     const { batchSize, makers, userKeypair } = userData;
     const retryLimit = 3;
     let attempt = 0;
+
     const updatedBalance = await this.connection.getBalance(userKeypair.publicKey);
+    console.log(`Initial balance: ${updatedBalance / 1e9} SOL`);
+
+    if (updatedBalance <= 0) {
+      throw new InsufficientBalanceError('Insufficient balance in sender wallet');
+    }
 
     while (attempt < retryLimit) {
       try {
         const senderKeypair = Keypair.fromSecretKey(bs58.decode(userKeypair.privateKey));
-
-        console.log(`checking balance: ${updatedBalance}`);
-
-        if (updatedBalance <= 0) {
-          throw new InsufficientBalanceError('Insufficient balance in sender wallet');
-        }
-
         const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
-        console.log(`Found wallets.json: ${filePath}`);
-        await this.waitForFile(filePath);
+
+        await this.waitForFile(filePath, 30000);
+
         const fileContent = await fs.readFile(filePath, 'utf8');
         const newWallets = JSON.parse(fileContent);
 
-        const amountPerWallet = Math.floor(updatedBalance / makers);
-
-        console.log(`Calculating amount per wallet: ${amountPerWallet}`);
-
-        if (isNaN(amountPerWallet) || amountPerWallet <= 0) {
-          throw new InsufficientBalanceError('Insufficient balance to distribute SOL.');
+        if (newWallets.length > 1000) {
+          throw new Error('Maximum wallet limit exceeded (1000)');
         }
 
-        // Process in chunks to avoid memory overload
-        console.log(`Calculating batches: ${batchSize}`);
+        const amountPerWallet = Math.floor(updatedBalance / makers);
+        console.log(`Amount per wallet: ${amountPerWallet / 1e9} SOL`);
 
+        if (amountPerWallet < 1000000) {
+          throw new InsufficientBalanceError('Amount per wallet too low');
+        }
+
+        const totalBatches = Math.ceil(newWallets.length / batchSize);
         for (let i = 0; i < newWallets.length; i += batchSize) {
-          const chunk = newWallets.slice(i, i + batchSize);
+          const currentBatch = Math.floor(i / batchSize) + 1;
+          console.log(`Processing batch ${currentBatch}/${totalBatches}`);
 
+          const chunk = newWallets.slice(i, i + batchSize);
           const dropList = chunk.map(wallet => ({
             walletAddress: wallet.publicKey,
             numLamports: amountPerWallet,
           }));
 
           const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
-          console.log(`Transaction list generated: ${transactionList}`);
+          const results = await this.executeTransactions(transactionList, senderKeypair, userData);
 
-          await this.executeTransactions(transactionList, senderKeypair, userData);
-
-          console.log(`Processed chunk ${i + 1} to ${i + chunk} of ${Math.round(newWallets.length)}`);
+          this.logTransactionResults(results, currentBatch, userData);
         }
 
+        console.log('Distribution completed successfully');
+        await this.sendNotification(
+          userData,
+          `✅ Distribution completed successfully\n` +
+          `Total wallets: ${newWallets.length}\n` +
+          `Amount per wallet: ${amountPerWallet / 1e9} SOL`
+        );
+
+        return true;
+
       } catch (error) {
-        console.error(`Attempt ${attempt + 1} failed during distribution:`, error.message);
-        if (attempt === retryLimit - 1) throw error; // If it's the last attempt, throw the error
+        console.error(`Attempt ${attempt + 1} failed:`, error);
+        if (attempt === retryLimit - 1) throw error;
+        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
       }
       attempt++;
     }
   }
 
-
-  // Wait for the file to exist
-  async waitForFile(filePath) {
+  async waitForFile(filePath, timeout) {
+    const startTime = Date.now();
     while (true) {
+      if (Date.now() - startTime > timeout) {
+        throw new Error(`Timeout waiting for file: ${filePath}`);
+      }
       try {
         await fs.access(filePath);
-        break; // File exists, break out of loop
+        return;
       } catch (err) {
-        console.log(`Waiting for file to be created: ${filePath}`);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
   }
 
   generateTransactions(dropList, fromWallet, userData) {
-    console.log(`Generating transactions for ${dropList.length} wallets`);
+    if (!dropList?.length || !fromWallet || !userData?.makers) {
+      throw new Error('Invalid parameters for transaction generation');
+    }
 
     const transactions = [];
-    const txInstructions = dropList.map(drop =>
-      SystemProgram.transfer({
-        fromPubkey: fromWallet,
-        toPubkey: new PublicKey(drop.walletAddress),
-        lamports: drop.numLamports,
-      })
-    );
+    const txInstructions = dropList.map(drop => {
+      try {
+        return SystemProgram.transfer({
+          fromPubkey: fromWallet,
+          toPubkey: new PublicKey(drop.walletAddress),
+          lamports: drop.numLamports,
+        });
+      } catch (error) {
+        console.error(`Invalid wallet address: ${drop.walletAddress}`);
+        throw error;
+      }
+    });
 
-    // Ensure batchSize is a positive number and doesn't result in 0
     const batchSize = Math.max(1, Math.floor(txInstructions.length / userData.makers));
     const numTransactions = Math.ceil(txInstructions.length / batchSize);
 
-    console.log(`Batch size: ${batchSize}, Number of transactions: ${numTransactions}`);
-
     for (let i = 0; i < numTransactions; i++) {
       const transaction = new Transaction();
-      const lowerIndex = i * batchSize;
-      const upperIndex = Math.min((i + 1) * batchSize, txInstructions.length);
-      for (let j = lowerIndex; j < upperIndex; j++) {
-        if (txInstructions[j]) transaction.add(txInstructions[j]);
-      }
+      const batch = txInstructions.slice(i * batchSize, (i + 1) * batchSize);
+      batch.forEach(instruction => transaction.add(instruction));
       transactions.push(transaction);
     }
 
     return transactions;
   }
 
+  async logTransactionResults(results, batchNumber, userData) {
+    const successful = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
 
-  async executeTransactions(transactionList, payer, userData) {
-    console.log(`Executing transactions: ${transactionList}`);
-    const results = [];
-    const staggeredTransactions = transactionList.map((transaction, i) => {
-      return new Promise((resolve) => {
-        setTimeout(async () => {
-          try {
-            console.log(`Requesting Transaction ${i + 1}/${userData.makers}`);
-            const { blockhash } = await this.connection.getLatestBlockhash();
-            transaction.recentBlockhash = blockhash;
-            const signature = await sendAndConfirmTransaction(this.connection, transaction, [payer]);
-            resolve({ status: 'fulfilled', signature });
-          } catch (error) {
-            resolve({ status: 'rejected', reason: error.message });
-          }
-        }, i * TX_INTERVAL);
-      });
-    });
+    const message = `Batch ${batchNumber} results: ` +
+      `✅ ${successful} successful, ❌ ${failed} failed`;
 
-    results.push(...await Promise.allSettled(staggeredTransactions));
-    return results;
+    console.log(message);
+    await this.sendNotification(userData, message);
+
+    if (failed > 0) {
+      results
+        .filter(r => r.status === 'rejected')
+        .forEach((r, i) => console.error(`Transaction ${i} failed:`, r.reason));
+    }
   }
 }
 
