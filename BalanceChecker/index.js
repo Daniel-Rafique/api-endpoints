@@ -126,7 +126,7 @@ class BalanceChecker {
         if (!this.isConnected) {
           await this.connectToBitquery();
         }
-
+        // TODO check that we can retrive send token balance
         return await new Promise((resolve, reject) => {
           const query = `
 subscription{
