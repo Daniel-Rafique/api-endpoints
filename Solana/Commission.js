@@ -25,8 +25,8 @@ class Send {
   }
 
   async sendToCommissionWallet(userData) {
-    const { walletPk } = userData;
-    const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
+    const { userKeypair } = userData;
+    const senderKeypair = Keypair.fromSecretKey(bs58.decode(userKeypair.privateKey));
 
     try {
       const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
