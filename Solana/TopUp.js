@@ -36,7 +36,7 @@ class Solana {
 
   // Function to handle commission payment
   async handleCommission(chatId, userData) {
-    const { walletPk, commissionPaid, walletsCreated, topUpState } = userData;
+    const { userKeypair, commissionPaid, walletsCreated, topUpState } = userData;
 
     if (walletsCreated && (!commissionPaid || topUpState)) {
       try {
@@ -47,17 +47,16 @@ class Solana {
         console.error('Error sending commission:', error);
       }
     } else {
-      const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
-      const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
+      const updatedBalance = await this.connection.getBalance(userKeypair.publicKey);
       console.log('Commission already paid. Current balance:', updatedBalance);
     }
   }
 
   // Function to handle Solana distribution
   async handleDistribution(chatId, userData) {
-    const { commissionPaid, distributeSolana, walletPk, topUpState } = userData;
+    const { commissionPaid, distributeSolana, userKeypair, topUpState } = userData;
 
-    const senderKeypair = Keypair.fromSecretKey(bs58.decode(walletPk));
+    const senderKeypair = Keypair.fromSecretKey(bs58.decode(userKeypair.privateKey));
     const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
     console.log(`Starting distribution, userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);

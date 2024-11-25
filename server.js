@@ -2,6 +2,30 @@ require('dotenv').config();
 // Initialize Firebase Admin with service account
 const admin = require('firebase-admin');
 const serviceAccount = require('./.config/firebaseServiceAccountKey.json');
+const { REST } = require('@discordjs/rest');
+const { Routes } = require('discord-api-types/v10');
+
+// Initialize Discord REST client
+const discordToken = process.env.DISCORD_TOKEN;
+const rest = new REST({ version: '10' }).setToken(discordToken);
+
+// Function to send Discord follow-up messages
+async function sendFollowUp(applicationId, interactionToken, content) {
+  try {
+    await rest.post(
+      Routes.webhookMessage(applicationId, interactionToken),
+      {
+        body: {
+          content,
+          flags: 64 // Ephemeral flag, if you want the message to be private
+        }
+      }
+    );
+  } catch (error) {
+    console.error('Error sending Discord follow-up:', error);
+    throw error;
+  }
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -72,38 +96,73 @@ app.post('/api/create', async (req, res) => {
       return res.status(404).send('User data not found');
     }
 
-    const contractAddress = userData.contractAddress;
+    const mintAddress = userData.contractAddress;
     const minimumSolBalance = userData.boostCost;
     const minimumTokenBalance = userData.tokenDetails.tokenAmount;
     const platform = userData.platform;
 
-    if (userData.boostType === 'ultra_boost') {
-      const contractAddress = userData.contractAddress;
-    } else {
-      const tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
-    }
-
-    // Start the periodic check
-    let receiverPrivateKey = userData.walletPk;
+    let receiverPrivateKey = userData.userKeypair.privateKey;
     receiverPrivateKey = receiverPrivateKey.toString();
 
     if (typeof receiverPrivateKey !== 'string') {
       throw new TypeError('Receiver private key must be a string');
     }
-    const websocket = new BalanceChecker(
+
+    // Start the periodic check
+    const balance = new BalanceChecker(
       chatId,
       receiverPrivateKey,
       minimumSolBalance,
       minimumTokenBalance,
       telegramToken,
-      contractAddress,
+      mintAddress,
       platform
     );
 
     if (!userData?.distributeSolana) {
-      websocket.initialize();
+      balance.getBalance();
+
+      // Send platform-specific notifications
       if (platform === 'telegram') {
-        telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
+        await telegramNotifier.sendTelegramMessage(
+          chatId,
+          `🤖 *Market Maker Mode Activated*\n` +
+          `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
+          `💰 Required Balance: ${minimumSolBalance} SOL\n` +
+          `🔍 Status: Waiting for confirmation...`
+        );
+      } else if (platform === 'discord') {
+        try {
+          // Check if we have valid Discord credentials
+          if (!userData.applicationId || !userData.interactionToken) {
+            console.error('Missing Discord interaction details for user:', chatId);
+            return res.status(400).send('Missing Discord interaction details');
+          }
+
+          // Check if this is market maker mode
+          if (userData.mode === 'market_maker' ||
+            userData.mode === 'catalyst' ||
+            userData.mode === 'compound' ||
+            userData.mode === 'velocity') {
+            await sendFollowUp(
+              userData.applicationId,
+              userData.interactionToken,
+              `🤖 **Market Maker Mode Activated**\n` +
+              `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
+              `💰 Required Balance: ${minimumSolBalance} SOL\n` +
+              `🔍 Status: Waiting for confirmation...`
+            );
+          } else {
+            await sendFollowUp(
+              userData.applicationId,
+              userData.interactionToken,
+              `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`
+            );
+          }
+        } catch (discordError) {
+          console.error('Discord notification error:', discordError);
+          // Continue execution even if Discord notification fails
+        }
       }
       res.status(200).send('Checking balance...');
     }

@@ -204,7 +204,7 @@ class InstanceManager {
     });
   }
 
-  async copyUnlinkAndAppendEnv(userDir, chatId, { contractAddress, tokenDetails, batchSize, boostType, buyAmount, sellAmount, senderWallet }) {
+  async copyUnlinkAndAppendEnv(userDir, chatId, { contractAddress, tokenDetails, batchSize, boostType, buyAmount, sellAmount, senderWallet, tradeSettings }) {
     const parentEnvPath = path.join(this.basePath, '.env');
     const destEnvPath = path.join(userDir, '.env');
 
@@ -236,7 +236,8 @@ class InstanceManager {
       }
 
       // Step 3: Append new parameters to the copied .env file
-      const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nTOKEN_DECIMALS=${tokenDetails.decimals}\nTOKEN_SYMBOL=${tokenDetails.symbol}\nBATCH_SIZE=${batchSize}\nBOOST_TYPE=${boostType}\nBUY_AMOUNT=${buyAmount}\nSELL_AMOUNT=${sellAmount}\nSENDER_WALLET=${senderWallet}\n`;
+      const solAmount = tradeSettings.amount ? tradeSettings.amount : buyAmount;
+      const envContent = `\nCHAT_ID=${chatId}\nCONTRACT_ADDRESS=${contractAddress}\nTOKEN_DECIMALS=${tokenDetails.decimals}\nTOKEN_SYMBOL=${tokenDetails.symbol}\nBATCH_SIZE=${batchSize}\nBOOST_TYPE=${boostType}\nBUY_AMOUNT=${solAmount}\nSELL_AMOUNT=${sellAmount}\nSENDER_WALLET=${senderWallet}\n`;
       fs.appendFileSync(destEnvPath, envContent);
       console.log(`Appended new parameters to ${destEnvPath}`);
       // Step 4. Update the firestore flag to indicate that the instance has been created.
