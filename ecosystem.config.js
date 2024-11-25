@@ -3,7 +3,7 @@ module.exports = {
         {
             name: 'copytrade',
             script: './dist/index.js',
-            cwd: '~/devnet-api/instances/copytrade',
+            cwd: '/root/devnet-api/instances/copytrade',
             env: {
                 NODE_ENV: 'production',
                 STRATEGY: 'copytrade',
@@ -17,7 +17,7 @@ module.exports = {
         {
             name: 'pumpfun',
             script: './dist/index.js',
-            cwd: '~/devnet-api/instances/pumpfun',
+            cwd: '/root/devnet-api/instances/pumpfun',
             env: {
                 NODE_ENV: 'production',
                 STRATEGY: 'pumpfun',
@@ -31,7 +31,7 @@ module.exports = {
         {
             name: 'moonshot',
             script: './dist/index.js',
-            cwd: '~/devnet-api/instances/moonshot',
+            cwd: '/root/devnet-api/instances/moonshot',
             env: {
                 NODE_ENV: 'production',
                 STRATEGY: 'moonshot',
@@ -45,7 +45,7 @@ module.exports = {
         {
             name: 'raydium',
             script: './dist/index.js',
-            cwd: '~/devnet-api/instances/raydium',
+            cwd: '/root/devnet-api/instances/raydium',
             env: {
                 NODE_ENV: 'production',
                 STRATEGY: 'raydium',
@@ -59,7 +59,7 @@ module.exports = {
         {
             name: 'sniper',
             script: './dist/index.js',
-            cwd: '~/devnet-api/instances/sniper',
+            cwd: '/root/devnet-api/instances/sniper',
             env: {
                 NODE_ENV: 'production',
                 STRATEGY: 'sniper',
@@ -73,7 +73,7 @@ module.exports = {
         {
             name: 'sol_spl',
             script: './dist/index.js',
-            cwd: '~/devnet-api/instances/sol_spl',
+            cwd: '/root/devnet-api/instances/sol_spl',
             env: {
                 NODE_ENV: 'production',
                 STRATEGY: 'sol_spl',
@@ -87,7 +87,7 @@ module.exports = {
         {
             name: 'usdc_spl',
             script: './dist/index.js',
-            cwd: '~/devnet-api/instances/usdc_spl',
+            cwd: '/root/devnet-api/instances/usdc_spl',
             env: {
                 NODE_ENV: 'production',
                 STRATEGY: 'usdc_spl',
