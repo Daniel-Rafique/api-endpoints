@@ -2,30 +2,6 @@ require('dotenv').config();
 // Initialize Firebase Admin with service account
 const admin = require('firebase-admin');
 const serviceAccount = require('./.config/firebaseServiceAccountKey.json');
-const { REST } = require('@discordjs/rest');
-const { Routes } = require('discord-api-types/v10');
-
-// Initialize Discord REST client
-const discordToken = process.env.DISCORD_TOKEN;
-const rest = new REST({ version: '10' }).setToken(discordToken);
-
-// Function to send Discord follow-up messages
-async function sendFollowUp(applicationId, interactionToken, content) {
-  try {
-    await rest.post(
-      Routes.webhookMessage(applicationId, interactionToken),
-      {
-        body: {
-          content,
-          flags: 64 // Ephemeral flag, if you want the message to be private
-        }
-      }
-    );
-  } catch (error) {
-    console.error('Error sending Discord follow-up:', error);
-    throw error;
-  }
-}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -38,6 +14,7 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const DataManager = require('./database');
 const BalanceChecker = require('./BalanceChecker');
+const DiscordNotifier = require('./Discord');
 const TelegramNotifier = require('./Telegram');
 const InstanceStart = require('./InstanceManager/start')
 const InstanceStop = require('./InstanceManager/stop')
@@ -68,6 +45,10 @@ function generateHash(chatId, timestamp) {
   const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
+
+// Initialize DiscordNotifier
+const discordToken = process.env.DISCORD_TOKEN;
+const discordNotifier = new DiscordNotifier(discordToken);
 
 // Initialize TelegramNotifier
 const telegramToken = process.env.TELEGRAM_TOKEN;
@@ -139,12 +120,27 @@ app.post('/api/create', async (req, res) => {
             return res.status(400).send('Missing Discord interaction details');
           }
 
+          await discordNotifier.sendDiscordMessage(
+            userData.applicationId,
+            userData.interactionToken,
+            `🔐 **Your Wallet Details**\n\n` +
+            `**Public Key (Your Deposit Address):**\n` +
+            `\`${userData.userKeypair.publicKey.toString()}\`\n\n` +
+            `⚠️ **IMPORTANT:**\n` +
+            `Your private key is sensitive. Click the button below to reveal it.\n\n` +
+            `💡 **Next Steps:**\n` +
+            `1. Save your wallet details securely\n` +
+            `2. Make your minimum deposit to the public key address above\n` +
+            `3. Once confirmed, your bot will start automatically\n\n` +
+            `Need help? Contact @koynlabs`
+          );
+
           // Check if this is market maker mode
           if (userData.mode === 'market_maker' ||
             userData.mode === 'catalyst' ||
             userData.mode === 'compound' ||
             userData.mode === 'velocity') {
-            await sendFollowUp(
+            await discordNotifier.sendDiscordMessage(
               userData.applicationId,
               userData.interactionToken,
               `🤖 **Market Maker Mode Activated**\n` +
@@ -153,7 +149,7 @@ app.post('/api/create', async (req, res) => {
               `🔍 Status: Waiting for confirmation...`
             );
           } else {
-            await sendFollowUp(
+            await discordNotifier.sendDiscordMessage(
               userData.applicationId,
               userData.interactionToken,
               `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`
@@ -162,9 +158,10 @@ app.post('/api/create', async (req, res) => {
         } catch (discordError) {
           console.error('Discord notification error:', discordError);
           // Continue execution even if Discord notification fails
+          res.status(200).send('🔍 Checking balance...');
         }
       }
-      res.status(200).send('Checking balance...');
+      res.status(200).send('🔍 Checking balance...');
     }
   } catch (error) {
     console.error('Error processing request:', error);
