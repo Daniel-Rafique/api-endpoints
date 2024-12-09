@@ -12,3 +12,5 @@ tests/mockWebSocketServer.js
 tests/dockerTest.js
 utils/clearQeue.js
 .DS_Store
+copyInstance.sh
+ecosystem.config.js
