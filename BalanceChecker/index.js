@@ -2,6 +2,7 @@ const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfi
 const { AccountLayout, u64 } = require('@solana/spl-token');
 const bs58 = require('bs58');
 const DataManager = require('../database')
+const DiscordNotifier = require('../Discord');
 const TelegramNotifier = require('../Telegram');
 const { formatTokenAmount } = require('../utils');
 const InstanceManager = require('../InstanceManager');
@@ -33,6 +34,7 @@ class BalanceChecker {
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
+    this.discordNotifier = new DiscordNotifier(discordToken);
     this.telegramNotifier = new TelegramNotifier(telegramToken);
     this.instanceManager = new InstanceManager();
     this.chatId = chatId;
@@ -290,7 +292,7 @@ subscription{
           } else if (this.platform === 'discord') {
             const userData = await this.dataManager.getCollection(this.chatId);
             if (userData?.applicationId && userData?.interactionToken) {
-              await this.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
+              await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
             }
           }
         }
@@ -312,7 +314,7 @@ subscription{
         } else if (this.platform === 'discord') {
           const userData = await this.dataManager.getCollection(this.chatId);
           if (userData?.applicationId && userData?.interactionToken) {
-            await this.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
+            await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
           }
         }
       }
@@ -325,7 +327,7 @@ subscription{
       } else if (this.platform === 'discord') {
         const userData = await this.dataManager.getCollection(this.chatId);
         if (userData?.applicationId && userData?.interactionToken) {
-          await this.sendDiscordMessage(userData.applicationId, userData.interactionToken, errorMessage);
+          await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, errorMessage);
         }
       }
     }
@@ -370,7 +372,7 @@ subscription{
           } else if (this.platform === 'discord') {
             const userData = await this.dataManager.getCollection(this.chatId);
             if (userData?.applicationId && userData?.interactionToken && signature) {
-              await this.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
+              await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
             }
           }
 
@@ -409,7 +411,7 @@ subscription{
       } else if (this.platform === 'discord') {
         const userData = await this.dataManager.getCollection(this.chatId);
         if (userData?.applicationId && userData?.interactionToken) {
-          await this.sendDiscordMessage(userData.applicationId, userData.interactionToken, errorMessage);
+          await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, errorMessage);
         }
       }
     }
