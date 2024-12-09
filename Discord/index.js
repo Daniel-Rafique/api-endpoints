@@ -1,3 +1,35 @@
+const axios = require('axios');
+
+class Discord {
+    constructor(discordToken) {
+        this.discordApiUrl = 'https://discord.com/api/v10/webhooks';
+        this.discordToken = discordToken;
+    }
+
+    async sendDiscordMessage(applicationId, interactionToken, content, options = {}) {
+        const url = `${this.discordApiUrl}/${applicationId}/${interactionToken}/messages/@original`;
+
+        try {
+            const payload = {
+                content,
+                ...options,
+                components: formatDiscordComponents(options.components),
+                embeds: formatDiscordEmbeds(options.embeds)
+            };
+
+            await axios.patch(url, payload, {
+                headers: {
+                    'Authorization': `Bot ${this.discordToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+        } catch (error) {
+            console.error('Error sending Discord message:', error);
+            throw error;
+        }
+    }
+}
+
 const formatDiscordComponents = (components) => {
     if (!components) return [];
 
@@ -69,44 +101,5 @@ const formatDiscordMessage = (content) => {
         allowed_mentions: content.allowed_mentions || { parse: [] }
     };
 };
+module.exports = Discord;
 
-const sendDiscordMessage = async (interaction, content) => {
-    try {
-        if (!interaction?.token || !'1286051782073647185') {
-            console.error('Missing required Discord credentials');
-            throw new Error('Missing required Discord credentials');
-        }
-
-        const messagePayload = formatDiscordMessage(content);
-
-        // Debug log before sending
-        console.log('Sending formatted message payload:', JSON.stringify(messagePayload, null, 2));
-
-        const webhookUrl = `https://discord.com/api/v10/webhooks/1286051782073647185/${interaction.token}`;
-
-        const response = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-                'User-Agent': 'DiscordBot (https://github.com/koynlabs/market-maker, 1.0.0)'
-            },
-            body: JSON.stringify(messagePayload)
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Discord API Error Response:', JSON.stringify(errorData));
-            throw new Error(`Discord API error: ${response.status} - ${JSON.stringify(errorData)}`);
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error('Discord webhook error:', error);
-        throw error;
-    }
-};
-
-module.exports = {
-    sendDiscordMessage
-};
