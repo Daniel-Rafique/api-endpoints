@@ -1,7 +1,3 @@
-const { formatDiscordMessage } = require('./utils');
-const { EmbedBuilder } = require('discord.js');
-
-
 const formatDiscordComponents = (components) => {
     if (!components) return [];
 
