@@ -81,25 +81,5 @@ const formatDiscordEmbeds = (embeds) => {
     }).filter(Boolean); // Remove any null/undefined values
 };
 
-const formatDiscordMessage = (content) => {
-    // Handle null or undefined content
-    if (!content) {
-        return { content: '' };
-    }
-
-    // Format components
-    const components = formatDiscordComponents(content.components);
-
-    // Format embeds
-    const embeds = formatDiscordEmbeds(content.embeds);
-
-    // Return formatted message payload
-    return {
-        ...content,
-        components,
-        embeds,
-        allowed_mentions: content.allowed_mentions || { parse: [] }
-    };
-};
 module.exports = Discord;
 
