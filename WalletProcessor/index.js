@@ -37,11 +37,16 @@ class WalletProcessor {
   initializeWorker() {
     new Worker('walletQueue', async job => {
       const { chatId, userData } = job.data;
-      const { makers } = userData;
+      const { makers, boostType, userKeypair } = userData;
       console.log('Processing job for chatId:', chatId); // Log chatId
 
       try {
-        const walletsArray = await this.walletManager.createSolanaWallets(makers);
+        let walletsArray;
+        if (boostType === 'solo') {
+          walletsArray = [userKeypair]; // Use the provided userKeypair for solo mode
+        } else {
+          walletsArray = await this.walletManager.createSolanaWallets(makers);
+        }
         await this.walletManager.saveWallets(chatId, walletsArray);
         console.log(`Processed wallets for chatId: ${chatId}`);
 
