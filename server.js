@@ -119,7 +119,7 @@ app.post('/api/create', async (req, res) => {
       if (platform === 'telegram') {
         await telegramNotifier.sendTelegramMessage(
           chatId,
-          `🤖 \*${userData.boostName} Mode Activated\*\n` +
+          `🤖 *${userData.boostName} Mode Activated*\n` +
           `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
           `💰 Required Balance: ${minimumSolBalance} SOL\n` +
           `🔍 Status: Waiting for confirmation...`
