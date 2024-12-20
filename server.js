@@ -56,7 +56,14 @@ const telegramNotifier = new TelegramNotifier(telegramToken);
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
-  const { chatId, timestamp, hash } = req.body;
+  /**
+   *  
+   * chatId: the chat id of the user
+   * platform: the platform of the user
+   * timestamp: the timestamp of the request
+   * hash: the hash of the request
+   */
+  let { chatId, timestamp, interaction, hash } = req.body;
 
   // Validate parameters
   if (!chatId || !hash) {
@@ -114,35 +121,12 @@ app.post('/api/create', async (req, res) => {
         );
       } else if (platform === 'discord') {
         try {
-          // Check if we have valid Discord credentials
-          if (!userData.applicationId || !userData.interactionToken) {
-            console.error('Missing Discord interaction details for user:', chatId);
-            return res.status(400).send('Missing Discord interaction details');
-          }
-
-          await discordNotifier.sendDiscordMessage(
-            userData.applicationId,
-            userData.interactionToken,
-            `🔐 **Your Wallet Details**\n\n` +
-            `**Public Key (Your Deposit Address):**\n` +
-            `\`${userData.userKeypair.publicKey.toString()}\`\n\n` +
-            `⚠️ **IMPORTANT:**\n` +
-            `Your private key is sensitive. Click the button below to reveal it.\n\n` +
-            `💡 **Next Steps:**\n` +
-            `1. Save your wallet details securely\n` +
-            `2. Make your minimum deposit to the public key address above\n` +
-            `3. Once confirmed, your bot will start automatically\n\n` +
-            `Need help? Contact @koynlabs`
-          );
-
           // Check if this is market maker mode
-          if (userData.mode === 'market_maker' ||
-            userData.mode === 'catalyst' ||
+          if (userData.mode === 'catalyst' ||
             userData.mode === 'compound' ||
             userData.mode === 'velocity') {
             await discordNotifier.sendDiscordMessage(
-              userData.applicationId,
-              userData.interactionToken,
+              interaction,
               `🤖 **Market Maker Mode Activated**\n` +
               `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
               `💰 Required Balance: ${minimumSolBalance} SOL\n` +
@@ -150,8 +134,7 @@ app.post('/api/create', async (req, res) => {
             );
           } else {
             await discordNotifier.sendDiscordMessage(
-              userData.applicationId,
-              userData.interactionToken,
+              interaction,
               `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`
             );
           }
