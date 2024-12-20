@@ -127,6 +127,8 @@ class BalanceChecker {
 
     while (retryCount < this.maxRetries) {
       try {
+        // Check connection status and reconnect if needed
+        this.isConnected = false; // Ensure initial state
         if (!this.isConnected) {
           await this.connectToBitquery();
         }
