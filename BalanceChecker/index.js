@@ -117,7 +117,7 @@ class BalanceChecker {
   }
 
   // New method to get balance
-  async getBalance() {
+  async getBalance(interaction) {
     let retryCount = 0;
     const walletAddress = this.receiverKeypair.publicKey;
     const tokenMint = this.mintAddress;
@@ -207,7 +207,7 @@ subscription{
                   sender: senderWallet
                 };
 
-                this.handleTransaction(balances)
+                this.handleTransaction(balances, interaction)
                 cleanup();
                 resolve(balances);
               } else {
@@ -256,9 +256,9 @@ subscription{
     return "0";
   }
 
-  async handleTransaction(balances) {
+  async handleTransaction(balances, interaction) {
     try {
-      console.log('Handling transaction:', balance);
+      console.log('Handling transaction:', balances);
 
       const senderPublicKeyString = new PublicKey(senderPublicKey);
 
@@ -273,7 +273,7 @@ subscription{
 
       if (solBalance < this.minimumSolBalance || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
-        await this.returnSol(senderPublicKeyString, amountReceived);
+        await this.returnSol(senderPublicKeyString, amountReceived, interaction);
         let message = '';
 
         if (solBalance < this.minimumSolBalance) {
@@ -294,7 +294,7 @@ subscription{
           } else if (this.platform === 'discord') {
             const userData = await this.dataManager.getCollection(this.chatId);
             if (userData?.applicationId && userData?.interactionToken) {
-              await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
+              await this.discordNotifier.sendDiscordMessage(interaction, message);
             }
           }
         }
@@ -314,9 +314,8 @@ subscription{
             await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           }
         } else if (this.platform === 'discord') {
-          const userData = await this.dataManager.getCollection(this.chatId);
           if (userData?.applicationId && userData?.interactionToken) {
-            await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
+            await this.discordNotifier.sendDiscordMessage(interaction, message);
           }
         }
       }
@@ -329,13 +328,13 @@ subscription{
       } else if (this.platform === 'discord') {
         const userData = await this.dataManager.getCollection(this.chatId);
         if (userData?.applicationId && userData?.interactionToken) {
-          await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, errorMessage);
+          await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
         }
       }
     }
   }
 
-  async returnSol(senderPublicKeyString, amountReceived) {
+  async returnSol(senderPublicKeyString, amountReceived, interaction) {
     try {
       const estimatedFee = await this.getEstimatedFee();
       const amountToReturn = amountReceived - estimatedFee;
@@ -374,19 +373,54 @@ subscription{
           } else if (this.platform === 'discord') {
             const userData = await this.dataManager.getCollection(this.chatId);
             if (userData?.applicationId && userData?.interactionToken && signature) {
-              await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
+              await this.discordNotifier.sendDiscordMessage(interaction, message);
             }
           }
 
           return this.reconnectWebSocket();
+
         } catch (error) {
           if (error.name === 'SendTransactionError') {
             console.error('Transaction simulation failed:', error.message);
             console.error('Transaction logs:', error.transactionLogs || 'No logs available');
 
             // Fetch logs directly from the connection if available
-            const recentLogs = await this.connection.getConfirmedTransaction(error.signature);
-            console.error('Fetched transaction logs:', recentLogs ? recentLogs.meta.logMessages : 'No logs found');
+            const confirmation = await connection.confirmTransaction({
+              signature,
+              blockhash: tx.message.recentBlockhash,
+              lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight
+            }, 'confirmed');
+
+            // Get transaction info regardless of success/failure
+            const txInfo = await connection.getTransaction(signature, {
+              maxSupportedTransactionVersion: 0,
+              commitment: 'confirmed'
+            });
+
+            // Log fees even if transaction failed
+            const fee = txInfo?.meta?.fee || 0;
+            console.log('Transaction fee:', {
+              fee: fee / 1e9, // Convert lamports to SOL
+              signature
+            });
+
+            if (confirmation.value.err || txInfo?.meta?.err) {
+              const error = confirmation.value.err || txInfo?.meta?.err;
+              console.log('Transaction failed:', {
+                error,
+                fee: fee / 1e9,
+                signature,
+                logs: txInfo?.meta?.logMessages
+              });
+              throw new Error(`Transaction failed, try increasing slippage`);
+            }
+
+            console.log('Transaction successful:', {
+              signature,
+              slot: txInfo?.slot,
+              confirmationStatus: txInfo?.confirmationStatus,
+              fee: fee / 1e9
+            });
 
             // Decide whether to retry based on the specific error or logs
             if (this.shouldRetryTransaction(error)) {
@@ -413,7 +447,7 @@ subscription{
       } else if (this.platform === 'discord') {
         const userData = await this.dataManager.getCollection(this.chatId);
         if (userData?.applicationId && userData?.interactionToken) {
-          await this.discordNotifier.sendDiscordMessage(userData.applicationId, userData.interactionToken, errorMessage);
+          await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
         }
       }
     }
@@ -495,7 +529,7 @@ subscription{
   }
 
   // Helper function to handle notifications for both platforms
-  async sendNotification(message) {
+  async sendNotification(message, interaction) {
     if (this.platform === 'telegram') {
       if (this.shouldSendMessage(this.chatId, message)) {
         await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
@@ -503,7 +537,7 @@ subscription{
     } else if (this.platform === 'discord') {
       const userData = await this.dataManager.getCollection(this.chatId);
       if (userData?.applicationId && userData?.interactionToken) {
-        await this.sendDiscordMessage(userData.applicationId, userData.interactionToken, message);
+        await this.discordNotifier.sendDiscordMessage(interaction, message);
       }
     }
   }

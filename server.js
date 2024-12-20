@@ -113,7 +113,7 @@ app.post('/api/create', async (req, res) => {
     );
 
     if (!userData?.distributeSolana) {
-      balance.getBalance();
+      balance.getBalance(interaction);
 
       // Send platform-specific notifications
       if (platform === 'telegram') {
