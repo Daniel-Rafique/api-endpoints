@@ -65,6 +65,11 @@ app.post('/api/create', async (req, res) => {
    */
   let { chatId, timestamp, interaction, hash } = req.body;
 
+  console.log('chatId', chatId);
+  console.log('timestamp', timestamp);
+  console.log('interaction', interaction);
+  console.log('hash', hash);
+
   // Validate parameters
   if (!chatId || !hash) {
     return res.status(400).send('Missing required parameters');
