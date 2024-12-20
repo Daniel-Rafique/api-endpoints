@@ -132,7 +132,7 @@ app.post('/api/create', async (req, res) => {
             userData.mode === 'velocity') {
             await discordNotifier.sendDiscordMessage(
               interaction,
-              `🤖 **Market Maker Mode Activated**\n` +
+              `🤖 **${userData.mode} Mode Activated**\n` +
               `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
               `💰 Required Balance: ${minimumSolBalance} SOL\n` +
               `🔍 Status: Waiting for confirmation...`
