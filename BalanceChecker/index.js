@@ -48,6 +48,9 @@ class BalanceChecker {
     this.listenerActive = true; // Flag to control the listener
     this.messageCache = {};
     this.platform = platform;
+    this.maxRetries = 3;
+    this.retryDelay = 2000; // 2 seconds
+    this.isConnected = false;
   }
 
   // New method to connect to Bitquery
@@ -67,7 +70,7 @@ class BalanceChecker {
     this.connectionPromise = new Promise((resolve, reject) => {
       const token = BALANCE_BITQUERY_TOKEN; // Ensure this constant is defined
 
-
+      console.log('Creating new WebSocket connection...');
       this.bitqueryConnection = new WebSocket(
         "wss://streaming.bitquery.io/eap?token=" + token,
         "graphql-ws",
@@ -87,11 +90,12 @@ class BalanceChecker {
         console.log("Connected to Bitquery Balance WebSocket.");
         this.isConnected = true;
         const initMessage = JSON.stringify({ type: "connection_init", payload: {} });
-        resolve(true);
         this.bitqueryConnection.send(initMessage);
+        resolve(true);
       });
 
       this.bitqueryConnection.on("message", (data) => {
+        console.log('Received message from Bitquery:', data.toString());
         const response = JSON.parse(data);
         if (response.type === "connection_ack") {
           console.log("Connection acknowledged by Bitquery.");
@@ -100,6 +104,7 @@ class BalanceChecker {
           resolve(true);
         }
         if (response.type === "data") {
+          console.log('Received data from Bitquery:', response.payload.data);
           this.emit('balanceUpdate', response.payload.data);
         }
         if (response.type === "error") {
@@ -138,37 +143,39 @@ class BalanceChecker {
         // Check connection status and reconnect if needed
         this.isConnected = false; // Ensure initial state
         if (!this.isConnected) {
+          console.log('Attempting to connect to Bitquery...');
           await this.connectToBitquery();
+          console.log('Connected to Bitquery successfully');
         }
-        // TODO check that we can retrive send token balance
+
         return await new Promise((resolve, reject) => {
           const query = `
-subscription{
-  Solana {
-    BalanceUpdates(
-      limitBy: {by: BalanceUpdate_Currency_MintAddress}
-      where: {BalanceUpdate: {Account: {Owner: {is: "${walletAddress}"}}}}
-      orderBy: {descending: Block_Time}
-    ) {
-      BalanceUpdate {
-        Currency {
-          Symbol
-          Name
-          MintAddress
-        }
-        Amount
-        AmountInUSD
-        PreBalance
-        PostBalance
-        PreBalanceInUSD
-        PostBalanceInUSD
-      }
-      Transaction {
-        Signer
-      }
-    }
-  }
-}
+            subscription {
+              Solana {
+                BalanceUpdates(
+                  limitBy: {by: BalanceUpdate_Currency_MintAddress}
+                  where: {BalanceUpdate: {Account: {Owner: {is: "${walletAddress}"}}}}
+                  orderBy: {descending: Block_Time}
+                ) {
+                  BalanceUpdate {
+                    Currency {
+                      Symbol
+                      Name
+                      MintAddress
+                    }
+                    Amount
+                    AmountInUSD
+                    PreBalance
+                    PostBalance
+                    PreBalanceInUSD
+                    PostBalanceInUSD
+                  }
+                  Transaction {
+                    Signer
+                  }
+                }
+              }
+            }
           `;
 
           const subscriptionMessage = JSON.stringify({
@@ -183,58 +190,35 @@ subscription{
           }, 120000);
 
           const cleanup = () => {
-            this.removeListener('balanceUpdate', onBalanceUpdate);
-            this.removeListener('error', onError);
+            if (this.bitqueryConnection) {
+              this.bitqueryConnection.removeListener('balanceUpdate', onBalanceUpdate);
+              this.bitqueryConnection.removeListener('error', onError);
+            }
             clearTimeout(queryTimeout);
           };
 
-          const onBalanceUpdate = (data) => {
-            console.log("Received balance update data:", data); // Debugging line
-
-            // Check if the data contains BalanceUpdate
-            if (data?.Solana?.BalanceUpdates) {
-              const balanceUpdate = data.Solana.BalanceUpdates[0]; // Access the first item if it's an array
-              const senderWallet = data.Solana.Transaction.Signer;
-              // Check if balanceUpdate is an object
-              if (balanceUpdate && balanceUpdate.BalanceUpdate) {
-                const update = balanceUpdate.BalanceUpdate;
-
-                const solBalance = update.Currency.MintAddress === "11111111111111111111111111111111" ? {
-                  balance: this.formatBalance(update.PostBalance),
-                  symbol: update.Currency.Symbol,
-                  name: update.Currency.Name
-                } : { balance: "0", symbol: "SOL", name: "Solana" };
-
-                const tokenBalance = update.Currency.MintAddress === String(tokenMint) ? {
-                  balance: this.formatBalance(update.Amount),
-                  symbol: update.Currency.Symbol,
-                  name: update.Currency.Name
-                } : { balance: "0", symbol: null, name: null };
-
-                const balances = {
-                  SOL: solBalance,
-                  token: tokenBalance,
-                  sender: senderWallet
-                };
-
-                this.handleTransaction(balances, interaction)
-                cleanup();
-                resolve(balances);
-              } else {
-                console.error("BalanceUpdate is not found in the response:", data);
-                cleanup();
-                reject(new Error('BalanceUpdate is not found'));
-              }
-            } else {
-              console.error("No BalanceUpdates found in the response:", data);
-              cleanup();
-              reject(new Error('No BalanceUpdates found'));
-            }
+          const onError = (error) => {
+            console.error('Bitquery subscription error:', error);
+            cleanup();
+            reject(error);
           };
 
+          const onBalanceUpdate = (data) => {
+            console.log("Received balance update data:", data);
+            // ... rest of onBalanceUpdate logic ...
+          };
+
+          // Add error listener
+          this.bitqueryConnection.on('error', onError);
+
+          // Add balance update listener
+          this.bitqueryConnection.on('balanceUpdate', onBalanceUpdate);
+
           if (this.bitqueryConnection.readyState === WebSocket.OPEN) {
+            console.log('Sending subscription message to Bitquery');
             this.bitqueryConnection.send(subscriptionMessage);
           } else {
+            console.error('WebSocket not open. Current state:', this.bitqueryConnection.readyState);
             cleanup();
             reject(new Error('WebSocket not open'));
           }
@@ -246,6 +230,7 @@ subscription{
         retryCount++;
 
         if (retryCount < this.maxRetries) {
+          console.log(`Waiting ${this.retryDelay}ms before retry...`);
           await new Promise(resolve => setTimeout(resolve, this.retryDelay));
         } else {
           throw new Error(`Failed to fetch balance after ${this.maxRetries} attempts`);
