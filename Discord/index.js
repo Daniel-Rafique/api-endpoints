@@ -6,29 +6,29 @@ class Discord {
         this.discordToken = discordToken;
     }
 
-    async sendDiscordMessage(applicationId, interactionToken, content, options = {}) {
-        const url = `${this.discordApiUrl}/${applicationId}/${interactionToken}/messages/@original`;
-
+    async sendDiscordMessage(content, embeds = [], components = []) {
         try {
-            const payload = {
-                content,
-                ...options,
-                components: formatDiscordComponents(options.components),
-                embeds: formatDiscordEmbeds(options.embeds)
-            };
-
-            await axios.patch(url, payload, {
-                headers: {
-                    'Authorization': `Bot ${this.discordToken}`,
-                    'Content-Type': 'application/json'
-                }
+            const response = await fetch(process.env.DISCORD_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    content,
+                    embeds,
+                    components
+                })
             });
+
+            if (!response.ok) {
+                throw new Error(`Discord webhook error: ${response.statusText}`);
+            }
+            console.log('Discord message sent successfully');
         } catch (error) {
             console.error('Error sending Discord message:', error);
             throw error;
         }
     }
 }
+
 
 const formatDiscordComponents = (components) => {
     if (!components) return [];
