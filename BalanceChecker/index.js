@@ -1,5 +1,4 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, web3 } = require('@solana/web3.js');
-const { AccountLayout, u64 } = require('@solana/spl-token');
 const bs58 = require('bs58');
 const DataManager = require('../database')
 const DiscordNotifier = require('../Discord');
