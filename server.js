@@ -119,7 +119,7 @@ app.post('/api/create', async (req, res) => {
       if (platform === 'telegram') {
         await telegramNotifier.sendTelegramMessage(
           chatId,
-          `🤖 *${userData.mode.charAt(0).toUpperCase() + userData.mode.slice(1)} Mode Activated*\n` +
+          `🤖 *${userData.boostName} Mode Activated*\n` +
           `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
           `💰 Required Balance: ${minimumSolBalance} SOL\n` +
           `🔍 Status: Waiting for confirmation...`
@@ -132,7 +132,7 @@ app.post('/api/create', async (req, res) => {
             userData.mode === 'velocity') {
             await discordNotifier.sendDiscordMessage(
               interaction,
-              `🤖 **${userData.mode.charAt(0).toUpperCase() + userData.mode.slice(1)} Mode Activated**\n` +
+              `🤖 **${userData.boostName} Mode Activated**\n` +
               `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
               `💰 Required Balance: ${minimumSolBalance} SOL\n` +
               `🔍 Status: Waiting for confirmation...`
