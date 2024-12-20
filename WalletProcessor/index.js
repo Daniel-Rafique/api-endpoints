@@ -4,8 +4,6 @@ const os = require('os');
 const { Queue, Worker } = require('bullmq');
 const DataManager = require('../database');
 const WalletManager = require('../WalletManager');
-const InstanceInitializer = require('../InstanceInitializer');
-const Solana = require('../Solana');
 
 const ENV_PATH = process.env.ENV_PATH;
 
@@ -14,9 +12,9 @@ if (!ENV_PATH) {
 }
 
 class WalletProcessor {
-  constructor() {
-    this.walletManager = new WalletManager();
-
+  constructor(chatId) {
+    this.chatId = chatId;
+    this.walletManager = new WalletManager(chatId);
     // Define absolute paths
     const basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
     const instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
@@ -25,9 +23,7 @@ class WalletProcessor {
       throw new Error('Error resolving basePath or instancePath.');
     }
 
-    this.instanceInitializer = new InstanceInitializer(basePath, instancePath);
     this.dataManager = new DataManager();
-    this.solana = new Solana();
 
     this.walletQueue = new Queue('walletQueue', {
       connection: {
@@ -41,42 +37,24 @@ class WalletProcessor {
 
   initializeWorker() {
     new Worker('walletQueue', async job => {
-      const { chatId } = job.data;
+      const { chatId, userData } = job.data;
+      const { makers, boostType, userKeypair } = userData;
       console.log('Processing job for chatId:', chatId); // Log chatId
-      const userData = await this.dataManager.getCollection(chatId);
-      const { makers } = userData;
+
       try {
-
-        if (!userData.instancesCreated) {
-          console.log('Initializing market maker instance for chatId:', chatId);
-          await this.instanceInitializer.initializeMarketMakerInstance(chatId);
+        let walletsArray;
+        if (boostType === 'solo') {
+          walletsArray = [userKeypair]; // Use the provided userKeypair for solo mode
+        } else {
+          walletsArray = await this.walletManager.createSolanaWallets(makers);
         }
+        await this.walletManager.saveWallets(chatId, walletsArray);
+        console.log(`Processed wallets for chatId: ${chatId}`);
 
-        if (!userData.walletsCreated) {
-          console.log('Creating wallets for chatId:', chatId);
-          try {
-            const walletsArray = this.walletManager.createSolanaWallets(makers);
-            await this.walletManager.saveWallets(chatId, walletsArray);
-          } catch (error) {
-            console.log(error);
-          }
-        }
-
-        if (userData.instancesCreated && userData.walletsCreated) {
-          console.log('Airdrop Solana for chatId:', chatId);
-
-          // Add debugging statements
-          console.log('ENV_PATH:', ENV_PATH);
-          console.log('chatId:', chatId);
-
-          const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
-          console.log('filePath:', filePath);
-
-          await this.solana.distributeSolana(chatId);
-        }
-        console.log(`Processed job for chatId: ${chatId}`);
       } catch (error) {
         console.error('Error processing job:', error);
+        throw new Error('Failed to process job');
+
       }
     }, {
       connection: {
@@ -87,6 +65,7 @@ class WalletProcessor {
   }
 
   addJob(data) {
+    console.log('Adding create wallet job to queue:', data);
     return this.walletQueue.add('createWallets', data);
   }
 }

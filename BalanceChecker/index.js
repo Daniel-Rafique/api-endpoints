@@ -1,9 +1,11 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, web3 } = require('@solana/web3.js');
-const { AccountLayout, u64 } = require('@solana/spl-token');
 const bs58 = require('bs58');
-const TelegramNotifier = require('../Telegram');
-const WalletProcessor = require('../WalletProcessor');
 const DataManager = require('../database')
+const DiscordNotifier = require('../Discord');
+const EventEmitter = require('events');
+const TelegramNotifier = require('../Telegram');
+const { formatTokenAmount } = require('../utils');
+const InstanceManager = require('../InstanceManager');
 const WebSocket = require('ws');
 
 const redis = require('redis');
@@ -15,286 +17,329 @@ client.on('error', (err) => console.error('Redis Client Error', err));
   await client.connect();
 })();
 
-const WEBSOCKET_ENDPOINT = process.env.WEBSOCKET_ENDPOINT; // Only one WebSocket endpoint is used now
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
-const PROGRAM_ID = process.env.PROGRAM_ID;
-const TOKEN_MINT_ADDRESS = process.env.TOKEN_MINT_ADDRESS;
-const TOKEN_PROGRAM_ID = new PublicKey(PROGRAM_ID);
-const MINT_ADDRESS = new PublicKey(TOKEN_MINT_ADDRESS);
-const { MESSAGES } = require('../constants');
+const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
+const { MESSAGES, BALANCE_BITQUERY_TOKEN } = require('../constants');
 
-const telegramToken = process.env.TELEGRAM_TOKEN;
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+const discordToken = process.env.DISCORD_BOT_TOKEN;
+
 const TOKEN = process.env.TOKEN;
 
-class BalanceChecker {
-  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, contractAddress) {
-    this.receiverKeypairString = receiverPrivateKey.toString();
+class BalanceChecker extends EventEmitter {
+  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform) {
+    super();
+    this.chatId = chatId;
+    this.receiverKeypairString = receiverPrivateKey;
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
+    this.connection2 = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
     this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
+    this.discordNotifier = new DiscordNotifier(discordToken);
     this.telegramNotifier = new TelegramNotifier(telegramToken);
-    this.walletProcessor = new WalletProcessor();
-    this.chatId = chatId;
-    this.contractAddress = contractAddress;
+    this.instanceManager = new InstanceManager(chatId);
+    this.mintAddress = mintAddress;
     this.dataManager = new DataManager(chatId);
-
     this.messageQueue = [];
     this.ws = null;
     this.pingInterval = null;
-    this.reconnectInterval = null;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 10;
+    this.reconnectTimeout = null;
     this.listenerActive = true; // Flag to control the listener
     this.messageCache = {};
-    this.initialize();
-
-    this.dummyPublicKey = '2E5btHk6WtUASSiEzfBxRFEQUvNV8aX2FV4Zv3TyXn8M';
-    this.distributeSolana = this.getDistributeSolanaFlag(chatId);
+    this.platform = platform;
+    this.maxRetries = 3;
+    this.retryDelay = 2000; // 2 seconds
+    this.isConnected = false;
   }
 
-  async initialize() {
-    try {
-      const userData = await this.dataManager.getCollection(this.chatId);
-      this.distributeSolana = userData.distributeSolana ? true : false;
-      this.listenForTransactions();
-    } catch (error) {
-      console.error('Failed to initialize BalanceChecker:', error);
-      this.distributeSolana = false; // Default to false if there's an error
-      this.listenForTransactions();
+  // New method to connect to Bitquery
+  async connectToBitquery() {
+    console.log('Attempting to connect to Bitquery...');
+    console.log('Token available:', !!BALANCE_BITQUERY_TOKEN);
+
+    if (!BALANCE_BITQUERY_TOKEN) {
+      throw new Error('BALANCE_BITQUERY_TOKEN is not defined');
     }
+
+    if (this.connectionPromise) {
+      console.log('Existing connection promise found, returning...');
+      return this.connectionPromise;
+    }
+
+    this.connectionPromise = new Promise((resolve, reject) => {
+      const token = BALANCE_BITQUERY_TOKEN; // Ensure this constant is defined
+
+      console.log('Creating new WebSocket connection...');
+      this.bitqueryConnection = new WebSocket(
+        "wss://streaming.bitquery.io/eap?token=" + token,
+        "graphql-ws",
+        {
+          headers: {
+            "Content-Type": "application/json",
+          }
+        }
+      );
+
+      const connectionTimeout = setTimeout(() => {
+        reject(new Error('Connection timeout'));
+        this.cleanup();
+      }, 60000);
+
+      this.bitqueryConnection.on("open", () => {
+        console.log("Connected to Bitquery Balance WebSocket.");
+        this.isConnected = true;
+        const initMessage = JSON.stringify({ type: "connection_init", payload: {} });
+        this.bitqueryConnection.send(initMessage);
+        resolve(true);
+      });
+
+      this.bitqueryConnection.on("message", (data) => {
+        console.log('Received message from Bitquery:', data.toString());
+        const response = JSON.parse(data);
+        if (response.type === "connection_ack") {
+          console.log("Connection acknowledged by Bitquery.");
+          clearTimeout(connectionTimeout);
+          this.emit('connected');
+          resolve(true);
+        }
+        if (response.type === "data") {
+          console.log('Received data from Bitquery:', response.payload.data);
+          this.emit('balanceUpdate', response.payload.data);
+          this.handleTransaction(response.payload.data, interaction);
+        }
+        if (response.type === "error") {
+          console.error("Received error from Bitquery:", response.payload.errors[0].message);
+          this.emit('error', new Error(response.payload.errors[0].message));
+        }
+      });
+
+      this.bitqueryConnection.on("close", () => {
+        console.log("Bitquery WebSocket connection closed.");
+        this.cleanup();
+        reject(new Error('WebSocket closed'));
+      });
+
+      this.bitqueryConnection.on("error", (error) => {
+        console.error("Bitquery WebSocket error:", error);
+        this.cleanup();
+        reject(error);
+      });
+    });
+
+    return this.connectionPromise;
   }
 
-  async getDistributeSolanaFlag(chatId) {
-    try {
-      const userData = await this.dataManager.getCollection(chatId);
-      return userData.distributeSolana ? true : false;
-    } catch (error) {
-      console.error('Failed to fetch distributeSolana flag from database:', error);
-      return false; // Default to false if there's an error
-    }
-  }
+  // New method to get balance
+  async getBalance(interaction) {
+    let retryCount = 0;
+    const walletAddress = this.receiverKeypair.publicKey;
+    const tokenMint = this.mintAddress;
 
-  listenForTransactions() {
-    const userData = this.dataManager.getCollection(this.chatId);
-    const publicKeyToMention = this.distributeSolana ? this.dummyPublicKey.toString() : this.receiverKeypair.publicKey.toString();
+    console.log('Getting balance for:', walletAddress);
+    console.log('Token mint:', tokenMint);
 
-    console.log('Listening for transactions on public key:', publicKeyToMention);
-    
-    if (!this.listenerActive || userData.walletsCreated) {
-        console.log('Transaction listener is inactive or wallets are already created.');
-        return;
-    }
+    while (retryCount < this.maxRetries) {
+      try {
+        // Check connection status and reconnect if needed
+        this.isConnected = false; // Ensure initial state
+        if (!this.isConnected) {
+          console.log('Attempting to connect to Bitquery...');
+          await this.connectToBitquery(interaction);
+          console.log('Connected to Bitquery successfully');
+        }
 
-    console.log('Attempting to connect to WebSocket endpoint:', WEBSOCKET_ENDPOINT);
-    this.ws = new WebSocket(WEBSOCKET_ENDPOINT);
+        return await new Promise((resolve, reject) => {
+          const query = `
+            subscription {
+              Solana {
+                BalanceUpdates(
+                  limitBy: {by: BalanceUpdate_Currency_MintAddress}
+                  where: {BalanceUpdate: {Account: {Owner: {is: "${walletAddress}"}}}}
+                  orderBy: {descending: Block_Time}
+                ) {
+                  BalanceUpdate {
+                    Currency {
+                      Symbol
+                      Name
+                      MintAddress
+                    }
+                    Amount
+                    AmountInUSD
+                    PreBalance
+                    PostBalance
+                    PreBalanceInUSD
+                    PostBalanceInUSD
+                  }
+                  Transaction {
+                    Signer
+                  }
+                }
+              }
+            }
+          `;
 
-    this.ws.on('open', () => {
-        console.log('WebSocket connection successfully opened to:', WEBSOCKET_ENDPOINT);
-        this.sendMessage({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "logsSubscribe",
-            params: [{
-                mentions: [publicKeyToMention]
-            }]
+          const subscriptionMessage = JSON.stringify({
+            type: "start",
+            id: "1",
+            payload: { query },
+          });
+
+          const queryTimeout = setTimeout(() => {
+            cleanup();
+            reject(new Error('Query timeout'));
+          }, 120000);
+
+          const cleanup = () => {
+            if (this.bitqueryConnection) {
+              this.bitqueryConnection.removeListener('balanceUpdate', onBalanceUpdate);
+              this.bitqueryConnection.removeListener('error', onError);
+            }
+            clearTimeout(queryTimeout);
+          };
+
+          const onError = (error) => {
+            console.error('Bitquery subscription error:', error);
+            cleanup();
+            reject(error);
+          };
+
+          const onBalanceUpdate = (data) => {
+            console.log("Received balance update data:", data);
+            // ... rest of onBalanceUpdate logic ...
+          };
+
+          // Add error listener
+          this.bitqueryConnection.on('error', onError);
+
+          // Add balance update listener
+          this.bitqueryConnection.on('balanceUpdate', onBalanceUpdate);
+
+          if (this.bitqueryConnection.readyState === WebSocket.OPEN) {
+            console.log('Sending subscription message to Bitquery');
+            this.bitqueryConnection.send(subscriptionMessage);
+          } else {
+            console.error('WebSocket not open. Current state:', this.bitqueryConnection.readyState);
+            cleanup();
+            reject(new Error('WebSocket not open'));
+          }
         });
 
-        // Set up a ping interval to keep the connection alive
-        this.pingInterval = setInterval(() => {
-            if (this.ws.readyState === WebSocket.OPEN) {
-                console.log('Sending ping to WebSocket server');
-                this.ws.ping();
-            }
-        }, 10000); // Adjust the interval as needed
-    });
+      } catch (error) {
+        console.error(`Balance fetch attempt ${retryCount + 1} failed:`, error);
+        this.cleanup();
+        retryCount++;
 
-    this.ws.on('message', async (data) => {
-        const response = JSON.parse(data);
-        console.log('Received WebSocket message:', response);
-        if (response.method === 'logsNotification') {
-            const transactionSignature = response.params.result.value.signature;
-            console.log(`New transaction: ${transactionSignature}`);
-            if (transactionSignature) {
-                await this.handleTransaction(transactionSignature);
-            }
-        }
-    });
-
-    this.ws.on('error', (error) => {
-        console.error('WebSocket error occurred:', error);
-        this.cleanUpWebSocket();
-        this.reconnectWebSocket();
-    });
-
-    this.ws.on('close', () => {
-        console.log('WebSocket connection closed');
-        this.cleanUpWebSocket();
-        this.reconnectWebSocket();
-    });
-}
-
-  cleanUpWebSocket() {
-    clearInterval(this.pingInterval);
-    this.pingInterval = null;
-    this.ws = null;
-  }
-
-  reconnectWebSocket() {
-    if (!this.reconnectInterval) {
-      this.reconnectInterval = setTimeout(() => {
-        console.log('Attempting to reconnect WebSocket...');
-        this.listenForTransactions();
-      }, 5000); // Using a delay before reconnecting, adjust as necessary
-    }
-  }
-
-  sendMessage(message) {
-    if (this.ws.readyState === WebSocket.OPEN) {
-      console.log('Sending message:', message);
-      this.ws.send(JSON.stringify(message));
-    } else {
-      console.log('WebSocket not open, queueing message:', message);
-      this.messageQueue.push(message);
-      this.waitForOpenConnection(() => {
-        this.processMessageQueue();
-      });
-    }
-  }
-
-
-  waitForOpenConnection(callback) {
-    const maxAttempts = 10;
-    let attempts = 0;
-
-    const interval = setInterval(() => {
-      if (this.ws.readyState === WebSocket.OPEN) {
-        clearInterval(interval);
-        callback();
-      } else {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          clearInterval(interval);
-          console.error('Failed to open WebSocket connection.');
+        if (retryCount < this.maxRetries) {
+          console.log(`Waiting ${this.retryDelay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+        } else {
+          throw new Error(`Failed to fetch balance after ${this.maxRetries} attempts`);
         }
       }
-    }, 1000); // Check every second
-  }
-
-  processMessageQueue() {
-    while (this.messageQueue.length > 0) {
-      const message = this.messageQueue.shift();
-      this.sendMessage(message);
     }
   }
 
-  async handleTransaction(signature) {
+  formatBalance(balance) {
+    if (balance === null || balance === undefined) {
+      return "0";
+    }
+    if (typeof balance === 'number') {
+      return balance.toFixed(6);
+    } else if (typeof balance === 'string') {
+      return parseFloat(balance).toFixed(6);
+    }
+    return "0";
+  }
+
+  async handleTransaction(balances, interaction) {
     try {
-      const userData = this.dataManager;
-      console.log('Handling transaction:', signature);
-
-      const transaction = await this.connection.getTransaction(signature, {
-        maxSupportedTransactionVersion: 0,
-      });
-
-      if (!transaction) {
-        console.error('Failed to retrieve transaction');
-        return;
-      }
-
-      console.log('Retrieved transaction:', JSON.stringify(transaction, null, 2));
-
-      const senderPublicKey = transaction.transaction.message.accountKeys.find(
-        key => !key.equals(this.receiverKeypair.publicKey)
-      );
-
-      if (!senderPublicKey) {
-        console.error('Sender public key not found in the transaction');
-        return;
-      }
-
-      const receiverIndex = transaction.transaction.message.accountKeys.findIndex(
-        key => key.equals(this.receiverKeypair.publicKey)
-      );
-
-      const amountReceived = transaction.meta.postBalances[receiverIndex] - transaction.meta.preBalances[receiverIndex];
-
-      if (amountReceived <= 0) {
-        console.error('Invalid transaction amount');
-        return;
-      }
+      console.log('Handling transaction:', balances);
 
       const senderPublicKeyString = new PublicKey(senderPublicKey);
 
-      const tokenBalance = await this.checkTokenBalance(senderPublicKeyString.toString(), amountReceived);
-      const solBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
+      const tokenBalance = balances.token;
+      const solBalance = balances.SOL
+      const amountReceived = balances.SOL
 
       console.log('Token balance:', tokenBalance);
       console.log('Minimum token balance:', this.minimumTokenBalance);
       console.log('Sol balance:', solBalance);
-      console.log('Minimum Sol balance:', this.minimumSolBalance * 1_000_000_000);
+      console.log('Minimum Sol balance:', this.minimumSolBalance);
 
-      if (solBalance < this.minimumSolBalance * 1_000_000_000 || tokenBalance < this.minimumTokenBalance) {
+      if (solBalance < this.minimumSolBalance || tokenBalance < this.minimumTokenBalance) {
         console.log('Returning SOL to sender.');
-        await this.returnSol(senderPublicKeyString, amountReceived);
-
+        await this.returnSol(senderPublicKeyString, amountReceived, interaction);
         let message = '';
-        if (solBalance < this.minimumSolBalance * 1_000_000_000) {
+
+        if (solBalance < this.minimumSolBalance) {
           console.log('Sending insufficient SOL balance message.');
           message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         }
+
         if (tokenBalance < this.minimumTokenBalance) {
           console.log(`Sending insufficient ${TOKEN} balance message.`);
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         }
-        if (this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+
+        if (message) {
+          if (this.platform === 'telegram') {
+            if (this.shouldSendMessage(this.chatId, message)) {
+              await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            }
+          } else if (this.platform === 'discord') {
+            const userData = await this.dataManager.getCollection(this.chatId);
+            if (userData?.applicationId && userData?.interactionToken) {
+              await this.discordNotifier.sendDiscordMessage(interaction, message);
+            }
+          }
         }
       } else {
         let message = '';
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
-        message += `✅ Received ${amountReceived / 1_000_000_000} SOL from ${senderPublicKeyString} \ntoken balance is ${tokenBalance}\n Any dust will be returned to ${senderPublicKeyString}`
-        if (this.shouldSendMessage(this.chatId, message)) {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-        }
-
         const chatId = this.chatId;
-        await this.walletProcessor.addJob({ chatId });
+        this.instanceManager.initializeMarketMakerInstance(chatId);
+        const currentTokenBalance = tokenBalance / 1_000_000_000;
+        const currentSolBalance = amountReceived / 1_000_000_000;
+        const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
+
+        message += `✅ Received ${currentSolBalance} SOL from ${senderPublicKeyString} \ntoken balance is ${TOKEN_BALANCE}\n Any dust will be returned to ${senderPublicKeyString}`
+
+        if (this.platform === 'telegram') {
+          if (this.shouldSendMessage(this.chatId, message)) {
+            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          }
+        } else if (this.platform === 'discord') {
+          if (userData?.applicationId && userData?.interactionToken) {
+            await this.discordNotifier.sendDiscordMessage(interaction, message);
+          }
+        }
       }
     } catch (error) {
       console.error('Error handling transaction:', error);
-    }
-  }
+      const errorMessage = `❌ Error handling transaction: ${error.message}`;
 
-  async checkTokenBalance(senderPublicKeyString, amountReceived) {
-    console.log('Checking token balance for wallet:', senderPublicKeyString.toString(), 'with mint:', MINT_ADDRESS.toString());
-
-    const tokenMintAddress = new PublicKey(MINT_ADDRESS);
-    const senderPublicKey = new PublicKey(senderPublicKeyString); // Ensure senderPublicKey is a PublicKey object
-    const accounts = await this.connection.getParsedTokenAccountsByOwner(senderPublicKey, { programId: TOKEN_PROGRAM_ID });
-    const accountInfo = accounts.value.find((account) => account.account.data.parsed.info.mint === tokenMintAddress.toBase58());
-
-    const tokenBalance = accountInfo ? parseFloat(accountInfo.account.data.parsed.info.tokenAmount.amount) : 0;
-
-    if (tokenBalance < this.minimumTokenBalance) {
-      await this.returnSol(senderPublicKeyString, amountReceived);
-      const message = MESSAGES.INSUFFICIENT_TOKEN(this.minimumSolBalance);
-
-      if (await this.shouldSendMessage(this.chatId, message)) {
-        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+      if (this.platform === 'telegram') {
+        await this.telegramNotifier.sendTelegramMessage(this.chatId, errorMessage);
+      } else if (this.platform === 'discord') {
+        const userData = await this.dataManager.getCollection(this.chatId);
+        if (userData?.applicationId && userData?.interactionToken) {
+          await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
+        }
       }
     }
-
-    return tokenBalance;
   }
 
-
-  async returnSol(senderPublicKeyString, amountReceived) {
+  async returnSol(senderPublicKeyString, amountReceived, interaction) {
     try {
       const estimatedFee = await this.getEstimatedFee();
-      const amountToReturn = amountReceived - estimatedFee; // Double the estimated fee
+      const amountToReturn = amountReceived - estimatedFee;
 
       if (amountToReturn <= 0) {
         console.error('Amount to return is less than or equal to the transaction fee');
-        return;
+        return this.reconnectWebSocket();
       }
 
       let transaction = new Transaction().add(
@@ -315,25 +360,105 @@ class BalanceChecker {
       while (currentBlockHeight < lastValidBlockHeight) {
         try {
           const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
+
           console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
           const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
 
-          if (this.shouldSendMessage(this.chatId, message)) {
-            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          if (this.platform === 'telegram') {
+            if (this.shouldSendMessage(this.chatId, message) && signature) {
+              await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+            }
+          } else if (this.platform === 'discord') {
+            const userData = await this.dataManager.getCollection(this.chatId);
+            if (userData?.applicationId && userData?.interactionToken && signature) {
+              await this.discordNotifier.sendDiscordMessage(interaction, message);
+            }
           }
 
-          return;
+          return this.reconnectWebSocket();
+
         } catch (error) {
-          console.error('Error sending transaction, retrying...', error);
+          if (error.name === 'SendTransactionError') {
+            console.error('Transaction simulation failed:', error.message);
+            console.error('Transaction logs:', error.transactionLogs || 'No logs available');
+
+            // Fetch logs directly from the connection if available
+            const confirmation = await connection.confirmTransaction({
+              signature,
+              blockhash: tx.message.recentBlockhash,
+              lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight
+            }, 'confirmed');
+
+            // Get transaction info regardless of success/failure
+            const txInfo = await connection.getTransaction(signature, {
+              maxSupportedTransactionVersion: 0,
+              commitment: 'confirmed'
+            });
+
+            // Log fees even if transaction failed
+            const fee = txInfo?.meta?.fee || 0;
+            console.log('Transaction fee:', {
+              fee: fee / 1e9, // Convert lamports to SOL
+              signature
+            });
+
+            if (confirmation.value.err || txInfo?.meta?.err) {
+              const error = confirmation.value.err || txInfo?.meta?.err;
+              console.log('Transaction failed:', {
+                error,
+                fee: fee / 1e9,
+                signature,
+                logs: txInfo?.meta?.logMessages
+              });
+              throw new Error(`Transaction failed, try increasing slippage`);
+            }
+
+            console.log('Transaction successful:', {
+              signature,
+              slot: txInfo?.slot,
+              confirmationStatus: txInfo?.confirmationStatus,
+              fee: fee / 1e9
+            });
+
+            // Decide whether to retry based on the specific error or logs
+            if (this.shouldRetryTransaction(error)) {
+              console.log('Retrying transaction...');
+              continue;
+            } else {
+              console.log('Not retrying transaction due to specific error condition.');
+              break;
+            }
+          } else {
+            console.error('Unexpected error during transaction:', error);
+          }
         }
         await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
         currentBlockHeight = await this.connection.getBlockHeight();
       }
-
       console.error('Failed to return SOL: transaction expired');
     } catch (error) {
       console.error('Error returning SOL to sender:', error);
+      const errorMessage = `❌ Error returning SOL: ${error.message}`;
+
+      if (this.platform === 'telegram') {
+        await this.telegramNotifier.sendTelegramMessage(this.chatId, errorMessage);
+      } else if (this.platform === 'discord') {
+        const userData = await this.dataManager.getCollection(this.chatId);
+        if (userData?.applicationId && userData?.interactionToken) {
+          await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
+        }
+      }
     }
+  }
+
+  shouldRetryTransaction(error) {
+    // Implement logic to determine whether a transaction should be retried based on the error or logs
+    // For example, you may choose to retry on network-related issues, but not on issues like "account not found"
+    if (error.message.includes('Attempt to debit an account but found no record of a prior credit')) {
+      return false; // Don't retry if the account lacks sufficient funds
+    }
+    // Add other conditions as necessary
+    return true; // Default to retrying in other cases
   }
 
   async shouldSendMessage(chatId, message) {
@@ -399,6 +524,49 @@ class BalanceChecker {
     ).compileMessage();
     const { value } = await this.connection.getFeeForMessage(message);
     return value;
+  }
+
+  // Helper function to handle notifications for both platforms
+  async sendNotification(message, interaction) {
+    if (this.platform === 'telegram') {
+      if (this.shouldSendMessage(this.chatId, message)) {
+        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+      }
+    } else if (this.platform === 'discord') {
+      const userData = await this.dataManager.getCollection(this.chatId);
+      if (userData?.applicationId && userData?.interactionToken) {
+        await this.discordNotifier.sendDiscordMessage(interaction, message);
+      }
+    }
+  }
+
+  cleanup() {
+    try {
+      console.log('Cleaning up Bitquery connection...');
+
+      // Close WebSocket connection if it exists
+      if (this.bitqueryConnection) {
+        if (this.bitqueryConnection.readyState === WebSocket.OPEN) {
+          this.bitqueryConnection.close();
+        }
+        this.bitqueryConnection = null;
+      }
+
+      // Reset connection state
+      this.isConnected = false;
+      this.connectionPromise = null;
+
+      // Remove all listeners
+      if (this.removeAllListeners) {
+        this.removeAllListeners('balanceUpdate');
+        this.removeAllListeners('error');
+        this.removeAllListeners('connected');
+      }
+
+      console.log('Cleanup completed');
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+    }
   }
 }
 

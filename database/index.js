@@ -8,6 +8,7 @@ console.log(FIRESTORE_COLLECTION);
 class DataManager {
 
   async getCollection(chatId) {
+
     try {
       const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).get();
       if (doc.exists) {
@@ -16,6 +17,28 @@ class DataManager {
       return null;
     } catch (error) {
       console.error('Error getting collection:', error);
+    }
+  }
+
+  async updateCollection(chatId, updateData) {
+
+    if (!chatId || typeof chatId !== 'string') {
+      throw new Error('Invalid chatId. It must be a non-empty string.');
+    }
+
+    if (!updateData || typeof updateData !== 'object' || Object.keys(updateData).length === 0) {
+      throw new Error('Invalid updateData. It must be a non-empty object.');
+    }
+
+    try {
+      const doc = db.collection(FIRESTORE_COLLECTION).doc(chatId.toString());
+      await doc.set(updateData, { merge: true });
+
+      console.log(`Successfully updated document for chat ID ${chatId}`);
+      return true;
+    } catch (error) {
+      console.error(`Error updating document for chat ID ${chatId}:`, error);
+      throw error; // Re-throw the error for higher-level error handling
     }
   }
 

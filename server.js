@@ -14,13 +14,13 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const DataManager = require('./database');
 const BalanceChecker = require('./BalanceChecker');
+const DiscordNotifier = require('./Discord');
 const TelegramNotifier = require('./Telegram');
-const Solana = require('./Solana');
-const InstanceInitializer = require('./InstanceInitializer');
+const InstanceStart = require('./InstanceManager/start')
+const InstanceStop = require('./InstanceManager/stop')
+
 
 const dataManager = new DataManager();
-const solana = new Solana();
-const instanceInitializer = new InstanceInitializer();
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
@@ -46,13 +46,29 @@ function generateHash(chatId, timestamp) {
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
+// Initialize DiscordNotifier
+const discordToken = process.env.DISCORD_TOKEN;
+const discordNotifier = new DiscordNotifier(discordToken);
+
 // Initialize TelegramNotifier
 const telegramToken = process.env.TELEGRAM_TOKEN;
 const telegramNotifier = new TelegramNotifier(telegramToken);
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
-  const { chatId, timestamp, hash } = req.body;
+  /**
+   *  
+   * chatId: the chat id of the user
+   * platform: the platform of the user
+   * timestamp: the timestamp of the request
+   * hash: the hash of the request
+   */
+  let { chatId, timestamp, interaction, hash } = req.body;
+
+  console.log('chatId', chatId);
+  console.log('timestamp', timestamp);
+  console.log('interaction', interaction);
+  console.log('hash', hash);
 
   // Validate parameters
   if (!chatId || !hash) {
@@ -73,49 +89,176 @@ app.post('/api/create', async (req, res) => {
       return res.status(404).send('User data not found');
     }
 
-    const minimumSolBalance = 0.1;
-    const receiverPublicKey = userData.wallet;
-    const minimumTokenBalance = process.env.MINIMUM_TOKEN_BALANCE;
-    const contractAddress = userData.contractAddress;
+    const mintAddress = userData.contractAddress;
+    const minimumSolBalance = userData.boostCost;
+    const minimumTokenBalance = userData.tokenDetails.tokenAmount;
+    const platform = userData.platform;
 
-    if (userData.boostType === 'ultra_boost') {
-      const contractAddress = userData.contractAddress;
-    } else {
-      const tokenMintAddress = process.env.TOKEN_MINT_ADDRESS;
-    }
-
-    // Start the periodic check
-    let receiverPrivateKey = userData.walletPk;
+    let receiverPrivateKey = userData.userKeypair.privateKey;
     receiverPrivateKey = receiverPrivateKey.toString();
 
     if (typeof receiverPrivateKey !== 'string') {
       throw new TypeError('Receiver private key must be a string');
     }
-    const websocket = new BalanceChecker(
+
+    // Start the periodic check
+    const balance = new BalanceChecker(
       chatId,
       receiverPrivateKey,
       minimumSolBalance,
       minimumTokenBalance,
       telegramToken,
-      contractAddress
+      mintAddress,
+      platform
     );
 
-    if (!userData?.walletsCreated) {
-      websocket.listenForTransactions(chatId, receiverPublicKey);
-      telegramNotifier.sendTelegramMessage(chatId, `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`);
-      res.status(200).send('Checking balance...');
-    } else if (userData?.walletsCreated && !userData?.instancesCreated) {
-      await instanceInitializer.initializeMarketMakerInstance(chatId);
-      res.status(200).send('Instances created...');
-    } else if (userData?.instancesCreated) {
-      await solana.distributeSolana(chatId);
-      res.status(200).send('Distributing SOL...');
+    if (!userData?.distributeSolana) {
+      balance.getBalance(interaction);
+
+      // Send platform-specific notifications
+      if (platform === 'telegram') {
+        await telegramNotifier.sendTelegramMessage(
+          chatId,
+          `🤖 *${userData.boostName} Mode Activated*\n` +
+          `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
+          `💰 Required Balance: ${minimumSolBalance} SOL\n` +
+          `🔍 Status: Waiting for confirmation...`
+        );
+      } else if (platform === 'discord') {
+        try {
+          // Check if this is market maker mode
+          if (userData.mode === 'catalyst' ||
+            userData.mode === 'compound' ||
+            userData.mode === 'velocity') {
+            await discordNotifier.sendDiscordMessage(
+              interaction,
+              `🤖 **${userData.boostName} Mode Activated**\n` +
+              `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
+              `💰 Required Balance: ${minimumSolBalance} SOL\n` +
+              `🔍 Status: Waiting for confirmation...`
+            );
+          } else {
+            await discordNotifier.sendDiscordMessage(
+              interaction,
+              `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`
+            );
+          }
+        } catch (discordError) {
+          console.error('Discord notification error:', discordError);
+          // Continue execution even if Discord notification fails
+          res.status(200).send('🔍 Checking balance...');
+        }
+      }
+      res.status(200).send('🔍 Checking balance...');
     }
   } catch (error) {
     console.error('Error processing request:', error);
     if (!res.headersSent) {
       res.status(500).send('Internal Server Error');
     }
+  }
+});
+
+// Start the bot
+app.post('/api/start', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
+  }
+
+  try {
+    const startInstance = new InstanceStart(chatId);
+    console.log('Endpoint for start instance', chatId);
+    await startInstance.startInstance(chatId);
+    res.status(200).send('Instance started successfully');
+  } catch (error) {
+    console.error('Error starting instance:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+// Stop the bot
+app.post('/api/stop', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
+  }
+  console.log('stopping instance', chatId)
+
+  // ... in your route handler ...
+  const stopInstance = new InstanceStop(chatId);
+  return stopInstance.stopInstance(chatId);
+
+});
+
+app.post('/api/balance', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
+  }
+});
+
+app.post('/api/liquidate', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
+  }
+});
+
+app.post('/api/top-up', async (req, res) => {
+  const { chatId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!chatId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(chatId, timestamp);
+
+  if (hash !== expectedHash) {
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
   }
 });
 

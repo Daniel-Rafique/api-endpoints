@@ -6,24 +6,21 @@ const path = require('path');
 const DataManager = require('../database')
 const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
-const Solana = require('../Solana');
 
 const ENV_PATH = process.env.ENV_PATH;
-const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
+
 class WalletManager {
 
-    constructor() {
-
+    constructor(chatId) {
+        this.chatId = chatId;
         this.dataManager = new DataManager;
-        this.solana = new Solana;
-
         this.firestore = new Firestore({
             projectId: 'koynlabs-2f749',
             keyFilename: '.config/firebaseServiceAccountKey.json',
         });
     }
 
-    createSolanaWallets(makers) {
+    async createSolanaWallets(makers) {
 
         console.log("Creating wallets");
         const wallets = [];
@@ -39,61 +36,70 @@ class WalletManager {
     async saveWallets(chatId, newWallets) {
         try {
             console.log("Saving wallets");
+
+            // Step 1: Validation checks
             if (!chatId) {
                 throw new Error('Invalid chatId');
             }
-            const chatIdStr = chatId.toString(); // Ensure chatId is a string
-            const docRef = this.firestore.collection(FIRESTORE_COLLECTION).doc(chatIdStr);
 
-            // Add new wallets to the existing array
-            await docRef.update({
-                wallets: Firestore.FieldValue.arrayUnion(...newWallets),
-                walletsCreated: true
-            });
+            if (!newWallets || newWallets.length === 0) {
+                throw new Error('Invalid wallets data');
+            }
 
-            console.log(`Saved ${newWallets.length} wallets for chatId: ${chatIdStr}`);
-            await this.saveWalletsToFile(chatIdStr, newWallets)
+            const chatIdStr = chatId.toString();
+
+            // Step 2: Check wallet count limit
+            if (newWallets.length > 1000) {
+                console.error(`Cannot add wallets: wallet count exceeds 100 for chatId: ${chatIdStr}`);
+                throw new Error('Cannot add more than 100 wallets');
+            }
+
+            // Step 3: Save wallets to file
+            await this.saveWalletsToFile(chatIdStr, newWallets);
+
+            console.log(`Successfully saved wallets to file for chatId: ${chatIdStr}`);
+            return true;
+
         } catch (error) {
-            console.error('Error saving to Firestore:', error);
+            console.error('Error saving wallets:', error.message || error);
             throw new Error('Failed to save wallets');
         }
     }
 
     async saveWalletsToFile(chatIdStr, newWallets) {
         try {
+            // Check if newWallets is an array
+            if (!Array.isArray(newWallets)) {
+                throw new Error('newWallets must be an array');
+            }
+
             // Resolve the path for the file
-            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/dist/wallets.json`);
+            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/.config/wallets.json`);
 
             if (!filePath) {
                 throw new Error('Error resolving filePath.');
             }
 
-            // Ensure the directory exists
+            // Ensure the directory exists using fs.promises.mkdir
             const dirPath = path.dirname(filePath);
-            if (!fs.existsSync(dirPath)) {
-                fs.mkdirSync(dirPath, { recursive: true });
-                console.log(`Directory created: ${dirPath}`);
-            }
+            await fs.promises.mkdir(dirPath, { recursive: true });
+            console.log(`Directory ensured: ${dirPath}`);
 
-            // Create or overwrite the wallets file
-            fs.writeFileSync(filePath, '[]', { flag: 'w' }); // Initialize the file with an empty array
-
-            // Prepare wallet data
+            // Prepare wallet data for saving
             const walletData = newWallets.map(wallet => ({
                 publicKey: wallet.publicKey,
                 secretKey: wallet.privateKey,
             }));
 
-            // Write wallets to file
-            fs.writeFileSync(filePath, JSON.stringify(walletData, null, 2));
+            // Write wallets data to file asynchronously
+            await fs.promises.writeFile(filePath, JSON.stringify(walletData, null, 2));
             console.log(`Wallets saved to ${filePath}`);
-
-            // Proceed to the next step
-            await this.solana.distributeSolana(chatIdStr);
         } catch (error) {
             console.error("Error saving wallets to file:", error);
+            throw new Error('Failed to save wallets to file');
         }
     }
+
 
 }
 
