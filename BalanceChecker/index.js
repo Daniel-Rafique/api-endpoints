@@ -2,6 +2,7 @@ const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfi
 const bs58 = require('bs58');
 const DataManager = require('../database')
 const DiscordNotifier = require('../Discord');
+const EventEmitter = require('events');
 const TelegramNotifier = require('../Telegram');
 const { formatTokenAmount } = require('../utils');
 const InstanceManager = require('../InstanceManager');
@@ -25,8 +26,9 @@ const discordToken = process.env.DISCORD_BOT_TOKEN;
 
 const TOKEN = process.env.TOKEN;
 
-class BalanceChecker {
+class BalanceChecker extends EventEmitter {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform) {
+    super();
     this.chatId = chatId;
     this.receiverKeypairString = receiverPrivateKey;
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
@@ -100,12 +102,13 @@ class BalanceChecker {
         if (response.type === "connection_ack") {
           console.log("Connection acknowledged by Bitquery.");
           clearTimeout(connectionTimeout);
-          // this.emit('connected');
+          this.emit('connected');
           resolve(true);
         }
         if (response.type === "data") {
           console.log('Received data from Bitquery:', response.payload.data);
           this.emit('balanceUpdate', response.payload.data);
+          this.handleTransaction(response.payload.data, interaction);
         }
         if (response.type === "error") {
           console.error("Received error from Bitquery:", response.payload.errors[0].message);
@@ -144,7 +147,7 @@ class BalanceChecker {
         this.isConnected = false; // Ensure initial state
         if (!this.isConnected) {
           console.log('Attempting to connect to Bitquery...');
-          await this.connectToBitquery();
+          await this.connectToBitquery(interaction);
           console.log('Connected to Bitquery successfully');
         }
 
