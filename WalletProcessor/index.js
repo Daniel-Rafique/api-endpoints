@@ -12,8 +12,9 @@ if (!ENV_PATH) {
 }
 
 class WalletProcessor {
-  constructor() {
-    this.walletManager = new WalletManager();
+  constructor(chatId) {
+    this.chatId = chatId;
+    this.walletManager = new WalletManager(chatId);
     // Define absolute paths
     const basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
     const instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');

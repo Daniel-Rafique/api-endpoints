@@ -27,6 +27,7 @@ const TOKEN = process.env.TOKEN;
 
 class BalanceChecker {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform) {
+    this.chatId = chatId;
     this.receiverKeypairString = receiverPrivateKey;
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.connection2 = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
@@ -35,8 +36,7 @@ class BalanceChecker {
     this.minimumTokenBalance = minimumTokenBalance;
     this.discordNotifier = new DiscordNotifier(discordToken);
     this.telegramNotifier = new TelegramNotifier(telegramToken);
-    this.instanceManager = new InstanceManager();
-    this.chatId = chatId;
+    this.instanceManager = new InstanceManager(chatId);
     this.mintAddress = mintAddress;
     this.dataManager = new DataManager(chatId); s
     this.messageQueue = [];

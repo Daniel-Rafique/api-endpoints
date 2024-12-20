@@ -11,8 +11,8 @@ const ENV_PATH = process.env.ENV_PATH;
 
 class WalletManager {
 
-    constructor() {
-
+    constructor(chatId) {
+        this.chatId = chatId;
         this.dataManager = new DataManager;
         this.firestore = new Firestore({
             projectId: 'koynlabs-2f749',

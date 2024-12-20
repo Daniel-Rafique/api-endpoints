@@ -14,7 +14,7 @@ const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const ENV_PATH = process.env.ENV_PATH;
 
 class InstanceManager {
-  constructor() {
+  constructor(chatId) {
     this.basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
     this.dataManager = new DataManager();
@@ -23,10 +23,10 @@ class InstanceManager {
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
 
-    this.walletProcessor = new WalletProcessor();
-    this.distributeSolana = new Distribute();
-    this.commissionPaid = new Commission();
-    this.topUp = new TopUp();
+    this.walletProcessor = new WalletProcessor(chatId);
+    this.distributeSolana = new Distribute(chatId);
+    this.commissionPaid = new Commission(chatId);
+    this.topUp = new TopUp(chatId);
   }
 
   async initializeMarketMakerInstance(chatId) {
