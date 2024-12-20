@@ -122,6 +122,9 @@ class BalanceChecker {
     const walletAddress = this.receiverKeypair.publicKey;
     const tokenMint = this.mintAddress;
 
+    console.log('Getting balance for:', walletAddress);
+    console.log('Token mint:', tokenMint);
+
     while (retryCount < this.maxRetries) {
       try {
         if (!this.isConnected) {
