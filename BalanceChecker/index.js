@@ -100,7 +100,7 @@ class BalanceChecker {
         if (response.type === "connection_ack") {
           console.log("Connection acknowledged by Bitquery.");
           clearTimeout(connectionTimeout);
-          this.emit('connected');
+          // this.emit('connected');
           resolve(true);
         }
         if (response.type === "data") {
@@ -534,6 +534,35 @@ class BalanceChecker {
       if (userData?.applicationId && userData?.interactionToken) {
         await this.discordNotifier.sendDiscordMessage(interaction, message);
       }
+    }
+  }
+
+  cleanup() {
+    try {
+      console.log('Cleaning up Bitquery connection...');
+
+      // Close WebSocket connection if it exists
+      if (this.bitqueryConnection) {
+        if (this.bitqueryConnection.readyState === WebSocket.OPEN) {
+          this.bitqueryConnection.close();
+        }
+        this.bitqueryConnection = null;
+      }
+
+      // Reset connection state
+      this.isConnected = false;
+      this.connectionPromise = null;
+
+      // Remove all listeners
+      if (this.removeAllListeners) {
+        this.removeAllListeners('balanceUpdate');
+        this.removeAllListeners('error');
+        this.removeAllListeners('connected');
+      }
+
+      console.log('Cleanup completed');
+    } catch (error) {
+      console.error('Error during cleanup:', error);
     }
   }
 }
