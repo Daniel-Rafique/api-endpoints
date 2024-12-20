@@ -1,6 +1,7 @@
 const { escapeMarkdown } = require('../utils');
 const TOKEN = process.env.TOKEN;
 const MINIMUM_TOKEN_BALANCE = parseFloat(process.env.MINIMUM_TOKEN_BALANCE);
+const BALANCE_BITQUERY_TOKEN = process.env.BALANCE_BITQUERY_TOKEN;
 
 const MESSAGES = {
   BALANCE_CHECK_REPORT: '🔍 Balance check report:',
@@ -23,5 +24,6 @@ Current balance: [Insert updated balance here] SOL`,
 };
 
 module.exports = {
+  BALANCE_BITQUERY_TOKEN,
   MESSAGES
 };

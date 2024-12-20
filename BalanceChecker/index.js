@@ -18,7 +18,7 @@ client.on('error', (err) => console.error('Redis Client Error', err));
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
-const { MESSAGES } = require('../constants');
+const { MESSAGES, BALANCE_BITQUERY_TOKEN } = require('../constants');
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const discordToken = process.env.DISCORD_BOT_TOKEN;
