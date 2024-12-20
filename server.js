@@ -131,6 +131,7 @@ app.post('/api/create', async (req, res) => {
             userData.mode === 'compound' ||
             userData.mode === 'velocity') {
             await discordNotifier.sendDiscordMessage(
+              interaction,
               `🤖 **Market Maker Mode Activated**\n` +
               `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
               `💰 Required Balance: ${minimumSolBalance} SOL\n` +
@@ -138,6 +139,7 @@ app.post('/api/create', async (req, res) => {
             );
           } else {
             await discordNotifier.sendDiscordMessage(
+              interaction,
               `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`
             );
           }
