@@ -38,7 +38,7 @@ class BalanceChecker {
     this.telegramNotifier = new TelegramNotifier(telegramToken);
     this.instanceManager = new InstanceManager(chatId);
     this.mintAddress = mintAddress;
-    this.dataManager = new DataManager(chatId); s
+    this.dataManager = new DataManager(chatId);
     this.messageQueue = [];
     this.ws = null;
     this.pingInterval = null;
