@@ -52,7 +52,15 @@ class BalanceChecker {
 
   // New method to connect to Bitquery
   async connectToBitquery() {
+    console.log('Attempting to connect to Bitquery...');
+    console.log('Token available:', !!BALANCE_BITQUERY_TOKEN);
+
+    if (!BALANCE_BITQUERY_TOKEN) {
+      throw new Error('BALANCE_BITQUERY_TOKEN is not defined');
+    }
+
     if (this.connectionPromise) {
+      console.log('Existing connection promise found, returning...');
       return this.connectionPromise;
     }
 
