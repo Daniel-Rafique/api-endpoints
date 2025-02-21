@@ -452,14 +452,12 @@ class BalanceChecker extends EventEmitter {
       return {
         success: true,
         signature: result.signature,
-        solscanLink: `https://solscan.io/tx/${result.signature}`,
-        balance: newBalance / LAMPORTS_PER_SOL
+        message: 'Transaction completed successfully'
       };
 
     } catch (error) {
       console.error('Send error:', error);
       const errorMessage = `❌ Error returning SOL: ${error.message}`;
-
 
       try {
         if (this.platform === 'telegram') {
