@@ -91,7 +91,7 @@ app.post('/api/create', async (req, res) => {
       const minimumTokenBalance = userData.tokenDetails.tokenAmount;
       const platform = userData.platform;
 
-      let receiverPrivateKey = userData.userKeypair.privateKey;
+      let receiverPrivateKey = userData.userKeypair.secretKey;
       receiverPrivateKey = receiverPrivateKey.toString();
 
       if (typeof receiverPrivateKey !== 'string') {
