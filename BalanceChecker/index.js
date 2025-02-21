@@ -218,6 +218,7 @@ class BalanceChecker extends EventEmitter {
           const onBalanceUpdate = (data) => {
             console.log("Received balance update data:", data);
             // ... rest of onBalanceUpdate logic ...
+            this.cleanup();
             this.handleTransaction(data, interaction);
           };
 
