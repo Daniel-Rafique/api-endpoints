@@ -111,21 +111,19 @@ app.post('/api/create', async (req, res) => {
       );
 
       if (!userData?.distributeSolana) {
-        await balance.getBalance(interaction);
+        try {
+          await balance.getBalance(interaction);
 
-        // Send platform-specific notifications
-        if (platform === 'telegram') {
-          console.log('Sending telegram message');
-          await telegramNotifier.sendTelegramMessage(
-            chatId,
-            `🤖 *${userData.boostName} Mode Activated*\n` +
-            `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
-            `💰 Required Balance: ${minimumSolBalance} SOL\n` +
-            `🔍 Status: Waiting for confirmation...`
-          );
-        } else if (platform === 'discord') {
-          try {
-            console.log('Sending discord message');
+          // Send initial platform-specific notifications
+          if (platform === 'telegram') {
+            await telegramNotifier.sendTelegramMessage(
+              chatId,
+              `🤖 *${userData.boostName} Mode Activated*\n` +
+              `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
+              `💰 Required Balance: ${minimumSolBalance} SOL\n` +
+              `🔍 Status: Waiting for confirmation...`
+            );
+          } else if (platform === 'discord') {
             await discordNotifier.sendDiscordMessage(
               interaction,
               `🤖 **${userData.boostName} Mode Activated**\n` +
@@ -133,26 +131,34 @@ app.post('/api/create', async (req, res) => {
               `💰 Required Balance: ${minimumSolBalance} SOL\n` +
               `🔍 Status: Waiting for confirmation...`
             );
-          } catch (discordError) {
-            console.error('Discord notification error:', discordError);
-            // Send a fallback message
-            res.status(200).json({
-              message: '⏳ Initializing trading wallets. Please wait...',
-              error: discordError.message
-            });
           }
+        } catch (balanceError) {
+          // Just log the error and cleanup without sending additional messages
+          console.log('Balance check failed:', balanceError);
+          await balance.cleanup();
+          return res.status(200).json({
+            message: '🔍 Initializing trading wallets...',
+            details: {
+              wallets: userData.makers,
+              solPerWallet: userData.solPerWallet,
+              mode: userData.boostName
+            }
+          });
         }
-        res.status(200).json({
-          message: '🔍 Initializing trading wallets...',
-          details: {
-            wallets: userData.makers,
-            solPerWallet: userData.solPerWallet,
-            mode: userData.boostName
-          }
-        });
       }
+
+      res.status(200).json({
+        message: '🔍 Initializing trading wallets...',
+        details: {
+          wallets: userData.makers,
+          solPerWallet: userData.solPerWallet,
+          mode: userData.boostName
+        }
+      });
+
     } catch (dbError) {
-      console.error('Database or processing error:', dbError);
+      console.error('Database error:', dbError);
+      await balance?.cleanup();
       return res.status(500).json({
         error: 'Internal server error',
         details: dbError.message
@@ -161,6 +167,7 @@ app.post('/api/create', async (req, res) => {
 
   } catch (error) {
     console.error('Unexpected error:', error);
+    await balance?.cleanup();
     return res.status(500).json({
       error: 'Internal server error',
       details: error.message

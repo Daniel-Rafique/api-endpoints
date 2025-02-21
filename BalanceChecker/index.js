@@ -441,12 +441,17 @@ class BalanceChecker extends EventEmitter {
       try {
         if (this.platform === 'telegram') {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          console.log('Transaction completed successfully');
+          this.cleanup();
         } else if (this.platform === 'discord' && interaction) {
           await this.discordNotifier.sendDiscordMessage(interaction, message);
+          console.log('Transaction completed successfully');
+          this.cleanup();
         }
       } catch (error) {
         console.error('Failed to send notification:', error);
         // Continue execution even if notification fails
+        this.cleanup();
       }
 
       return {
@@ -462,11 +467,14 @@ class BalanceChecker extends EventEmitter {
       try {
         if (this.platform === 'telegram') {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, errorMessage);
+          this.cleanup();
         } else if (this.platform === 'discord' && interaction) {
           await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
+          this.cleanup();
         }
       } catch (msgError) {
         console.error('Failed to send error notification:', msgError);
+        this.cleanup();
       }
       throw error;
     }
