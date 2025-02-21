@@ -265,7 +265,6 @@ class BalanceChecker extends EventEmitter {
   }
 
   async handleTransaction(balances) {
-    // Define sendMessage at class level if it's used across multiple methods
     const sendMessage = async (message) => {
       try {
         if (this.platform === 'telegram') {
@@ -279,32 +278,34 @@ class BalanceChecker extends EventEmitter {
     };
 
     try {
-      // Validate balances object
-      if (!balances || typeof balances !== 'object') {
-        throw new Error('Invalid balances data received');
+      // Validate and extract data from Bitquery response
+      if (!balances?.Solana?.BalanceUpdates?.[0]?.BalanceUpdate) {
+        throw new Error('Invalid balance data structure');
       }
 
-      console.log('Handling transaction:', balances);
+      const balanceUpdate = balances.Solana.BalanceUpdates[0].BalanceUpdate;
+      const transaction = balances.Solana.BalanceUpdates[0].Transaction;
 
-      // Safely access properties with default values
-      const tokenBalance = balances.token || 0;
-      const solBalance = balances.SOL || 0;
-      const transaction = balances.Transaction || {};
-      const amountReceived = parseFloat(transaction.Amount) || 0;
-      const senderPublicKeyString = transaction.Signer || '';
+      // Extract required values
+      const tokenBalance = parseFloat(balanceUpdate.PostBalance) || 0;
+      const solBalance = parseFloat(balanceUpdate.PostBalance) || 0;
+      const amountReceived = parseFloat(balanceUpdate.Amount) || 0;
+      const senderPublicKeyString = transaction?.Signer;
+
+      console.log('Parsed transaction details:', {
+        amountReceived,
+        tokenBalance,
+        solBalance,
+        senderPublicKey: senderPublicKeyString,
+        platform: this.platform,
+        rawBalanceUpdate: balanceUpdate,
+        rawTransaction: transaction
+      });
 
       // Validate essential data
       if (!senderPublicKeyString) {
         throw new Error('Missing sender public key');
       }
-
-      console.log('Transaction details:', {
-        amountReceived,
-        tokenBalance,
-        solBalance,
-        senderPublicKey: senderPublicKeyString,
-        platform: this.platform
-      });
 
       // Check balances
       if (solBalance < this.minimumSolBalance || tokenBalance < this.minimumTokenBalance) {
