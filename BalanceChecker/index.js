@@ -35,7 +35,6 @@ class BalanceChecker extends EventEmitter {
     this.receiverKeypairString = receiverPrivateKey;
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.connection2 = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
-    this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(decrypt(this.receiverKeypairString, ENCRYPTION_KEY)));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.discordNotifier = new DiscordNotifier(discordToken);
@@ -55,6 +54,13 @@ class BalanceChecker extends EventEmitter {
     this.maxRetries = 3;
     this.retryDelay = 2000; // 2 seconds
     this.isConnected = false;
+    try {
+      this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(decrypt(this.receiverKeypairString, ENCRYPTION_KEY)));
+    } catch (error) {
+      this.cleanup();
+      console.error('Error decrypting receiver keypair:', error);
+      throw error;
+    }
   }
 
   // New method to connect to Bitquery
