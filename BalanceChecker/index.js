@@ -29,7 +29,7 @@ const discordToken = process.env.DISCORD_BOT_TOKEN;
 const TOKEN = process.env.TOKEN;
 
 class BalanceChecker extends EventEmitter {
-  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform) {
+  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform, interaction) {
     super();
     this.chatId = chatId;
     this.receiverKeypairString = receiverPrivateKey;
@@ -54,6 +54,7 @@ class BalanceChecker extends EventEmitter {
     this.maxRetries = 3;
     this.retryDelay = 2000; // 2 seconds
     this.isConnected = false;
+    this.interaction = interaction;
     try {
       this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(decrypt(this.receiverKeypairString, ENCRYPTION_KEY)));
     } catch (error) {
@@ -116,7 +117,7 @@ class BalanceChecker extends EventEmitter {
         if (response.type === "data") {
           console.log('Received data from Bitquery:', response.payload.data);
           this.emit('balanceUpdate', response.payload.data);
-          this.handleTransaction(response.payload.data, interaction);
+          this.handleTransaction(response.payload.data);
         }
         if (response.type === "error") {
           console.error("Received error from Bitquery:", response.payload.errors[0].message);
@@ -263,7 +264,7 @@ class BalanceChecker extends EventEmitter {
     return "0";
   }
 
-  async handleTransaction(balances, interaction = null) {
+  async handleTransaction(balances) {
     try {
       console.log('Handling transaction:', balances);
       const tokenBalance = balances.token;
@@ -275,8 +276,8 @@ class BalanceChecker extends EventEmitter {
       const sendMessage = async (message) => {
         if (this.platform === 'telegram') {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-        } else if (this.platform === 'discord' && interaction) {
-          await this.discordNotifier.sendDiscordMessage(interaction, message);
+        } else if (this.platform === 'discord' && this.interaction) {
+          await this.discordNotifier.sendDiscordMessage(this.interaction, message);
         }
       };
 
