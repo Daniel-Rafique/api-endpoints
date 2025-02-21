@@ -263,73 +263,70 @@ class BalanceChecker extends EventEmitter {
     return "0";
   }
 
-  async handleTransaction(balances, interaction) {
+  async handleTransaction(balances, interaction = null) {
     try {
       console.log('Handling transaction:', balances);
       const tokenBalance = balances.token;
       const solBalance = balances.SOL;
-      const amountReceived = parseFloat(balances.Transaction.Amount) || 0; // Parse the received amount
+      const amountReceived = parseFloat(balances.Transaction.Amount) || 0;
       const senderPublicKeyString = balances.Transaction.Signer;
+
+      // Helper function to send platform-specific messages
+      const sendMessage = async (message) => {
+        if (this.platform === 'telegram') {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        } else if (this.platform === 'discord' && interaction) {
+          await this.discordNotifier.sendDiscordMessage(interaction, message);
+        }
+      };
 
       console.log('Transaction details:', {
         amountReceived,
         tokenBalance,
         solBalance,
-        senderPublicKey: senderPublicKeyString
+        senderPublicKey: senderPublicKeyString,
+        platform: this.platform
       });
 
-      // Continue with balance checks
+      // Check balances
       if (solBalance < this.minimumSolBalance || tokenBalance < this.minimumTokenBalance) {
         console.log('Insufficient balances, returning SOL.');
-        await this.returnSol(senderPublicKeyString, amountReceived, interaction);
-        let message = '';
+        await this.returnSol(senderPublicKeyString, amountReceived,
+          this.platform === 'discord' ? interaction : null
+        );
 
+        let message = '';
         if (solBalance < this.minimumSolBalance) {
           message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         }
-
         if (tokenBalance < this.minimumTokenBalance) {
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         }
 
-        if (message) {
-          if (this.platform === 'telegram') {
-            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-          } else if (this.platform === 'discord') {
-            await this.discordNotifier.sendDiscordMessage(interaction, message);
-          }
-        }
-      } else {
-        // Correct amount received and balances are sufficient
-        this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
-        await this.instanceManager.initializeMarketMakerInstance(this.chatId);
-
-        const currentTokenBalance = tokenBalance / 1_000_000_000;
-        const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
-
-        const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}\n` +
-          `Token balance is ${TOKEN_BALANCE}\n` +
-          `Any dust will be returned to ${senderPublicKeyString}`;
-
-        if (this.platform === 'telegram') {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, successMessage);
-        } else if (this.platform === 'discord') {
-          await this.discordNotifier.sendDiscordMessage(interaction, successMessage);
-        }
+        await sendMessage(message);
+        return;
       }
+
+      // Process successful transaction
+      await this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
+      await this.instanceManager.initializeMarketMakerInstance(this.chatId);
+
+      const currentTokenBalance = tokenBalance / 1_000_000_000;
+      const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
+
+      const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}\n` +
+        `Token balance is ${TOKEN_BALANCE}\n` +
+        `Any dust will be returned to ${senderPublicKeyString}`;
+
+      await sendMessage(successMessage);
+
     } catch (error) {
       console.error('Error handling transaction:', error);
-      const errorMessage = `❌ Error handling transaction: ${error.message}`;
-
-      if (this.platform === 'telegram') {
-        await this.telegramNotifier.sendTelegramMessage(this.chatId, errorMessage);
-      } else if (this.platform === 'discord') {
-        await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
-      }
+      await sendMessage(`❌ Error handling transaction: ${error.message}`);
     }
   }
 
-  async returnSol(senderPublicKeyString, amountReceived, interaction) {
+  async returnSol(senderPublicKeyString, amountReceived, interaction = null) {
     try {
       const estimatedFee = await this.getEstimatedFee();
       const amountToReturn = amountReceived - estimatedFee;
