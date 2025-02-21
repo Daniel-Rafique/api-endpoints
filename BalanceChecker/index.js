@@ -4,7 +4,8 @@ const DataManager = require('../database')
 const DiscordNotifier = require('../Discord');
 const EventEmitter = require('events');
 const TelegramNotifier = require('../Telegram');
-const { formatTokenAmount, decrypt } = require('../utils');
+const { formatTokenAmount } = require('../utils');
+const { decrypt } = require('../utils/encryption');
 const InstanceManager = require('../InstanceManager');
 const WebSocket = require('ws');
 
