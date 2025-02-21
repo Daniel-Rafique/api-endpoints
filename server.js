@@ -67,7 +67,6 @@ app.post('/api/create', async (req, res) => {
 
   console.log('chatId', chatId);
   console.log('timestamp', timestamp);
-  console.log('interaction', interaction);
   console.log('hash', hash);
 
   // Validate parameters
