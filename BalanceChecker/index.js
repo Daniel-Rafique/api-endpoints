@@ -192,7 +192,7 @@ class BalanceChecker extends EventEmitter {
 
           const subscriptionMessage = JSON.stringify({
             type: "start",
-            id: "1",
+            id: `balance_checker_${this.chatId}_${Date.now()}_${walletAddress}`,
             payload: { query },
           });
 
