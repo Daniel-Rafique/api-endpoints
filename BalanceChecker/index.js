@@ -265,21 +265,38 @@ class BalanceChecker extends EventEmitter {
   }
 
   async handleTransaction(balances) {
-    try {
-      console.log('Handling transaction:', balances);
-      const tokenBalance = balances.token;
-      const solBalance = balances.SOL;
-      const amountReceived = parseFloat(balances.Transaction.Amount) || 0;
-      const senderPublicKeyString = balances.Transaction.Signer;
-
-      // Helper function to send platform-specific messages
-      const sendMessage = async (message) => {
+    // Define sendMessage at class level if it's used across multiple methods
+    const sendMessage = async (message) => {
+      try {
         if (this.platform === 'telegram') {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
         } else if (this.platform === 'discord' && this.interaction) {
           await this.discordNotifier.sendDiscordMessage(this.interaction, message);
         }
-      };
+      } catch (error) {
+        console.error('Error sending message:', error);
+      }
+    };
+
+    try {
+      // Validate balances object
+      if (!balances || typeof balances !== 'object') {
+        throw new Error('Invalid balances data received');
+      }
+
+      console.log('Handling transaction:', balances);
+
+      // Safely access properties with default values
+      const tokenBalance = balances.token || 0;
+      const solBalance = balances.SOL || 0;
+      const transaction = balances.Transaction || {};
+      const amountReceived = parseFloat(transaction.Amount) || 0;
+      const senderPublicKeyString = transaction.Signer || '';
+
+      // Validate essential data
+      if (!senderPublicKeyString) {
+        throw new Error('Missing sender public key');
+      }
 
       console.log('Transaction details:', {
         amountReceived,
@@ -292,8 +309,10 @@ class BalanceChecker extends EventEmitter {
       // Check balances
       if (solBalance < this.minimumSolBalance || tokenBalance < this.minimumTokenBalance) {
         console.log('Insufficient balances, returning SOL.');
-        await this.returnSol(senderPublicKeyString, amountReceived,
-          this.platform === 'discord' ? interaction : null
+        await this.returnSol(
+          senderPublicKeyString,
+          amountReceived,
+          this.platform === 'discord' ? this.interaction : null
         );
 
         let message = '';
@@ -309,7 +328,7 @@ class BalanceChecker extends EventEmitter {
       }
 
       // Process successful transaction
-      await this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
+      await this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString);
       await this.instanceManager.initializeMarketMakerInstance(this.chatId);
 
       const currentTokenBalance = tokenBalance / 1_000_000_000;
