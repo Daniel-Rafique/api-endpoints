@@ -237,7 +237,7 @@ class BalanceChecker extends EventEmitter {
         });
 
       } catch (error) {
-        console.error(`Balance fetch attempt ${retryCount + 1} failed:`, error);
+        console.error(`Balance fetch attempt ${retryCount + 1}`);
         this.cleanup();
         retryCount++;
 
