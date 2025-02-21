@@ -350,6 +350,13 @@ class BalanceChecker extends EventEmitter {
 
   async returnSol(senderPublicKeyString, amountReceived, interaction = null) {
     try {
+      // Validate sender public key
+      let senderPubKey;
+      try {
+        senderPubKey = new PublicKey(senderPublicKeyString);
+      } catch (error) {
+        throw new Error('Invalid sender public key');
+      }
       // Get fresh blockhash from API
       const response = await fetch('http://localhost:3000/api/wallet/solana');
       const data = await response.json();
@@ -365,7 +372,7 @@ class BalanceChecker extends EventEmitter {
         body: JSON.stringify({
           chatId: this.chatId,
           publicKey: this.receiverKeypair.publicKey.toString(),
-          recipient: senderPublicKeyString,
+          recipient: senderPubKey.toString(),
           amount: amountReceived,
           type: 'return'
         })
@@ -376,10 +383,15 @@ class BalanceChecker extends EventEmitter {
         throw new Error(transferData.error || 'Failed to prepare transfer');
       }
 
-      // Create new transaction with the data from endpoint
-      let transaction = Transaction.from(
-        Buffer.from(bs58.decode(transferData.serializedTransaction))
-      );
+      // Create new transaction with the data from backend
+      let transaction;
+      try {
+        transaction = Transaction.from(
+          Buffer.from(bs58.decode(transferData.serializedTransaction))
+        );
+      } catch (error) {
+        throw new Error(`Failed to create transaction: ${error.message}`);
+      }
 
       // Set the blockhash from endpoint response
       transaction.recentBlockhash = transferData.blockhash;
@@ -388,7 +400,7 @@ class BalanceChecker extends EventEmitter {
       // Sign and submit
       transaction.sign(this.receiverKeypair);
       const serializedTransaction = transaction.serialize();
-      const encodedTx = bs58.encode(new Uint8Array(serializedTransaction));
+      const encodedTx = bs58.encode(serializedTransaction);
 
       // Submit transaction through API
       const submitResponse = await fetch('http://localhost:3000/api/transaction/submit', {
@@ -402,37 +414,59 @@ class BalanceChecker extends EventEmitter {
         })
       });
 
-      const result = await submitResponse.json();
-      if (!result.success) throw new Error(result.error || 'Transaction failed');
+      if (!submitResponse.ok) {
+        throw new Error(`Transaction submission failed: ${submitResponse.status}`);
+      }
 
-      // Get updated balance
-      const newBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
+      const result = await submitResponse.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Transaction failed');
+      }
+
+      // Get updated balance with retry mechanism
+      let newBalance;
+      try {
+        newBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
+      } catch (error) {
+        console.error('Failed to get balance:', error);
+        newBalance = 0;
+      }
 
       // Send platform-specific success message
       const message = `✅ Returned ${amountReceived} SOL to sender: ${senderPublicKeyString}\n` +
         `TX: https://solscan.io/tx/${result.signature}`;
 
-      if (this.platform === 'telegram') {
-        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-      } else if (this.platform === 'discord' && interaction) {
-        await this.discordNotifier.sendDiscordMessage(interaction, message);
+      try {
+        if (this.platform === 'telegram') {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+        } else if (this.platform === 'discord' && interaction) {
+          await this.discordNotifier.sendDiscordMessage(interaction, message);
+        }
+      } catch (error) {
+        console.error('Failed to send notification:', error);
+        // Continue execution even if notification fails
       }
 
       return {
         success: true,
         signature: result.signature,
         solscanLink: `https://solscan.io/tx/${result.signature}`,
-        balance: newBalance
+        balance: newBalance / LAMPORTS_PER_SOL
       };
 
     } catch (error) {
       console.error('Send error:', error);
       const errorMessage = `❌ Error returning SOL: ${error.message}`;
 
-      if (this.platform === 'telegram') {
-        await this.telegramNotifier.sendTelegramMessage(this.chatId, errorMessage);
-      } else if (this.platform === 'discord' && interaction) {
-        await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
+
+      try {
+        if (this.platform === 'telegram') {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, errorMessage);
+        } else if (this.platform === 'discord' && interaction) {
+          await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
+        }
+      } catch (msgError) {
+        console.error('Failed to send error notification:', msgError);
       }
       throw error;
     }
