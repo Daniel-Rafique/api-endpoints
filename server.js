@@ -135,18 +135,10 @@ app.post('/api/create', async (req, res) => {
         } catch (balanceError) {
           // Just log the error and cleanup without sending additional messages
           console.log('Balance check failed:', balanceError);
-          await balance.cleanup();
-          return res.status(200).json({
-            message: '🔍 Initializing trading wallets...',
-            details: {
-              wallets: userData.makers,
-              solPerWallet: userData.solPerWallet,
-              mode: userData.boostName
-            }
-          });
+          balance.cleanup();
         }
       }
-
+      balance.cleanup();
       res.status(200).json({
         message: '🔍 Initializing trading wallets...',
         details: {
@@ -161,7 +153,6 @@ app.post('/api/create', async (req, res) => {
       await balance?.cleanup();
       return res.status(500).json({
         error: 'Internal server error',
-        details: dbError.message
       });
     }
 
@@ -170,7 +161,6 @@ app.post('/api/create', async (req, res) => {
     await balance?.cleanup();
     return res.status(500).json({
       error: 'Internal server error',
-      details: error.message
     });
   }
 });
