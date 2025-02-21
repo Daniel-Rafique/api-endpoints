@@ -105,7 +105,6 @@ app.post('/api/create', async (req, res) => {
         receiverPrivateKey,
         minimumSolBalance,
         minimumTokenBalance,
-        telegramToken,
         mintAddress,
         platform
       );
