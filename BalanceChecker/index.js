@@ -266,64 +266,55 @@ class BalanceChecker extends EventEmitter {
   async handleTransaction(balances, interaction) {
     try {
       console.log('Handling transaction:', balances);
-
-      const senderPublicKeyString = new PublicKey(senderPublicKey);
-
       const tokenBalance = balances.token;
-      const solBalance = balances.SOL
-      const amountReceived = balances.SOL
+      const solBalance = balances.SOL;
+      const amountReceived = parseFloat(balances.Transaction.Amount) || 0; // Parse the received amount
+      const senderPublicKeyString = balances.Transaction.Signer;
 
-      console.log('Token balance:', tokenBalance);
-      console.log('Minimum token balance:', this.minimumTokenBalance);
-      console.log('Sol balance:', solBalance);
-      console.log('Minimum Sol balance:', this.minimumSolBalance);
+      console.log('Transaction details:', {
+        amountReceived,
+        tokenBalance,
+        solBalance,
+        senderPublicKey: senderPublicKeyString
+      });
 
+      // Continue with balance checks
       if (solBalance < this.minimumSolBalance || tokenBalance < this.minimumTokenBalance) {
-        console.log('Returning SOL to sender.');
+        console.log('Insufficient balances, returning SOL.');
         await this.returnSol(senderPublicKeyString, amountReceived, interaction);
         let message = '';
 
         if (solBalance < this.minimumSolBalance) {
-          console.log('Sending insufficient SOL balance message.');
           message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         }
 
         if (tokenBalance < this.minimumTokenBalance) {
-          console.log(`Sending insufficient ${TOKEN} balance message.`);
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         }
 
         if (message) {
           if (this.platform === 'telegram') {
-            if (this.shouldSendMessage(this.chatId, message)) {
-              await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-            }
+            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           } else if (this.platform === 'discord') {
-            const userData = await this.dataManager.getCollection(this.chatId);
-            if (userData?.applicationId && userData?.interactionToken) {
-              await this.discordNotifier.sendDiscordMessage(interaction, message);
-            }
+            await this.discordNotifier.sendDiscordMessage(interaction, message);
           }
         }
       } else {
-        let message = '';
+        // Correct amount received and balances are sufficient
         this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString.toString());
-        const chatId = this.chatId;
-        this.instanceManager.initializeMarketMakerInstance(chatId);
+        await this.instanceManager.initializeMarketMakerInstance(this.chatId);
+
         const currentTokenBalance = tokenBalance / 1_000_000_000;
-        const currentSolBalance = amountReceived / 1_000_000_000;
         const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
 
-        message += `✅ Received ${currentSolBalance} SOL from ${senderPublicKeyString} \ntoken balance is ${TOKEN_BALANCE}\n Any dust will be returned to ${senderPublicKeyString}`
+        const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}\n` +
+          `Token balance is ${TOKEN_BALANCE}\n` +
+          `Any dust will be returned to ${senderPublicKeyString}`;
 
         if (this.platform === 'telegram') {
-          if (this.shouldSendMessage(this.chatId, message)) {
-            await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-          }
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, successMessage);
         } else if (this.platform === 'discord') {
-          if (userData?.applicationId && userData?.interactionToken) {
-            await this.discordNotifier.sendDiscordMessage(interaction, message);
-          }
+          await this.discordNotifier.sendDiscordMessage(interaction, successMessage);
         }
       }
     } catch (error) {
@@ -333,10 +324,7 @@ class BalanceChecker extends EventEmitter {
       if (this.platform === 'telegram') {
         await this.telegramNotifier.sendTelegramMessage(this.chatId, errorMessage);
       } else if (this.platform === 'discord') {
-        const userData = await this.dataManager.getCollection(this.chatId);
-        if (userData?.applicationId && userData?.interactionToken) {
-          await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
-        }
+        await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
       }
     }
   }
