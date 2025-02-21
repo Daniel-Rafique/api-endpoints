@@ -376,12 +376,12 @@ class BalanceChecker extends EventEmitter {
         throw new Error(transferData.error || 'Failed to prepare transfer');
       }
 
-      // Create new transaction with the data from backend
+      // Create new transaction with the data from endpoint
       let transaction = Transaction.from(
         Buffer.from(bs58.decode(transferData.serializedTransaction))
       );
 
-      // Set the blockhash from backend response
+      // Set the blockhash from endpoint response
       transaction.recentBlockhash = transferData.blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
 
@@ -398,7 +398,7 @@ class BalanceChecker extends EventEmitter {
           chatId: this.chatId,
           publicKey: this.receiverKeypair.publicKey.toString(),
           signedTransaction: encodedTx,
-          type: 'return'
+          type: 'send'
         })
       });
 
