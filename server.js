@@ -115,6 +115,7 @@ app.post('/api/create', async (req, res) => {
 
         // Send platform-specific notifications
         if (platform === 'telegram') {
+          console.log('Sending telegram message');
           await telegramNotifier.sendTelegramMessage(
             chatId,
             `🤖 *${userData.boostName} Mode Activated*\n` +
@@ -124,6 +125,7 @@ app.post('/api/create', async (req, res) => {
           );
         } else if (platform === 'discord') {
           try {
+            console.log('Sending discord message');
             await discordNotifier.sendDiscordMessage(
               interaction,
               `🤖 **${userData.boostName} Mode Activated**\n` +
