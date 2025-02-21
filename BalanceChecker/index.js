@@ -4,7 +4,7 @@ const DataManager = require('../database')
 const DiscordNotifier = require('../Discord');
 const EventEmitter = require('events');
 const TelegramNotifier = require('../Telegram');
-const { formatTokenAmount } = require('../utils');
+const { formatTokenAmount, decrypt } = require('../utils');
 const InstanceManager = require('../InstanceManager');
 const WebSocket = require('ws');
 
@@ -19,6 +19,7 @@ client.on('error', (err) => console.error('Redis Client Error', err));
 
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
 const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const { MESSAGES, BALANCE_BITQUERY_TOKEN } = require('../constants');
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -33,7 +34,7 @@ class BalanceChecker extends EventEmitter {
     this.receiverKeypairString = receiverPrivateKey;
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.connection2 = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
-    this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(this.receiverKeypairString));
+    this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(decrypt(this.receiverKeypairString, ENCRYPTION_KEY)));
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.discordNotifier = new DiscordNotifier(discordToken);

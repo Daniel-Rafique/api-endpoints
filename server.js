@@ -38,11 +38,11 @@ const options = {
 app.use(bodyParser.json());
 
 // Secret key (store this securely, e.g., in environment variables)
-const SECRET_KEY = process.env.SECRET_KEY;
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
 // Function to generate the hash
 function generateHash(chatId, timestamp) {
-  const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
+  const data = `${chatId}:${timestamp}:${ENCRYPTION_KEY}`;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
