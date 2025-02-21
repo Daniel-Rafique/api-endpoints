@@ -376,16 +376,17 @@ class BalanceChecker extends EventEmitter {
           if (this.platform === 'telegram') {
             if (this.shouldSendMessage(this.chatId, message) && signature) {
               await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+              console.log('Sent telegram message');
+              return this.reconnectWebSocket();
             }
           } else if (this.platform === 'discord') {
             const userData = await this.dataManager.getCollection(this.chatId);
             if (userData?.applicationId && userData?.interactionToken && signature) {
               await this.discordNotifier.sendDiscordMessage(interaction, message);
+              console.log('Sent discord message');
+              return this.reconnectWebSocket();
             }
           }
-
-          return this.reconnectWebSocket();
-
         } catch (error) {
           if (error.name === 'SendTransactionError') {
             console.error('Transaction simulation failed:', error.message);
