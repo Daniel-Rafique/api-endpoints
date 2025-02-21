@@ -374,7 +374,9 @@ class BalanceChecker extends EventEmitter {
           publicKey: this.receiverKeypair.publicKey.toString(),
           recipient: senderPubKey.toString(),
           amount: amountReceived,
-          type: 'return'
+          mintAddress: 'So11111111111111111111111111111111111111112',
+          decimals: 9,
+          type: 'send'
         })
       });
 
