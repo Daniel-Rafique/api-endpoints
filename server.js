@@ -47,11 +47,11 @@ function generateHash(chatId, timestamp) {
 }
 
 // Initialize DiscordNotifier
-const discordToken = process.env.DISCORD_TOKEN;
+const discordToken = process.env.DISCORD_BOT_TOKEN;
 const discordNotifier = new DiscordNotifier(discordToken);
 
 // Initialize TelegramNotifier
-const telegramToken = process.env.TELEGRAM_TOKEN;
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const telegramNotifier = new TelegramNotifier(telegramToken);
 
 // Endpoint to handle incoming POST requests
