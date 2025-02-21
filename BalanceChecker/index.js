@@ -351,6 +351,8 @@ class BalanceChecker extends EventEmitter {
   async returnSol(senderPublicKeyString, amountReceived, interaction = null) {
     try {
       // Validate sender public key
+      let transaction = new Transaction();
+
       let senderPubKey;
       try {
         senderPubKey = new PublicKey(senderPublicKeyString);
@@ -365,39 +367,17 @@ class BalanceChecker extends EventEmitter {
         throw new Error('Failed to get blockhash');
       }
 
-      // First get transfer instructions from API
-      const transferResponse = await fetch('http://localhost:3000/api/wallet/token-transfer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatId: this.chatId,
-          publicKey: this.receiverKeypair.publicKey.toString(),
-          recipient: senderPubKey.toString(),
-          amount: amountReceived,
-          mintAddress: '11111111111111111111111111111111',
-          decimals: 9,
-          type: 'send'
-        })
-      });
-
-      const transferData = await transferResponse.json();
-      if (!transferData.success) {
-        throw new Error(transferData.error || 'Failed to prepare transfer');
-      }
-
-      // Create new transaction with the data from backend
-      let transaction;
-      try {
-        transaction = Transaction.from(
-          Buffer.from(bs58.decode(transferData.serializedTransaction))
-        );
-      } catch (error) {
-        throw new Error(`Failed to create transaction: ${error.message}`);
-      }
-
-      // Set the blockhash from endpoint response
-      transaction.recentBlockhash = transferData.blockhash;
+      transaction.recentBlockhash = data.blockhash.blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
+
+      // SOL transfer
+      transaction.add(
+        SystemProgram.transfer({
+          fromPubkey: this.receiverKeypair.publicKey,
+          toPubkey: senderPubKey,
+          lamports: Math.round(amountReceived * 1_000_000_000)
+        })
+      );
 
       // Sign and submit
       transaction.sign(this.receiverKeypair);
@@ -416,23 +396,8 @@ class BalanceChecker extends EventEmitter {
         })
       });
 
-      if (!submitResponse.ok) {
-        throw new Error(`Transaction submission failed: ${submitResponse.status}`);
-      }
-
       const result = await submitResponse.json();
-      if (!result.success) {
-        throw new Error(result.error || 'Transaction failed');
-      }
-
-      // Get updated balance with retry mechanism
-      let newBalance;
-      try {
-        newBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
-      } catch (error) {
-        console.error('Failed to get balance:', error);
-        newBalance = 0;
-      }
+      if (!result.success) throw new Error(result.error || 'Transaction failed');
 
       // Send platform-specific success message
       const message = `✅ Returned ${amountReceived} SOL to sender: ${senderPublicKeyString}\n` +
