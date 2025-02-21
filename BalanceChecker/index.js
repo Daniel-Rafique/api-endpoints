@@ -350,121 +350,91 @@ class BalanceChecker extends EventEmitter {
 
   async returnSol(senderPublicKeyString, amountReceived, interaction = null) {
     try {
-      const estimatedFee = await this.getEstimatedFee();
-      const amountToReturn = amountReceived - estimatedFee;
+      // Get fresh blockhash from API
+      const response = await fetch('http://localhost:3000/api/wallet/solana');
+      const data = await response.json();
 
-      if (amountToReturn <= 0) {
-        console.error('Amount to return is less than or equal to the transaction fee');
-        return this.reconnectWebSocket();
+      if (!data.success) {
+        throw new Error('Failed to get blockhash');
       }
 
-      let transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: this.receiverKeypair.publicKey,
-          toPubkey: senderPublicKeyString,
-          lamports: amountToReturn
+      // First get transfer instructions from API
+      const transferResponse = await fetch('http://localhost:3000/api/wallet/token-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: this.chatId,
+          publicKey: this.receiverKeypair.publicKey.toString(),
+          recipient: senderPublicKeyString,
+          amount: amountReceived,
+          type: 'return'
         })
+      });
+
+      const transferData = await transferResponse.json();
+      if (!transferData.success) {
+        throw new Error(transferData.error || 'Failed to prepare transfer');
+      }
+
+      // Create new transaction with the data from backend
+      let transaction = Transaction.from(
+        Buffer.from(bs58.decode(transferData.serializedTransaction))
       );
 
-      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
+      // Set the blockhash from backend response
+      transaction.recentBlockhash = transferData.blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
+
+      // Sign and submit
       transaction.sign(this.receiverKeypair);
+      const serializedTransaction = transaction.serialize();
+      const encodedTx = bs58.encode(new Uint8Array(serializedTransaction));
 
-      let currentBlockHeight = await this.connection.getBlockHeight();
+      // Submit transaction through API
+      const submitResponse = await fetch('http://localhost:3000/api/transaction/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: this.chatId,
+          publicKey: this.receiverKeypair.publicKey.toString(),
+          signedTransaction: encodedTx,
+          type: 'return'
+        })
+      });
 
-      while (currentBlockHeight < lastValidBlockHeight) {
-        try {
-          const signature = await sendAndConfirmTransaction(this.connection, transaction, [this.receiverKeypair]);
+      const result = await submitResponse.json();
+      if (!result.success) throw new Error(result.error || 'Transaction failed');
 
-          console.log(`Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}`);
-          const message = `✅ Returned ${amountToReturn / 1_000_000_000} SOL to sender: ${senderPublicKeyString}. \nTX signature: ${signature}`;
+      // Get updated balance
+      const newBalance = await this.connection.getBalance(this.receiverKeypair.publicKey);
 
-          if (this.platform === 'telegram') {
-            if (this.shouldSendMessage(this.chatId, message) && signature) {
-              await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-              console.log('Sent telegram message');
-              return this.reconnectWebSocket();
-            }
-          } else if (this.platform === 'discord') {
-            const userData = await this.dataManager.getCollection(this.chatId);
-            if (userData?.applicationId && userData?.interactionToken && signature) {
-              await this.discordNotifier.sendDiscordMessage(interaction, message);
-              console.log('Sent discord message');
-              return this.reconnectWebSocket();
-            }
-          }
-        } catch (error) {
-          if (error.name === 'SendTransactionError') {
-            console.error('Transaction simulation failed:', error.message);
-            console.error('Transaction logs:', error.transactionLogs || 'No logs available');
+      // Send platform-specific success message
+      const message = `✅ Returned ${amountReceived} SOL to sender: ${senderPublicKeyString}\n` +
+        `TX: https://solscan.io/tx/${result.signature}`;
 
-            // Fetch logs directly from the connection if available
-            const confirmation = await connection.confirmTransaction({
-              signature,
-              blockhash: tx.message.recentBlockhash,
-              lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight
-            }, 'confirmed');
-
-            // Get transaction info regardless of success/failure
-            const txInfo = await connection.getTransaction(signature, {
-              maxSupportedTransactionVersion: 0,
-              commitment: 'confirmed'
-            });
-
-            // Log fees even if transaction failed
-            const fee = txInfo?.meta?.fee || 0;
-            console.log('Transaction fee:', {
-              fee: fee / 1e9, // Convert lamports to SOL
-              signature
-            });
-
-            if (confirmation.value.err || txInfo?.meta?.err) {
-              const error = confirmation.value.err || txInfo?.meta?.err;
-              console.log('Transaction failed:', {
-                error,
-                fee: fee / 1e9,
-                signature,
-                logs: txInfo?.meta?.logMessages
-              });
-              throw new Error(`Transaction failed, try increasing slippage`);
-            }
-
-            console.log('Transaction successful:', {
-              signature,
-              slot: txInfo?.slot,
-              confirmationStatus: txInfo?.confirmationStatus,
-              fee: fee / 1e9
-            });
-
-            // Decide whether to retry based on the specific error or logs
-            if (this.shouldRetryTransaction(error)) {
-              console.log('Retrying transaction...');
-              continue;
-            } else {
-              console.log('Not retrying transaction due to specific error condition.');
-              break;
-            }
-          } else {
-            console.error('Unexpected error during transaction:', error);
-          }
-        }
-        await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
-        currentBlockHeight = await this.connection.getBlockHeight();
+      if (this.platform === 'telegram') {
+        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+      } else if (this.platform === 'discord' && interaction) {
+        await this.discordNotifier.sendDiscordMessage(interaction, message);
       }
-      console.error('Failed to return SOL: transaction expired');
+
+      return {
+        success: true,
+        signature: result.signature,
+        solscanLink: `https://solscan.io/tx/${result.signature}`,
+        balance: newBalance
+      };
+
     } catch (error) {
-      console.error('Error returning SOL to sender:', error);
+      console.error('Send error:', error);
       const errorMessage = `❌ Error returning SOL: ${error.message}`;
 
       if (this.platform === 'telegram') {
         await this.telegramNotifier.sendTelegramMessage(this.chatId, errorMessage);
-      } else if (this.platform === 'discord') {
-        const userData = await this.dataManager.getCollection(this.chatId);
-        if (userData?.applicationId && userData?.interactionToken) {
-          await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
-        }
+      } else if (this.platform === 'discord' && interaction) {
+        await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
       }
+      throw error;
     }
   }
 
