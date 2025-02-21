@@ -120,16 +120,16 @@ app.post('/api/create', async (req, res) => {
               chatId,
               `🤖 *${userData.boostName} Mode Activated*\n` +
               `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
-              `💰 Required Balance: ${minimumSolBalance} SOL\n` +
-              `🔍 Status: Waiting for confirmation...`
+              `💰 Balance: ${minimumSolBalance} SOL\n` +
+              `🔍 Status: Initializing...`
             );
           } else if (platform === 'discord') {
             await discordNotifier.sendDiscordMessage(
               interaction,
               `🤖 **${userData.boostName} Mode Activated**\n` +
               `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
-              `💰 Required Balance: ${minimumSolBalance} SOL\n` +
-              `🔍 Status: Waiting for confirmation...`
+              `💰 Balance: ${minimumSolBalance} SOL\n` +
+              `🔍 Status: Initializing...`
             );
           }
         } catch (balanceError) {
