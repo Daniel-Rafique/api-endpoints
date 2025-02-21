@@ -124,30 +124,30 @@ app.post('/api/create', async (req, res) => {
           );
         } else if (platform === 'discord') {
           try {
-            // Check if this is market maker mode
-            if (userData.mode === 'catalyst' ||
-              userData.mode === 'compound' ||
-              userData.mode === 'velocity') {
-              await discordNotifier.sendDiscordMessage(
-                interaction,
-                `�� **${userData.boostName} Mode Activated**\n` +
-                `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
-                `💰 Required Balance: ${minimumSolBalance} SOL\n` +
-                `🔍 Status: Waiting for confirmation...`
-              );
-            } else {
-              await discordNotifier.sendDiscordMessage(
-                interaction,
-                `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`
-              );
-            }
+            await discordNotifier.sendDiscordMessage(
+              interaction,
+              `🤖 **${userData.boostName} Mode Activated**\n` +
+              `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
+              `💰 Required Balance: ${minimumSolBalance} SOL\n` +
+              `🔍 Status: Waiting for confirmation...`
+            );
           } catch (discordError) {
             console.error('Discord notification error:', discordError);
-            // Continue execution even if Discord notification fails
-            res.status(200).send('🔍 Checking balance...');
+            // Send a fallback message
+            res.status(200).json({
+              message: '⏳ Initializing trading wallets. Please wait...',
+              error: discordError.message
+            });
           }
         }
-        res.status(200).json({ message: '🔍 Checking balance...' });
+        res.status(200).json({
+          message: '🔍 Initializing trading wallets...',
+          details: {
+            wallets: userData.makers,
+            solPerWallet: userData.solPerWallet,
+            mode: userData.boostName
+          }
+        });
       }
     } catch (dbError) {
       console.error('Database or processing error:', dbError);
@@ -275,3 +275,4 @@ server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
 server.listen(port, () => {
   console.log(`HTTPS server is running on port ${port}`);
 });
+
