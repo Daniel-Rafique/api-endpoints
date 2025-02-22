@@ -395,16 +395,11 @@ class BalanceChecker extends EventEmitter {
 
   async returnSol(senderPublicKeyString, amountReceived, interaction = null) {
     try {
-      // Validate sender public key
+      // Create transaction to calculate fees first
       let transaction = new Transaction();
+      const senderPubKey = new PublicKey(senderPublicKeyString);
 
-      let senderPubKey;
-      try {
-        senderPubKey = new PublicKey(senderPublicKeyString);
-      } catch (error) {
-        throw new Error('Invalid sender public key');
-      }
-      // Get fresh blockhash from API
+      // Get fresh blockhash
       const response = await fetch('http://localhost:3000/api/wallet/solana');
       const data = await response.json();
 
@@ -415,12 +410,36 @@ class BalanceChecker extends EventEmitter {
       transaction.recentBlockhash = data.blockhash.blockhash;
       transaction.feePayer = this.receiverKeypair.publicKey;
 
-      // SOL transfer
+      // Add transfer instruction
       transaction.add(
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
           toPubkey: senderPubKey,
           lamports: Math.round(amountReceived * 1_000_000_000)
+        })
+      );
+
+      // Calculate fee
+      const message = transaction.compileMessage();
+      const { value: fee } = await this.connection.getFeeForMessage(message);
+
+      // Adjust transfer amount to account for fee
+      const adjustedAmount = amountReceived - (fee / 1_000_000_000);
+
+      if (adjustedAmount <= 0) {
+        throw new Error('Amount too small to cover transaction fee');
+      }
+
+      // Create new transaction with adjusted amount
+      transaction = new Transaction();
+      transaction.recentBlockhash = data.blockhash.blockhash;
+      transaction.feePayer = this.receiverKeypair.publicKey;
+
+      transaction.add(
+        SystemProgram.transfer({
+          fromPubkey: this.receiverKeypair.publicKey,
+          toPubkey: senderPubKey,
+          lamports: Math.round(adjustedAmount * 1_000_000_000)
         })
       );
 
@@ -445,18 +464,18 @@ class BalanceChecker extends EventEmitter {
       if (!result.success) throw new Error(result.error || 'Transaction failed');
 
       // Send platform-specific success message
-      const message = `✅ Returned ${amountReceived} SOL to sender: ${senderPublicKeyString}\n` +
+      const successMessage = `✅ Returned ${amountReceived} SOL to sender: ${senderPublicKeyString}\n` +
         `TX: https://solscan.io/tx/${result.signature}`;
 
       try {
         if (this.platform === 'telegram') {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, successMessage);
           console.log('Transaction completed successfully');
           this.cleanup();
           this.isConnected = false;
           return;
         } else if (this.platform === 'discord' && interaction) {
-          await this.discordNotifier.sendDiscordMessage(interaction, message);
+          await this.discordNotifier.sendDiscordMessage(interaction, successMessage);
           console.log('Transaction completed successfully');
           this.cleanup();
           this.isConnected = false;
@@ -471,7 +490,7 @@ class BalanceChecker extends EventEmitter {
       return {
         success: true,
         signature: result.signature,
-        message: message
+        message: successMessage
       };
 
     } catch (error) {
