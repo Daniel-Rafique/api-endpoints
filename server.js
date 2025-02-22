@@ -118,6 +118,9 @@ app.post('/api/create', async (req, res) => {
           // Just log the error and cleanup without sending additional messages
           console.log('Balance check failed:', balanceError);
           balance.cleanup();
+          return res.status(500).json({
+            error: 'Balance check failed',
+          });
         }
       }
       res.status(200).json({
