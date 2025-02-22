@@ -88,7 +88,7 @@ app.post('/api/create', async (req, res) => {
 
       const mintAddress = userData.contractAddress;
       const minimumSolBalance = 0.01;
-      const minimumTokenBalance = 100000000;
+      const minimumTokenBalance = 1000000;
       const platform = userData.platform;
 
       let receiverPrivateKey = userData.userKeypair.secretKey;
