@@ -31,8 +31,8 @@ class BalanceChecker extends EventEmitter {
     this.chatId = chatId;
     this.receiverKeypairString = receiverPrivateKey;
     this.rpcEndpoints = [
-      process.env.SOLANA_RPC_ENDPOINT_1,
-      process.env.SOLANA_RPC_ENDPOINT_2
+      process.env.SOLANA_RPC_ENDPOINT_1 || 'https://api.mainnet-beta.solana.com',
+      process.env.SOLANA_RPC_ENDPOINT_2 || 'https://api.mainnet-beta.solana.com'
     ];
     this.currentRpcIndex = 0;
     this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
