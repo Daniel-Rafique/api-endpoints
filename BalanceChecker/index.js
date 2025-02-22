@@ -514,16 +514,6 @@ class BalanceChecker extends EventEmitter {
     }
   }
 
-  shouldRetryTransaction(error) {
-    // Implement logic to determine whether a transaction should be retried based on the error or logs
-    // For example, you may choose to retry on network-related issues, but not on issues like "account not found"
-    if (error.message.includes('Attempt to debit an account but found no record of a prior credit')) {
-      return false; // Don't retry if the account lacks sufficient funds
-    }
-    // Add other conditions as necessary
-    return true; // Default to retrying in other cases
-  }
-
   async shouldSendMessage(chatId, message) {
     const cacheKey = String(chatId); // Ensure the cache key is a string
     const currentTime = Date.now();
