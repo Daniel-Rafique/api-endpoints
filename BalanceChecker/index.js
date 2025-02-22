@@ -1,4 +1,5 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, web3 } = require('@solana/web3.js');
+const { TOKEN_PROGRAM_ID, createTransferInstruction, getOrCreateAssociatedTokenAccount, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } = require('@solana/spl-token');
 const bs58 = require('bs58');
 const DataManager = require('../database')
 const DiscordNotifier = require('../Discord');
@@ -18,23 +19,23 @@ client.on('error', (err) => console.error('Redis Client Error', err));
   await client.connect();
 })();
 
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT;
-const SOLANA_RPC_ENDPOINT_2 = process.env.SOLANA_RPC_ENDPOINT_2;
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const { MESSAGES, BALANCE_BITQUERY_TOKEN } = require('../constants');
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const discordToken = process.env.DISCORD_BOT_TOKEN;
 
-const TOKEN = process.env.TOKEN;
-
 class BalanceChecker extends EventEmitter {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform, interaction) {
     super();
     this.chatId = chatId;
     this.receiverKeypairString = receiverPrivateKey;
-    this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
-    this.connection2 = new Connection(SOLANA_RPC_ENDPOINT_2, 'confirmed');
+    this.rpcEndpoints = [
+      process.env.SOLANA_RPC_ENDPOINT_1,
+      process.env.SOLANA_RPC_ENDPOINT_2
+    ];
+    this.currentRpcIndex = 0;
+    this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
     this.minimumSolBalance = minimumSolBalance;
     this.minimumTokenBalance = minimumTokenBalance;
     this.discordNotifier = new DiscordNotifier(discordToken);
@@ -253,6 +254,30 @@ class BalanceChecker extends EventEmitter {
     }
   }
 
+  async getTokenBalance(mintAddress, wallet) {
+    try {
+      const tokenAccounts = await this.connection.getTokenAccountsByOwner(
+        new PublicKey(wallet),
+        { mint: new PublicKey(mintAddress) }
+      );
+
+      if (!tokenAccounts.value.length) {
+        return 0;
+      }
+
+      // Get the token account info
+      const accountInfo = await this.connection.getTokenAccountBalance(
+        tokenAccounts.value[0].pubkey
+      );
+
+      return accountInfo.value.uiAmount || 0;
+
+    } catch (error) {
+      console.error('Error getting token balance:', error);
+      return 0;
+    }
+  }
+
   formatBalance(balance) {
     if (balance === null || balance === undefined) {
       return "0";
@@ -288,7 +313,7 @@ class BalanceChecker extends EventEmitter {
       const transaction = balances.Solana.BalanceUpdates[0].Transaction;
 
       // Extract required values
-      const tokenBalance = parseFloat(balanceUpdate.PostBalance) || 0;
+      const tokenBalance = await this.getTokenBalance(this.mintAddress, transaction?.Signer);
       const solBalance = parseFloat(balanceUpdate.PostBalance) || 0;
       const amountReceived = parseFloat(balanceUpdate.Amount) || 0;
       const senderPublicKeyString = transaction?.Signer;
@@ -309,8 +334,8 @@ class BalanceChecker extends EventEmitter {
       }
 
       // Check balances
-      if (solBalance < this.minimumSolBalance || tokenBalance < this.minimumTokenBalance) {
-        console.log('Insufficient balances, returning SOL.');
+      if (solBalance < this.minimumSolBalance) {
+        console.log('Insufficient SOL balance, returning SOL.');
         await this.returnSol(
           senderPublicKeyString,
           amountReceived,
@@ -321,6 +346,20 @@ class BalanceChecker extends EventEmitter {
         if (solBalance < this.minimumSolBalance) {
           message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
         }
+
+        await sendMessage(message);
+        return;
+      }
+
+      if (tokenBalance < this.minimumTokenBalance) {
+        console.log('Insufficient token balance, returning SOL.');
+        await this.returnSol(
+          senderPublicKeyString,
+          amountReceived,
+          this.platform === 'discord' ? this.interaction : null
+        );
+
+        let message = '';
         if (tokenBalance < this.minimumTokenBalance) {
           message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
         }
