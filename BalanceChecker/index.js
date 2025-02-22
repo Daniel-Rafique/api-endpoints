@@ -63,6 +63,12 @@ class BalanceChecker extends EventEmitter {
       console.error('Error decrypting receiver keypair:', error);
       throw error;
     }
+
+    // Simple rotation method
+    this.rotateEndpoint = () => {
+      this.currentRpcIndex = (this.currentRpcIndex + 1) % this.rpcEndpoints.length;
+      this.connection = new Connection(this.rpcEndpoints[this.currentRpcIndex], 'confirmed');
+    };
   }
 
   // New method to connect to Bitquery
@@ -256,7 +262,7 @@ class BalanceChecker extends EventEmitter {
 
   async getTokenBalance(mintAddress, wallet) {
     try {
-      const tokenAccounts = await this.connection.getTokenAccountsByOwner(
+      const tokenAccounts = await this.rotateEndpoint().getTokenAccountsByOwner(
         new PublicKey(wallet),
         { mint: new PublicKey(mintAddress) }
       );
@@ -266,7 +272,7 @@ class BalanceChecker extends EventEmitter {
       }
 
       // Get the token account info
-      const accountInfo = await this.connection.getTokenAccountBalance(
+      const accountInfo = await this.rotateEndpoint().getTokenAccountBalance(
         tokenAccounts.value[0].pubkey
       );
 
