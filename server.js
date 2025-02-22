@@ -100,7 +100,7 @@ app.post('/api/create', async (req, res) => {
       }
 
       // Start the periodic check
-      const balance = new BalanceChecker(
+      let balance = new BalanceChecker(
         chatId,
         receiverPrivateKey,
         minimumSolBalance,
@@ -113,13 +113,13 @@ app.post('/api/create', async (req, res) => {
       if (!userData?.distributeSolana) {
         try {
           await balance.getBalance(interaction);
+
         } catch (balanceError) {
           // Just log the error and cleanup without sending additional messages
           console.log('Balance check failed:', balanceError);
           balance.cleanup();
         }
       }
-      balance.cleanup();
       res.status(200).json({
         message: '🔍 Initializing trading wallets...',
         details: {
@@ -131,7 +131,6 @@ app.post('/api/create', async (req, res) => {
 
     } catch (dbError) {
       console.error('Database error:', dbError);
-      await balance?.cleanup();
       return res.status(500).json({
         error: 'Internal server error',
       });
@@ -139,7 +138,6 @@ app.post('/api/create', async (req, res) => {
 
   } catch (error) {
     console.error('Unexpected error:', error);
-    await balance?.cleanup();
     return res.status(500).json({
       error: 'Internal server error',
     });
