@@ -386,6 +386,7 @@ class BalanceChecker extends EventEmitter {
       const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}\n` +
         `Token balance is ${TOKEN_BALANCE}\n`
       await sendMessage(successMessage);
+      return;
 
     } catch (error) {
       console.error('Error handling transaction:', error);
