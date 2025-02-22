@@ -381,7 +381,7 @@ class BalanceChecker extends EventEmitter {
       // await this.instanceManager.initializeMarketMakerInstance(this.chatId);
 
       const currentTokenBalance = tokenBalance / 1_000_000_000;
-      const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
+      const TOKEN_BALANCE = formatTokenAmount(tokenBalance);
 
       const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}\n` +
         `Token balance is ${TOKEN_BALANCE}\n`
