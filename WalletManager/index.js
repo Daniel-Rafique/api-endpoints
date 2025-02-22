@@ -26,9 +26,9 @@ class WalletManager {
         const wallets = [];
         for (let i = 0; i < makers; i++) {
             const keypair = Keypair.generate();
-            const privateKey = bs58.encode(Buffer.from(keypair.secretKey)); // Ensure Buffer.from is used
+            const secretKey = bs58.encode(Buffer.from(keypair.secretKey)); // Ensure Buffer.from is used
             const publicKey = keypair.publicKey.toString();
-            wallets.push({ privateKey, publicKey });
+            wallets.push({ secretKey, publicKey });
         }
         return wallets;
     }
@@ -88,7 +88,7 @@ class WalletManager {
             // Prepare wallet data for saving
             const walletData = newWallets.map(wallet => ({
                 publicKey: wallet.publicKey,
-                secretKey: wallet.privateKey,
+                secretKey: wallet.secretKey,
             }));
 
             // Write wallets data to file asynchronously
@@ -99,8 +99,6 @@ class WalletManager {
             throw new Error('Failed to save wallets to file');
         }
     }
-
-
 }
 
 module.exports = WalletManager;
