@@ -455,10 +455,16 @@ class BalanceChecker extends EventEmitter {
           await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
           console.log('Transaction completed successfully');
           this.cleanup();
+          this.bitqueryConnection.close();
+          this.isConnected = false;
+          return;
         } else if (this.platform === 'discord' && interaction) {
           await this.discordNotifier.sendDiscordMessage(interaction, message);
           console.log('Transaction completed successfully');
           this.cleanup();
+          this.bitqueryConnection.close();
+          this.isConnected = false;
+          return;
         }
       } catch (error) {
         console.error('Failed to send notification:', error);
