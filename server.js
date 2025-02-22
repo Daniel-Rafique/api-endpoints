@@ -113,7 +113,14 @@ app.post('/api/create', async (req, res) => {
       if (!userData?.distributeSolana) {
         try {
           await balance.getBalance(interaction);
-
+          res.status(200).json({
+            message: '🔍 Initializing trading wallets...',
+            details: {
+              wallets: userData.makers,
+              solPerWallet: userData.solPerWallet,
+              mode: userData.boostName
+            }
+          });
         } catch (balanceError) {
           // Just log the error and cleanup without sending additional messages
           console.log('Balance check failed:', balanceError);
@@ -123,15 +130,6 @@ app.post('/api/create', async (req, res) => {
           });
         }
       }
-      res.status(200).json({
-        message: '🔍 Initializing trading wallets...',
-        details: {
-          wallets: userData.makers,
-          solPerWallet: userData.solPerWallet,
-          mode: userData.boostName
-        }
-      });
-
     } catch (dbError) {
       console.error('Database error:', dbError);
       return res.status(500).json({
