@@ -113,25 +113,6 @@ app.post('/api/create', async (req, res) => {
       if (!userData?.distributeSolana) {
         try {
           await balance.getBalance(interaction);
-
-          // Send initial platform-specific notifications
-          if (platform === 'telegram') {
-            await telegramNotifier.sendTelegramMessage(
-              chatId,
-              `🤖 *${userData.boostName} Mode Activated*\n` +
-              `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
-              `💰 Balance: ${minimumSolBalance} SOL\n` +
-              `🔍 Status: Initializing...`
-            );
-          } else if (platform === 'discord') {
-            await discordNotifier.sendDiscordMessage(
-              interaction,
-              `🤖 **${userData.boostName} Mode Activated**\n` +
-              `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
-              `💰 Balance: ${minimumSolBalance} SOL\n` +
-              `🔍 Status: Initializing...`
-            );
-          }
         } catch (balanceError) {
           // Just log the error and cleanup without sending additional messages
           console.log('Balance check failed:', balanceError);
