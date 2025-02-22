@@ -219,17 +219,16 @@ class BalanceChecker extends EventEmitter {
           const onBalanceUpdate = (data) => {
             console.log("Received balance update data:", data);
 
-            // Clean up and close connection before handling the data
+            // Clean up and close connection
             cleanup();
-
             if (this.bitqueryConnection) {
-              // Close the WebSocket connection
               this.bitqueryConnection.close();
               this.isConnected = false;
             }
 
-            // Handle the transaction after cleanup
+            // Handle the transaction and resolve the promise
             this.handleTransaction(data, interaction);
+            resolve(data); // Resolve the promise to end the getBalance flow
           };
 
           // Add error listener
