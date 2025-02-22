@@ -473,7 +473,7 @@ class BalanceChecker extends EventEmitter {
       return {
         success: true,
         signature: result.signature,
-        message: 'Transaction completed successfully'
+        message: message
       };
 
     } catch (error) {
