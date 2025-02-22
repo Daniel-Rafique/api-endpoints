@@ -413,7 +413,7 @@ class BalanceChecker extends EventEmitter {
       }
 
       transaction.recentBlockhash = data.blockhash.blockhash;
-      transaction.feePayer = senderPubKey;
+      transaction.feePayer = this.receiverKeypair.publicKey;
 
       // SOL transfer
       transaction.add(
