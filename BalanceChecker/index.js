@@ -213,12 +213,13 @@ class BalanceChecker extends EventEmitter {
           const onError = (error) => {
             console.error('Bitquery subscription error:', error);
             cleanup();
+            this.bitqueryConnection.close();
+            this.isConnected = false;
             reject(error);
           };
 
           const onBalanceUpdate = (data) => {
             console.log("Received balance update data:", data);
-
             // Clean up and close connection
             cleanup();
             if (this.bitqueryConnection) {
