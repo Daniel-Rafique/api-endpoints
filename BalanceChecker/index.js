@@ -381,7 +381,6 @@ class BalanceChecker extends EventEmitter {
       await this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString);
       // await this.instanceManager.initializeMarketMakerInstance(this.chatId);
 
-      const currentTokenBalance = tokenBalance / 1_000_000_000;
       const TOKEN_BALANCE = formatTokenAmount(tokenBalance);
 
       const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}\n` +
@@ -391,7 +390,7 @@ class BalanceChecker extends EventEmitter {
 
     } catch (error) {
       console.error('Error handling transaction:', error);
-      await sendMessage(`❌ Error handling transaction: ${error.message}`);
+      // await sendMessage(`❌ Error handling transaction: ${error.message}`);
     }
   }
 
