@@ -197,17 +197,17 @@ class BalanceChecker extends EventEmitter {
             payload: { query },
           });
 
-          const queryTimeout = setTimeout(() => {
-            cleanup();
-            reject(new Error('Query timeout'));
-          }, 120000);
+          // const queryTimeout = setTimeout(() => {
+          //   cleanup();
+          //   reject(new Error('Query timeout'));
+          // }, 120000);
 
           const cleanup = () => {
             if (this.bitqueryConnection) {
               this.bitqueryConnection.removeListener('balanceUpdate', onBalanceUpdate);
               this.bitqueryConnection.removeListener('error', onError);
             }
-            clearTimeout(queryTimeout);
+            // clearTimeout(queryTimeout);
           };
 
           const onError = (error) => {
@@ -384,9 +384,7 @@ class BalanceChecker extends EventEmitter {
       const TOKEN_BALANCE = formatTokenAmount(currentTokenBalance);
 
       const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}\n` +
-        `Token balance is ${TOKEN_BALANCE}\n` +
-        `Any dust will be returned to ${senderPublicKeyString}`;
-
+        `Token balance is ${TOKEN_BALANCE}\n`
       await sendMessage(successMessage);
 
     } catch (error) {
