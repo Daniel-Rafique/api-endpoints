@@ -109,9 +109,8 @@ class Distribute {
           await this.logTransactionResults(results, currentBatch);
         }
 
-        // console.log('Distribution completed successfully');
         await this.sendNotification(
-          userData,
+          this.chatId,
           `✅ Labs ${userData.boostName} tier will begin shortly for ${userData.tokenDetails.symbol}\n`
         );
 
