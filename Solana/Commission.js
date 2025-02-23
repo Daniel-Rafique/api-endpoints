@@ -88,7 +88,7 @@ class Commission {
       // Add transfer instruction
       transaction.add(
         SystemProgram.transfer({
-          fromPubkey: senderKeypair.publicKey,
+          fromPubkey: senderKeypair.publicKey.toString(),
           toPubkey: new PublicKey(KOYNLABS_WALLET),
           lamports: amountToSend
         })
@@ -107,11 +107,11 @@ class Commission {
       // Create new transaction with adjusted amount
       transaction = new Transaction();
       transaction.recentBlockhash = data.blockhash.blockhash;
-      transaction.feePayer = senderKeypair.publicKey;
+      transaction.feePayer = senderKeypair.publicKey.toString();
 
       transaction.add(
         SystemProgram.transfer({
-          fromPubkey: senderKeypair.publicKey,
+          fromPubkey: senderKeypair.publicKey.toString(),
           toPubkey: new PublicKey(KOYNLABS_WALLET),
           lamports: Math.round(adjustedAmount * 1_000_000_000)
         })

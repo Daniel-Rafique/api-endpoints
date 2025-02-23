@@ -91,7 +91,7 @@ class Distribute {
           throw new Error('Maximum wallet limit exceeded (1000)');
         }
 
-        const amountPerWallet = Math.floor(updatedBalance / makers);
+        const amountPerWallet = userData.amountPerWallet;
         console.log(`Amount per wallet: ${amountPerWallet / 1e9} SOL`);
 
         if (amountPerWallet < 1000000) {
@@ -105,7 +105,7 @@ class Distribute {
 
           const chunk = newWallets.slice(i, i + batchSize);
           const dropList = chunk.map(wallet => ({
-            walletAddress: wallet.publicKey,
+            walletAddress: wallet.publicKey.toString(),
             numLamports: amountPerWallet,
           }));
 
@@ -116,7 +116,7 @@ class Distribute {
         // console.log('Distribution completed successfully');
         await this.sendNotification(
           userData,
-          `✅ Trading will begin shortly for ${userData.tokenDetails.symbol}\n`
+          `✅ Labs ${userData.boostName} tier will begin shortly for ${userData.tokenDetails.symbol}\n`
         );
 
         return true;
