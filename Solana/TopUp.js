@@ -2,6 +2,7 @@ require('dotenv').config()
 const bs58 = require('bs58');
 const path = require('path');
 const os = require('os');
+const Encryption = require('../utils/encryption');
 const { Connection, Keypair } = require('@solana/web3.js'); // Import Keypair
 const Send = require('./Commission');
 const Distribute = require('./Distribute');
@@ -43,7 +44,7 @@ class Solana {
       try {
         const sendInstance = new Send(chatId);
         await sendInstance.sendToCommissionWallet(userData);
-        await this.handleCommission(chatId, userData)
+        await this.handleDistribution(chatId, userData)
       } catch (error) {
         console.error('Error sending commission:', error);
       }
@@ -57,7 +58,7 @@ class Solana {
   async handleDistribution(chatId, userData) {
     const { commissionPaid, distributeSolana, userKeypair, topUpState } = userData;
 
-    const senderKeypair = Keypair.fromSecretKey(bs58.decode(userKeypair.privateKey));
+    const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userKeypair.privateKey)));
     const updatedBalance = await this.connection.getBalance(senderKeypair.publicKey);
 
     console.log(`Starting distribution, userData.commissionPaid: ${commissionPaid}, userData.distributeSolana: ${distributeSolana}`);
