@@ -94,10 +94,6 @@ class Distribute {
         const amountPerWallet = userData.amountPerWallet;
         console.log(`Amount per wallet: ${amountPerWallet / 1e9} SOL`);
 
-        if (amountPerWallet < 1000000) {
-          throw new InsufficientBalanceError('Amount per wallet too low');
-        }
-
         const totalBatches = Math.ceil(newWallets.length / batchSize);
         for (let i = 0; i < newWallets.length; i += batchSize) {
           const currentBatch = Math.floor(i / batchSize) + 1;
