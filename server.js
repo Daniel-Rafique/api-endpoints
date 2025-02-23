@@ -38,124 +38,110 @@ const options = {
 app.use(bodyParser.json());
 
 // Secret key (store this securely, e.g., in environment variables)
-const SECRET_KEY = process.env.SECRET_KEY;
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
 // Function to generate the hash
 function generateHash(chatId, timestamp) {
-  const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
+  const data = `${chatId}:${timestamp}:${ENCRYPTION_KEY}`;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
 // Initialize DiscordNotifier
-const discordToken = process.env.DISCORD_TOKEN;
+const discordToken = process.env.DISCORD_BOT_TOKEN;
 const discordNotifier = new DiscordNotifier(discordToken);
 
 // Initialize TelegramNotifier
-const telegramToken = process.env.TELEGRAM_TOKEN;
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const telegramNotifier = new TelegramNotifier(telegramToken);
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
-  /**
-   *  
-   * chatId: the chat id of the user
-   * platform: the platform of the user
-   * timestamp: the timestamp of the request
-   * hash: the hash of the request
-   */
-  let { chatId, timestamp, interaction, hash } = req.body;
-
-  console.log('chatId', chatId);
-  console.log('timestamp', timestamp);
-  console.log('interaction', interaction);
-  console.log('hash', hash);
-
-  // Validate parameters
-  if (!chatId || !hash) {
-    return res.status(400).send('Missing required parameters');
-  }
-
-  // Validate the hash
-  const expectedHash = generateHash(chatId, timestamp);
-
-  if (hash !== expectedHash) {
-    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
-    return res.status(403).send('Invalid request signature');
-  }
-
   try {
-    const userData = await dataManager.getCollection(chatId.toString());
-    if (!userData) {
-      return res.status(404).send('User data not found');
-    }
+    let { chatId, timestamp, interaction, hash } = req.body;
 
-    const mintAddress = userData.contractAddress;
-    const minimumSolBalance = userData.boostCost;
-    const minimumTokenBalance = userData.tokenDetails.tokenAmount;
-    const platform = userData.platform;
-
-    let receiverPrivateKey = userData.userKeypair.privateKey;
-    receiverPrivateKey = receiverPrivateKey.toString();
-
-    if (typeof receiverPrivateKey !== 'string') {
-      throw new TypeError('Receiver private key must be a string');
-    }
-
-    // Start the periodic check
-    const balance = new BalanceChecker(
+    console.log('Received request:', {
       chatId,
-      receiverPrivateKey,
-      minimumSolBalance,
-      minimumTokenBalance,
-      telegramToken,
-      mintAddress,
-      platform
-    );
+      timestamp,
+      interaction: interaction ? 'present' : 'null',
+      hash
+    });
 
-    if (!userData?.distributeSolana) {
-      balance.getBalance(interaction);
+    // Validate parameters
+    if (!chatId || !hash) {
+      console.log('Missing required parameters');
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
 
-      // Send platform-specific notifications
-      if (platform === 'telegram') {
-        await telegramNotifier.sendTelegramMessage(
-          chatId,
-          `🤖 *${userData.boostName} Mode Activated*\n` +
-          `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
-          `💰 Required Balance: ${minimumSolBalance} SOL\n` +
-          `🔍 Status: Waiting for confirmation...`
-        );
-      } else if (platform === 'discord') {
+    // Validate the hash
+    const expectedHash = generateHash(chatId, timestamp);
+    if (hash !== expectedHash) {
+      console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+      return res.status(403).json({ error: 'Invalid request signature' });
+    }
+
+    try {
+      const userData = await dataManager.getCollection(chatId.toString());
+      if (!userData) {
+        console.log('User data not found for chatId:', chatId);
+        return res.status(404).json({ error: 'User data not found' });
+      }
+
+      const mintAddress = userData.contractAddress;
+      const minimumSolBalance = 0.01;
+      const minimumTokenBalance = 1000000;
+      const platform = userData.platform;
+
+      let receiverPrivateKey = userData.userKeypair.secretKey;
+      receiverPrivateKey = receiverPrivateKey.toString();
+
+      if (typeof receiverPrivateKey !== 'string') {
+        console.error('Invalid private key type:', typeof receiverPrivateKey);
+        throw new TypeError('Receiver private key must be a string');
+      }
+
+      // Start the periodic check
+      let balance = new BalanceChecker(
+        chatId,
+        receiverPrivateKey,
+        minimumSolBalance,
+        minimumTokenBalance,
+        mintAddress,
+        platform,
+        interaction
+      );
+
+      if (!userData?.distributeSolana) {
         try {
-          // Check if this is market maker mode
-          if (userData.mode === 'catalyst' ||
-            userData.mode === 'compound' ||
-            userData.mode === 'velocity') {
-            await discordNotifier.sendDiscordMessage(
-              interaction,
-              `🤖 **${userData.boostName} Mode Activated**\n` +
-              `🎯 Token: ${userData.tokenDetails.symbol || 'Unknown'}\n` +
-              `💰 Required Balance: ${minimumSolBalance} SOL\n` +
-              `🔍 Status: Waiting for confirmation...`
-            );
-          } else {
-            await discordNotifier.sendDiscordMessage(
-              interaction,
-              `🔍 Waiting for ${minimumSolBalance} SOL to be confirmed...`
-            );
-          }
-        } catch (discordError) {
-          console.error('Discord notification error:', discordError);
-          // Continue execution even if Discord notification fails
-          res.status(200).send('🔍 Checking balance...');
+          await balance.getBalance(interaction);
+          res.status(200).json({
+            message: '🔍 Initializing trading wallets...',
+            details: {
+              wallets: userData.makers,
+              solPerWallet: userData.solPerWallet,
+              mode: userData.boostName
+            }
+          });
+        } catch (balanceError) {
+          // Just log the error and cleanup without sending additional messages
+          console.log('Balance check failed:', balanceError);
+          balance.cleanup();
+          return res.status(500).json({
+            error: 'Balance check failed',
+          });
         }
       }
-      res.status(200).send('🔍 Checking balance...');
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      return res.status(500).json({
+        error: 'Internal server error',
+      });
     }
+
   } catch (error) {
-    console.error('Error processing request:', error);
-    if (!res.headersSent) {
-      res.status(500).send('Internal Server Error');
-    }
+    console.error('Unexpected error:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
   }
 });
 
@@ -268,3 +254,4 @@ server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
 server.listen(port, () => {
   console.log(`HTTPS server is running on port ${port}`);
 });
+

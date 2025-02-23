@@ -44,6 +44,7 @@ class InstanceManager {
 
       // Step 2: Create symbolic links for the user directory
       await this.createSymbolicLinksIndividually(this.basePath, userDir);
+      let userData = await this.dataManager.getCollection(chatId);
 
       const steps = [
         "CHECK_INSTANCES_CREATED",
@@ -58,7 +59,6 @@ class InstanceManager {
         console.log(`Processing step: ${step}`);
 
         // Fetch fresh user data before each step
-        let userData = await this.dataManager.getCollection(chatId);
         if (!userData) {
           throw new Error("userData is undefined. Stopping initialization.");
         }
@@ -226,18 +226,18 @@ class InstanceManager {
       }
 
       // Add sol_spl trade type and other parameters
-      const solAmount = userData.tradeSettings?.amount || userData.buyAmount;
       const envContent = `
 CHAT_ID=${chatId}
 TRADE_TYPE=sol_spl
-CONTRACT_ADDRESS=${userData.contractAddress}
+CONTRACT_ADDRESS=${userData.tokenDetails.mintAddress}
 TOKEN_DECIMALS=${userData.tokenDetails.decimals}
 TOKEN_SYMBOL=${userData.tokenDetails.symbol}
 BATCH_SIZE=${userData.batchSize}
 BOOST_TYPE=${userData.boostType}
-BUY_AMOUNT=${solAmount}
+BUY_AMOUNT=${userData.buyAmount}
 SELL_AMOUNT=${userData.sellAmount}
 SENDER_WALLET=${userData.senderWallet}
+SOL_PER_WALLET=${userData.solPerWallet}
 `;
       fs.appendFileSync(destEnvPath, envContent);
       console.log(`Appended sol_spl configuration to ${destEnvPath}`);
