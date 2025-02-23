@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
 const bs58 = require('bs58');
+const Encryption = require('../utils/encryption');
 const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
 const { Firestore } = require('@google-cloud/firestore');
@@ -78,7 +79,7 @@ class Distribute {
 
     while (attempt < retryLimit) {
       try {
-        const senderKeypair = Keypair.fromSecretKey(bs58.decode(userKeypair.privateKey));
+        const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userKeypair.privateKey)));
         const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
 
         await this.waitForFile(filePath, 30000);
@@ -108,18 +109,14 @@ class Distribute {
             numLamports: amountPerWallet,
           }));
 
-          const transactionList = this.generateTransactions(dropList, senderKeypair.publicKey, userData);
-          const results = await this.executeTransactions(transactionList, senderKeypair, userData);
-
-          this.logTransactionResults(results, currentBatch, userData);
+          const results = await this.generateTransactions(dropList, senderKeypair, userData);
+          await this.logTransactionResults(results, currentBatch);
         }
 
-        console.log('Distribution completed successfully');
+        // console.log('Distribution completed successfully');
         await this.sendNotification(
           userData,
-          `✅ Distribution completed successfully\n` +
-          `Total wallets: ${newWallets.length}\n` +
-          `Amount per wallet: ${amountPerWallet / 1e9} SOL`
+          `✅ Trading will begin shortly for ${userData.tokenDetails.symbol}\n`
         );
 
         return true;
@@ -148,39 +145,98 @@ class Distribute {
     }
   }
 
-  generateTransactions(dropList, fromWallet, userData) {
+  async generateTransactions(dropList, fromWallet, userData, retries = 3) {
     if (!dropList?.length || !fromWallet || !userData?.makers) {
       throw new Error('Invalid parameters for transaction generation');
     }
 
-    const transactions = [];
-    const txInstructions = dropList.map(drop => {
+    const results = [];
+
+    for (const drop of dropList) {
       try {
-        return SystemProgram.transfer({
-          fromPubkey: fromWallet,
-          toPubkey: new PublicKey(drop.walletAddress),
-          lamports: drop.numLamports,
+        let transaction = new Transaction();
+
+        // Get fresh blockhash from API
+        const response = await fetch('http://localhost:3000/api/wallet/solana');
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error('Failed to get blockhash');
+        }
+
+        transaction.recentBlockhash = data.blockhash.blockhash;
+        transaction.feePayer = fromWallet.publicKey;
+
+        // Add initial transfer instruction
+        transaction.add(
+          SystemProgram.transfer({
+            fromPubkey: fromWallet,
+            toPubkey: new PublicKey(drop.walletAddress),
+            lamports: drop.numLamports
+          })
+        );
+
+        // Calculate fee
+        const message = transaction.compileMessage();
+        const { value: fee } = await this.connection.getFeeForMessage(message);
+
+        // Create new transaction with adjusted amount
+        transaction = new Transaction();
+        transaction.recentBlockhash = data.blockhash.blockhash;
+        transaction.feePayer = fromWallet.publicKey;
+
+        const adjustedAmount = drop.numLamports - (fee ?? 0);
+        if (adjustedAmount <= 0) {
+          throw new Error('Amount too small to cover transaction fee');
+        }
+
+        transaction.add(
+          SystemProgram.transfer({
+            fromPubkey: fromWallet,
+            toPubkey: new PublicKey(drop.walletAddress),
+            lamports: adjustedAmount
+          })
+        );
+
+        transaction.sign(fromWallet);
+        const serializedTransaction = transaction.serialize();
+        const encodedTx = bs58.encode(serializedTransaction);
+
+        // Submit transaction through API
+        const submitResponse = await fetch('http://localhost:3000/api/transaction/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId: this.chatId,
+            publicKey: fromWallet.publicKey.toString(),
+            signedTransaction: encodedTx,
+            type: 'send'
+          })
         });
+
+        const result = await submitResponse.json();
+        if (!result.success) throw new Error(result.error || 'Transaction failed');
+
+        results.push({
+          success: true,
+          signature: result.signature,
+          recipient: drop.walletAddress,
+          amount: adjustedAmount
+        });
+
       } catch (error) {
-        console.error(`Invalid wallet address: ${drop.walletAddress}`);
+        if (retries > 0) {
+          console.log(`Retrying transaction for ${drop.walletAddress}... (${retries} attempts left)`);
+          await new Promise(resolve => setTimeout(resolve, 2000 * (4 - retries)));
+          return this.generateTransactions(dropList, fromWallet, userData, retries - 1);
+        }
         throw error;
       }
-    });
-
-    const batchSize = Math.max(1, Math.floor(txInstructions.length / userData.makers));
-    const numTransactions = Math.ceil(txInstructions.length / batchSize);
-
-    for (let i = 0; i < numTransactions; i++) {
-      const transaction = new Transaction();
-      const batch = txInstructions.slice(i * batchSize, (i + 1) * batchSize);
-      batch.forEach(instruction => transaction.add(instruction));
-      transactions.push(transaction);
     }
 
-    return transactions;
+    return results;
   }
 
-  async logTransactionResults(results, batchNumber, userData) {
+  async logTransactionResults(results, batchNumber) {
     const successful = results.filter(r => r.status === 'fulfilled').length;
     const failed = results.filter(r => r.status === 'rejected').length;
 
@@ -188,13 +244,6 @@ class Distribute {
       `✅ ${successful} successful, ❌ ${failed} failed`;
 
     console.log(message);
-    await this.sendNotification(userData, message);
-
-    if (failed > 0) {
-      results
-        .filter(r => r.status === 'rejected')
-        .forEach((r, i) => console.error(`Transaction ${i} failed:`, r.reason));
-    }
   }
 }
 

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, SystemProgram, Transaction } = require('@solana/web3.js');
 const bs58 = require('bs58');
+const Encryption = require('../utils/encryption');
 const { MESSAGES } = require('../constants');
 const Telegram = require('../Telegram');
 const Discord = require('../Discord');
@@ -9,6 +10,7 @@ const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const KOYNLABS_COMMS = process.env.KOYNLABS_COMMS || 0.2;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
 class InsufficientBalanceError extends Error {
   constructor(message) {
@@ -58,7 +60,7 @@ class Commission {
       throw new Error('Invalid user data or missing keypair');
     }
 
-    const senderKeypair = Keypair.fromSecretKey(bs58.decode(userData.userKeypair.secretKey));
+    const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userData.userKeypair.secretKey)));
     const commissionRate = parseFloat(KOYNLABS_COMMS);
 
     try {
@@ -114,7 +116,6 @@ class Commission {
           lamports: Math.round(adjustedAmount * 1_000_000_000)
         })
       );
-
 
       transaction.sign(senderKeypair);
 
