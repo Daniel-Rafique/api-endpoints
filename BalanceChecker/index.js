@@ -563,22 +563,6 @@ class BalanceChecker extends EventEmitter {
     return true;
   }
 
-  async getEstimatedFee() {
-    const { blockhash } = await this.connection.getLatestBlockhash();
-    const message = new Transaction({
-      recentBlockhash: blockhash,
-      feePayer: this.receiverKeypair.publicKey
-    }).add(
-      SystemProgram.transfer({
-        fromPubkey: this.receiverKeypair.publicKey,
-        toPubkey: this.receiverKeypair.publicKey, // Dummy transfer to self
-        lamports: 1
-      })
-    ).compileMessage();
-    const { value } = await this.connection.getFeeForMessage(message);
-    return value;
-  }
-
   // Helper function to handle notifications for both platforms
   async sendNotification(message, interaction) {
     if (this.platform === 'telegram') {
