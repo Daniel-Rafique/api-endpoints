@@ -228,6 +228,9 @@ class InstanceManager {
 
       const buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
       const sellAmount = this.tradeStrategy.calculateSellAmount(userData);
+      const takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
+      const stopLoss = this.tradeStrategy.calculateStopLoss(userData);
+      const dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
 
       // Add sol_spl trade type and other parameters
       const envContent = `
@@ -240,8 +243,11 @@ BATCH_SIZE=${userData.batchSize}
 BOOST_TYPE=${userData.boostType}
 BUY_AMOUNT=${buyAmount}
 SELL_AMOUNT=${sellAmount}
+TAKE_PROFIT=${takeProfit}
+STOP_LOSS=${stopLoss}
+DCA_AMOUNT=${dcaAmount}
 SENDER_WALLET=${userData.senderWallet}
-SOL_PER_WALLET=${userData.solPerWallet}
+AMOUNT_PER_WALLET=${userData.amountPerWallet}
 `;
       fs.appendFileSync(destEnvPath, envContent);
       console.log(`Appended sol_spl configuration to ${destEnvPath}`);
