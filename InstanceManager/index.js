@@ -9,7 +9,7 @@ const WalletProcessor = require('../WalletProcessor');
 const Commission = require('../Solana/Commission');
 const Distribute = require('../Solana/Distribute');
 const TopUp = require('../Solana/TopUp');
-
+const TradeStrategy = require('../TradeStrategy');
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const ENV_PATH = process.env.ENV_PATH;
 
@@ -27,6 +27,7 @@ class InstanceManager {
     this.distributeSolana = new Distribute(chatId);
     this.commissionPaid = new Commission(chatId);
     this.topUp = new TopUp(chatId);
+    this.tradeStrategy = new TradeStrategy();
   }
 
   async initializeMarketMakerInstance(chatId) {
@@ -225,6 +226,9 @@ class InstanceManager {
         console.error(`Failed to unlink .env at ${destEnvPath}:`, error);
       }
 
+      const buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
+      const sellAmount = this.tradeStrategy.calculateSellAmount(userData);
+
       // Add sol_spl trade type and other parameters
       const envContent = `
 CHAT_ID=${chatId}
@@ -234,8 +238,8 @@ TOKEN_DECIMALS=${userData.tokenDetails.decimals}
 TOKEN_SYMBOL=${userData.tokenDetails.symbol}
 BATCH_SIZE=${userData.batchSize}
 BOOST_TYPE=${userData.boostType}
-BUY_AMOUNT=${userData.buyAmount}
-SELL_AMOUNT=${userData.sellAmount}
+BUY_AMOUNT=${buyAmount}
+SELL_AMOUNT=${sellAmount}
 SENDER_WALLET=${userData.senderWallet}
 SOL_PER_WALLET=${userData.solPerWallet}
 `;
