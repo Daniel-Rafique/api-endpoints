@@ -7,7 +7,7 @@
     "axios": "^1.7.4",
     "body-parser": "^1.20.2",
     "bottleneck": "^2.19.5",
-    "brain.js": "^2.0.0-beta.24",
+    "brain.js": "^1.6.1",
     "bs58": "^5.0.0",
     "bullmq": "^5.10.3",
     "dockerode": "^4.0.2",

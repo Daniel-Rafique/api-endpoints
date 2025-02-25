@@ -2,43 +2,33 @@ const brain = require('brain.js');
 const fs = require('fs');
 const path = require('path');
 
-// Force CPU mode to avoid gpu.js dependency
-// This needs to be set before creating any neural networks
-brain.NeuralNetwork.prototype.useGPU = false;
-
 class TradeStrategy {
     constructor() {
         // Create separate neural networks for different trading decisions
         this.buyNet = new brain.NeuralNetwork({
             hiddenLayers: [10, 8],
-            activation: 'sigmoid',
-            // Explicitly disable GPU
-            mode: 'cpu'
+            activation: 'sigmoid'
         });
 
         this.sellNet = new brain.NeuralNetwork({
             hiddenLayers: [10, 8],
-            activation: 'sigmoid',
-            mode: 'cpu'
+            activation: 'sigmoid'
         });
 
         this.takeProfitNet = new brain.NeuralNetwork({
             hiddenLayers: [8, 6],
-            activation: 'sigmoid',
-            mode: 'cpu'
+            activation: 'sigmoid'
         });
 
         this.stopLossNet = new brain.NeuralNetwork({
             hiddenLayers: [8, 6],
-            activation: 'sigmoid',
-            mode: 'cpu'
+            activation: 'sigmoid'
         });
 
         // Add DCA neural network
         this.dcaNet = new brain.NeuralNetwork({
             hiddenLayers: [10, 8],
-            activation: 'sigmoid',
-            mode: 'cpu'
+            activation: 'sigmoid'
         });
 
         // Load pre-trained models if they exist
@@ -771,94 +761,6 @@ class TradeStrategy {
             }
         };
     }
-
-    // Add these methods to your TradeStrategy class
-
-    calculateGridParameters(userData) {
-        // Use neural network to determine optimal grid parameters
-        if (!this.metricsCount || this.metricsCount < 20) {
-            // Not enough data, return default values
-            return {
-                upperMargin: 0.05, // 5%
-                lowerMargin: 0.05, // 5%
-                gridLevels: 4
-            };
-        }
-
-        // Prepare input data for grid parameters
-        const inputData = this.prepareInputData(userData);
-
-        // Use neural networks to determine grid parameters
-        const volatility = userData.volatility || 10;
-        const priceChange24h = userData.tokenDetails?.priceChange?.h24 || 0;
-
-        // Adjust margins based on volatility and recent price action
-        let upperMargin = 0.05; // Default 5%
-        let lowerMargin = 0.05; // Default 5%
-        let gridLevels = 4;     // Default 4 levels
-
-        if (this.buyNet && this.buyNet.isRunnable) {
-            // Use neural network output to influence grid parameters
-            const nnOutput = this.buyNet.run(inputData);
-
-            // Scale the output to reasonable values
-            upperMargin = Math.max(0.02, Math.min(0.15, nnOutput * 0.2));
-            lowerMargin = Math.max(0.02, Math.min(0.15, nnOutput * 0.2));
-
-            // Adjust grid levels based on volatility
-            gridLevels = Math.round(Math.max(2, Math.min(8, volatility / 5)));
-        } else {
-            // Adjust based on volatility without neural network
-            upperMargin = Math.max(0.02, Math.min(0.15, volatility / 100));
-            lowerMargin = Math.max(0.02, Math.min(0.15, volatility / 100));
-
-            // More levels for higher volatility
-            gridLevels = Math.round(Math.max(2, Math.min(8, volatility / 5)));
-        }
-
-        // If price is trending up, set wider upper margin
-        if (priceChange24h > 5) {
-            upperMargin *= 1.5;
-        }
-
-        // If price is trending down, set wider lower margin
-        if (priceChange24h < -5) {
-            lowerMargin *= 1.5;
-        }
-
-        return {
-            upperMargin,
-            lowerMargin,
-            gridLevels
-        };
-    }
-
-    shouldAdjustGridOrders(userData) {
-        // Determine if existing grid orders should be adjusted
-
-        // If not enough data, be conservative and don't adjust
-        if (!this.metricsCount || this.metricsCount < 20) {
-            return false;
-        }
-
-        // Check if market conditions have changed significantly
-        const volatilityThreshold = 20; // Adjust based on your needs
-        const priceChangeThreshold = 10; // 10% price change
-
-        const volatility = userData.volatility || 0;
-        const priceChange24h = Math.abs(userData.tokenDetails?.priceChange?.h24 || 0);
-
-        // If volatility or price change exceeds thresholds, suggest adjustment
-        if (volatility > volatilityThreshold || priceChange24h > priceChangeThreshold) {
-            return true;
-        }
-
-        // Otherwise, don't adjust existing orders
-        return false;
-    }
 }
-
-// Add this to ensure any other instances of NeuralNetwork also use CPU mode
-brain.NeuralNetworkGPU = brain.NeuralNetwork;
 
 module.exports = TradeStrategy;
