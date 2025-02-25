@@ -90,15 +90,17 @@ class Commission {
         SystemProgram.transfer({
           fromPubkey: senderKeypair.publicKey.toString(),
           toPubkey: new PublicKey(KOYNLABS_WALLET),
-          lamports: amountToSend
+          lamports: amountToSend * 1_000_000_000
         })
       );
 
       // Calculate fee
       const message = transaction.compileMessage();
+      const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
       const { value: fee } = await this.connection.getFeeForMessage(message);
+      const totalFee = fee + minRentExemption;
 
-      const adjustedAmount = amountToSend - (fee / 1_000_000_000);
+      const adjustedAmount = amountToSend - totalFee
 
       if (adjustedAmount <= 0) {
         throw new Error('Amount too small to cover transaction fee');
@@ -113,7 +115,7 @@ class Commission {
         SystemProgram.transfer({
           fromPubkey: senderKeypair.publicKey.toString(),
           toPubkey: new PublicKey(KOYNLABS_WALLET),
-          lamports: Math.round(adjustedAmount * 1_000_000_000)
+          lamports: adjustedAmount * 1_000_000_000
         })
       );
 

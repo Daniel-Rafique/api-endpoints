@@ -173,13 +173,14 @@ class Distribute {
         // Calculate fee
         const message = transaction.compileMessage();
         const { value: fee } = await this.connection.getFeeForMessage(message);
-
+        const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+        const totalFee = fee + minRentExemption;
         // Create new transaction with adjusted amount
         transaction = new Transaction();
         transaction.recentBlockhash = data.blockhash.blockhash;
         transaction.feePayer = fromWallet.publicKey;
 
-        const adjustedAmount = drop.numLamports - (fee ?? 0);
+        const adjustedAmount = drop.numLamports - totalFee;
         if (adjustedAmount <= 0) {
           throw new Error('Amount too small to cover transaction fee');
         }
