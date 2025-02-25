@@ -248,6 +248,7 @@ STOP_LOSS=${stopLoss}
 DCA_AMOUNT=${dcaAmount}
 SENDER_WALLET=${userData.senderWallet}
 AMOUNT_PER_WALLET=${userData.amountPerWallet}
+SIGNAL_ONLY=false
 `;
       fs.appendFileSync(destEnvPath, envContent);
       console.log(`Appended sol_spl configuration to ${destEnvPath}`);
