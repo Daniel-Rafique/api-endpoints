@@ -26,7 +26,7 @@ const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const discordToken = process.env.DISCORD_BOT_TOKEN;
 
 class BalanceChecker extends EventEmitter {
-  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform, interaction) {
+  constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform, interaction, userData) {
     super();
     this.chatId = chatId;
     this.receiverKeypairString = receiverPrivateKey;
@@ -56,6 +56,7 @@ class BalanceChecker extends EventEmitter {
     this.retryDelay = 2000; // 2 seconds
     this.isConnected = false;
     this.interaction = interaction;
+    this.userData = userData;
     try {
       this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(decrypt(this.receiverKeypairString, ENCRYPTION_KEY)));
     } catch (error) {
@@ -115,7 +116,7 @@ class BalanceChecker extends EventEmitter {
           this.emit('connected');
           resolve(true);
         }
-        if (response.type === "data") {
+        if (response.type === "data" && this.userData.mode !== 'sniper') {
           console.log('Received data from Bitquery:', response.payload.data);
           this.emit('balanceUpdate', response.payload.data);
           this.handleTransaction(response.payload.data);

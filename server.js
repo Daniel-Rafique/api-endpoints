@@ -107,7 +107,8 @@ app.post('/api/create', async (req, res) => {
         minimumTokenBalance,
         mintAddress,
         platform,
-        interaction
+        interaction,
+        userData
       );
 
       if (!userData?.distributeSolana) {
