@@ -1,11 +1,12 @@
 require('dotenv').config();
 const admin = require('firebase-admin');
 const db = admin.firestore();
+const EventEmitter = require('events');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
 console.log(FIRESTORE_COLLECTION);
 
-class DataManager {
+class DataManager extends EventEmitter {
 
   async getCollection(chatId) {
 
@@ -87,6 +88,27 @@ class DataManager {
       console.log(`Saved senderWallet for chat ID ${chatId}`);
     } catch (error) {
       console.error(`Error saving senderWallet for ${chatId}:`, error);
+    }
+  }
+
+  async setMode(chatId, mode) {
+    try {
+      console.log(`Setting mode for ${chatId} to ${mode}`);
+
+      // Your existing code to set the mode in the database
+      const result = await this.collection.updateOne(
+        { chatId },
+        { $set: { mode } },
+        { upsert: true }
+      );
+
+      // Emit an event when mode changes
+      this.emit('modeChanged', chatId, mode);
+
+      return result;
+    } catch (error) {
+      console.error('Error setting mode:', error);
+      throw error;
     }
   }
 }

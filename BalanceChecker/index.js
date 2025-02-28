@@ -578,6 +578,32 @@ class BalanceChecker extends EventEmitter {
     }
   }
 
+  // Add this method to listen for mode changes
+  listenForModeChange(dataManager) {
+    console.log('Setting up mode change listener in BalanceChecker');
+
+    // Create a method to handle mode changes
+    this.handleModeChange = async (chatId, newMode) => {
+      console.log(`Mode change detected in BalanceChecker: ${chatId} -> ${newMode}`);
+
+      // If mode changed to sniper, close Bitquery connections
+      if (newMode === 'sniper' && this.chatId === chatId) {
+        console.log('Sniper mode activated, closing Bitquery connections');
+        this.cleanup();
+        this.emit('modeChanged', { chatId, mode: newMode });
+      }
+    };
+
+    // Register the event listener on the dataManager
+    dataManager.on('modeChanged', this.handleModeChange);
+
+    return () => {
+      // Return a cleanup function to remove the listener when needed
+      dataManager.removeListener('modeChanged', this.handleModeChange);
+    };
+  }
+
+  // Enhance the cleanup method to be more thorough
   cleanup() {
     try {
       console.log('Cleaning up Bitquery connection...');
@@ -585,6 +611,7 @@ class BalanceChecker extends EventEmitter {
       // Close WebSocket connection if it exists
       if (this.bitqueryConnection) {
         if (this.bitqueryConnection.readyState === WebSocket.OPEN) {
+          console.log('Closing open WebSocket connection');
           this.bitqueryConnection.close();
         }
         this.bitqueryConnection = null;
