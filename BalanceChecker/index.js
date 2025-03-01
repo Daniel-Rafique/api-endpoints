@@ -25,6 +25,9 @@ const { MESSAGES, BALANCE_BITQUERY_TOKEN } = require('../constants');
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const discordToken = process.env.DISCORD_BOT_TOKEN;
 
+// Define the Memo Program ID
+const MEMO_PROGRAM_ID = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
+
 class BalanceChecker extends EventEmitter {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform, interaction, userData) {
     super();
@@ -119,7 +122,15 @@ class BalanceChecker extends EventEmitter {
         if (response.type === "data" && this.userData.mode !== 'sniper') {
           console.log('Received data from Bitquery:', response.payload.data);
           this.emit('balanceUpdate', response.payload.data);
-          this.handleTransaction(response.payload.data);
+
+          // Extract transaction signature if available
+          let transactionSignature = null;
+          if (response.payload.data?.Solana?.BalanceUpdates?.[0]?.Transaction?.Hash) {
+            transactionSignature = response.payload.data.Solana.BalanceUpdates[0].Transaction.Hash;
+            console.log("Transaction signature:", transactionSignature);
+          }
+
+          this.handleTransaction(response.payload.data, transactionSignature);
         }
         if (response.type === "error") {
           console.error("Received error from Bitquery:", response.payload.errors[0].message);
@@ -186,6 +197,7 @@ class BalanceChecker extends EventEmitter {
                   }
                   Transaction {
                     Signer
+                    Hash
                   }
                 }
               }
@@ -228,8 +240,15 @@ class BalanceChecker extends EventEmitter {
               this.isConnected = false;
             }
 
+            // Extract transaction signature if available
+            let transactionSignature = null;
+            if (data?.Solana?.BalanceUpdates?.[0]?.Transaction?.Hash) {
+              transactionSignature = data.Solana.BalanceUpdates[0].Transaction.Hash;
+              console.log("Transaction signature:", transactionSignature);
+            }
+
             // Handle the transaction and resolve the promise
-            this.handleTransaction(data, interaction);
+            this.handleTransaction(data, transactionSignature);
             resolve(data); // Resolve the promise to end the getBalance flow
           };
 
@@ -300,7 +319,67 @@ class BalanceChecker extends EventEmitter {
     return "0";
   }
 
-  async handleTransaction(balances) {
+  // Add a new method to fetch transaction details including memos
+  async getTransactionDetails(signature) {
+    try {
+      console.log(`Fetching transaction details for signature: ${signature}`);
+
+      // Try multiple RPC endpoints if one fails
+      let transaction = null;
+      let error = null;
+
+      for (let i = 0; i < this.rpcEndpoints.length; i++) {
+        try {
+          const connection = new Connection(this.rpcEndpoints[i], 'confirmed');
+          transaction = await connection.getTransaction(signature, {
+            commitment: 'confirmed',
+            maxSupportedTransactionVersion: 0
+          });
+
+          if (transaction) break;
+        } catch (err) {
+          console.error(`Error fetching transaction from endpoint ${i}:`, err);
+          error = err;
+        }
+      }
+
+      if (!transaction) {
+        throw error || new Error('Failed to fetch transaction details');
+      }
+
+      // Extract memo from transaction if it exists
+      let memo = null;
+
+      if (transaction.meta && transaction.transaction.message.instructions) {
+        for (const instruction of transaction.transaction.message.instructions) {
+          // Check if this is a memo instruction
+          const programId = transaction.transaction.message.accountKeys[instruction.programId].toString();
+
+          if (programId === MEMO_PROGRAM_ID) {
+            try {
+              // Decode the memo data
+              const data = Buffer.from(bs58.decode(instruction.data));
+              memo = data.toString('utf8');
+              console.log('Found memo in transaction:', memo);
+              break;
+            } catch (err) {
+              console.error('Error decoding memo data:', err);
+            }
+          }
+        }
+      }
+
+      return {
+        transaction,
+        memo
+      };
+    } catch (error) {
+      console.error('Error getting transaction details:', error);
+      return { transaction: null, memo: null };
+    }
+  }
+
+  async handleTransaction(balances, transactionSignature = null) {
     const sendMessage = async (message) => {
       try {
         if (this.platform === 'telegram') {
@@ -341,6 +420,30 @@ class BalanceChecker extends EventEmitter {
       // Validate essential data
       if (!senderPublicKeyString) {
         throw new Error('Missing sender public key');
+      }
+
+      // Check for transaction memo if we have a signature
+      if (transactionSignature) {
+        const { memo } = await this.getTransactionDetails(transactionSignature);
+        // Verify the memo contains expected text
+        if (memo) {
+          console.log('Transaction memo found:', memo);
+          // If memo doesn't include "From Koynlabs Wallet", return SOL
+          if (!memo.includes('From Koynlabs Wallet')) {
+            console.log('Transaction failed:', memo);
+            await sendMessage(`❌ Transaction failed: \n` +
+              `1. The transaction must be from Koynlabs Wallet.\n` +
+              `2. Type /start then try the transaction again.`);
+
+            // Return the SOL since this doesn't appear to be from our wallet
+            await this.returnSol(
+              senderPublicKeyString,
+              amountReceived,
+              this.platform === 'discord' ? this.interaction : null
+            );
+            return;
+          }
+        }
       }
 
       // Check balances
