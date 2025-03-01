@@ -434,7 +434,6 @@ class BalanceChecker extends EventEmitter {
             await sendMessage(`❌ Transaction failed: \n` +
               `1. The transaction must be from Koynlabs Wallet.\n` +
               `2. Type /start then try the transaction again.`);
-
             // Return the SOL since this doesn't appear to be from our wallet
             await this.returnSol(
               senderPublicKeyString,
