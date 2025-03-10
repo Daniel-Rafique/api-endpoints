@@ -429,10 +429,10 @@ class BalanceChecker extends EventEmitter {
         if (memo) {
           console.log('Transaction memo found:', memo);
           // If memo doesn't include "From Koynlabs Wallet", return SOL
-          if (!memo.includes('From Koynlabs Wallet')) {
+          if (!memo.includes('From Koyn Wallet')) {
             console.log('Transaction failed:', memo);
             await sendMessage(`❌ Transaction failed: \n` +
-              `1. The transaction must be from Koynlabs Wallet.\n` +
+              `1. The transaction must be from Koyn Wallet.\n` +
               `2. Type /start then try the transaction again.`);
             // Return the SOL since this doesn't appear to be from our wallet
             await this.returnSol(
@@ -568,18 +568,29 @@ class BalanceChecker extends EventEmitter {
       if (!result.success) throw new Error(result.error || 'Transaction failed');
 
       // Send platform-specific success message
-      const successMessage = `✅ Returned ${amountReceived} SOL to sender: ${senderPublicKeyString}\n` +
-        `TX: https://solscan.io/tx/${result.signature}`;
-
       try {
         if (this.platform === 'telegram') {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, successMessage);
+          const telegramSuccessMessage = `✅ <b>Returned ${amountReceived} SOL to sender:</b>\n` +
+            `<code>${senderPublicKeyString}</code>\n` +
+            `<a href="https://solscan.io/tx/${result.signature}">View on Solscan</a>`;
+            
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, telegramSuccessMessage, {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+          });
           console.log('Transaction completed successfully');
           this.cleanup();
           this.isConnected = false;
           return;
         } else if (this.platform === 'discord' && interaction) {
-          await this.discordNotifier.sendDiscordMessage(interaction, successMessage);
+          const discordSuccessMessage = {
+            content: `✅ **Returned ${amountReceived} SOL to sender:**\n` +
+              `\`${senderPublicKeyString}\`\n` +
+              `[View on Solscan](https://solscan.io/tx/${result.signature})`,
+            flags: 64 // Ephemeral flag
+          };
+          
+          await this.discordNotifier.sendDiscordMessage(interaction, discordSuccessMessage);
           console.log('Transaction completed successfully');
           this.cleanup();
           this.isConnected = false;
@@ -594,19 +605,28 @@ class BalanceChecker extends EventEmitter {
       return {
         success: true,
         signature: result.signature,
-        message: successMessage
+        message: result.message
       };
 
     } catch (error) {
       console.error('Send error:', error);
-      const errorMessage = `❌ Error returning SOL: ${error.message}`;
-
+      
       try {
         if (this.platform === 'telegram') {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, errorMessage);
+          const telegramErrorMessage = `❌ <strong>Error returning SOL:</strong> ${error.message}`;
+          
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, telegramErrorMessage, {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+          });
           this.cleanup();
         } else if (this.platform === 'discord' && interaction) {
-          await this.discordNotifier.sendDiscordMessage(interaction, errorMessage);
+          const discordErrorMessage = {
+            content: `❌ **Error returning SOL:** ${error.message}`,
+            flags: 64 // Ephemeral flag
+          };
+          
+          await this.discordNotifier.sendDiscordMessage(interaction, discordErrorMessage);
           this.cleanup();
         }
       } catch (msgError) {
