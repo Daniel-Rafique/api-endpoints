@@ -47,81 +47,102 @@ class Distribute {
       projectId: 'koynlabs-2f749',
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
+    this.distributionLocks = new Map();
   }
 
-  async sendNotification(userData, message) {
+  async sendNotification(userData, message, interaction) {
     try {
       if (userData.platform === 'discord') {
-        await this.discordNotifier.sendMessage(this.chatId, message);
+        await this.discordNotifier.sendDiscordMessage(interaction, {
+          content: message,
+          flags: 64
+        });      
       } else {
-        await this.telegramNotifier.sendMessage(this.chatId, message);
+        await this.telegramNotifier.sendTelegramMessage(this.chatId,  message, {
+          parse_mode: 'HTML'
+        });      
       }
     } catch (error) {
       console.error(`Failed to send notification: ${error.message}`);
     }
   }
 
-  async distributeSolana(chatId, userData) {
+  async distributeSolana(chatId, userData, interaction) {
     if (!chatId || !userData) {
       throw new Error('Missing required parameters');
     }
 
-    const { batchSize, makers, userKeypair } = userData;
-    const retryLimit = 3;
-    let attempt = 0;
-
-    const updatedBalance = await this.connection.getBalance(userKeypair.publicKey);
-    console.log(`Initial balance: ${updatedBalance / 1e9} SOL`);
-
-    if (updatedBalance <= 0) {
-      throw new InsufficientBalanceError('Insufficient balance in sender wallet');
+    // Check if distribution is already in progress for this chatId
+    if (this.distributionLocks.get(chatId)) {
+      console.log(`Distribution already in progress for chat ${chatId}`);
+      return;
     }
 
-    while (attempt < retryLimit) {
-      try {
-        const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userKeypair.privateKey)));
-        const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+    // Set the lock for this chatId
+    this.distributionLocks.set(chatId, true);
 
-        await this.waitForFile(filePath, 30000);
+    try {
+      const { batchSize, userKeypair } = userData;
+      const retryLimit = 3;
+      let attempt = 0;
 
-        const fileContent = await fs.readFile(filePath, 'utf8');
-        const newWallets = JSON.parse(fileContent);
+      const updatedBalance = await this.connection.getBalance(userKeypair.publicKey);
+      console.log(`Initial balance: ${updatedBalance / 1e9} SOL`);
 
-        if (newWallets.length > 1000) {
-          throw new Error('Maximum wallet limit exceeded (1000)');
-        }
-
-        const amountPerWallet = userData.amountPerWallet;
-        console.log(`Amount per wallet: ${amountPerWallet / 1e9} SOL`);
-
-        const totalBatches = Math.ceil(newWallets.length / batchSize);
-        for (let i = 0; i < newWallets.length; i += batchSize) {
-          const currentBatch = Math.floor(i / batchSize) + 1;
-          console.log(`Processing batch ${currentBatch}/${totalBatches}`);
-
-          const chunk = newWallets.slice(i, i + batchSize);
-          const dropList = chunk.map(wallet => ({
-            walletAddress: wallet.publicKey.toString(),
-            numLamports: amountPerWallet,
-          }));
-
-          const results = await this.generateTransactions(dropList, senderKeypair, userData);
-          await this.logTransactionResults(results, currentBatch);
-        }
-
-        await this.sendNotification(
-          this.chatId,
-          `✅ Labs ${userData.boostName} tier will begin shortly for ${userData.tokenDetails.symbol}\n`
-        );
-
-        return true;
-
-      } catch (error) {
-        console.error(`Attempt ${attempt + 1} failed:`, error);
-        if (attempt === retryLimit - 1) throw error;
-        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+      if (updatedBalance <= 0) {
+        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
-      attempt++;
+
+      while (attempt < retryLimit) {
+        try {
+          const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userKeypair.privateKey)));
+          const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+
+          await this.waitForFile(filePath, 30000);
+
+          const fileContent = await fs.readFile(filePath, 'utf8');
+          const newWallets = JSON.parse(fileContent);
+
+          if (newWallets.length > 1000) {
+            throw new Error('Maximum wallet limit exceeded (1000)');
+          }
+
+          const amountPerWallet = userData.amountPerWallet;
+          console.log(`Amount per wallet: ${amountPerWallet / 1e9} SOL`);
+
+          const totalBatches = Math.ceil(newWallets.length / batchSize);
+          for (let i = 0; i < newWallets.length; i += batchSize) {
+            const currentBatch = Math.floor(i / batchSize) + 1;
+            console.log(`Processing batch ${currentBatch}/${totalBatches}`);
+
+            const chunk = newWallets.slice(i, i + batchSize);
+            const dropList = chunk.map(wallet => ({
+              walletAddress: wallet.publicKey.toString(),
+              numLamports: amountPerWallet,
+            }));
+
+            const results = await this.generateTransactions(dropList, senderKeypair, userData);
+            await this.logTransactionResults(results, currentBatch);
+          }
+
+          await this.sendNotification(
+            this.chatId,
+            `✅ Labs ${userData.boostName} tier will begin shortly for ${userData.tokenDetails.name}\n`,
+            interaction
+          );
+
+          return true;
+
+        } catch (error) {
+          console.error(`Attempt ${attempt + 1} failed:`, error);
+          if (attempt === retryLimit - 1) throw error;
+          await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+        }
+        attempt++;
+      }
+    } finally {
+      // Always release the lock
+      this.distributionLocks.delete(chatId);
     }
   }
 
@@ -240,6 +261,11 @@ class Distribute {
       `✅ ${successful} successful, ❌ ${failed} failed`;
 
     console.log(message);
+  }
+
+  // Add helper method to check lock status
+  isDistributionInProgress(chatId) {
+    return this.distributionLocks.get(chatId) === true;
   }
 }
 

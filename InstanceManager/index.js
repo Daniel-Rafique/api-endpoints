@@ -30,7 +30,7 @@ class InstanceManager {
     this.tradeStrategy = new TradeStrategy();
   }
 
-  async initializeMarketMakerInstance(chatId) {
+  async initializeMarketMakerInstance(chatId, interaction) {
     try {
       console.log('Initializing market maker instance:', chatId);
 
@@ -93,7 +93,7 @@ class InstanceManager {
               if (userData.walletsCreated && !userData.commissionPaid) {
                 console.log('Commission not paid. Sending commission...');
                 await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
-                await this.commissionPaid.sendToCommissionWallet(userData);
+                await this.commissionPaid.sendToCommissionWallet(chatId, userData, interaction);
                 console.log('Commission sent successfully.');
               } else {
                 console.log('Commission already paid.');
@@ -103,7 +103,7 @@ class InstanceManager {
             case "CHECK_SOLANA_DISTRIBUTION":
               if (userData.commissionPaid && !userData.distributeSolana) {
                 console.log('Distributing Solana...');
-                await this.distributeSolana.distributeSolana(chatId, userData);
+                await this.distributeSolana.distributeSolana(chatId, userData, interaction);
                 await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
                 console.log('Solana distributed successfully.');
               } else {

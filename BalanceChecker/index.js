@@ -32,6 +32,8 @@ class BalanceChecker extends EventEmitter {
   constructor(chatId, receiverPrivateKey, minimumSolBalance, minimumTokenBalance, mintAddress, platform, interaction, userData) {
     super();
     this.chatId = chatId;
+    this.interaction = interaction;
+    this.userData = userData;
     this.receiverKeypairString = receiverPrivateKey;
     this.rpcEndpoints = [
       process.env.SOLANA_RPC_ENDPOINT_1,
@@ -58,8 +60,7 @@ class BalanceChecker extends EventEmitter {
     this.maxRetries = 3;
     this.retryDelay = 2000; // 2 seconds
     this.isConnected = false;
-    this.interaction = interaction;
-    this.userData = userData;
+    this.isProcessingTransaction = false;
     try {
       this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(decrypt(this.receiverKeypairString, ENCRYPTION_KEY)));
     } catch (error) {
@@ -383,8 +384,10 @@ class BalanceChecker extends EventEmitter {
     const sendMessage = async (message) => {
       try {
         if (this.platform === 'telegram') {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
-        } else if (this.platform === 'discord' && this.interaction) {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId,  message, {
+            parse_mode: 'HTML'
+          });   
+          } else if (this.platform === 'discord' && this.interaction) {
           await this.discordNotifier.sendDiscordMessage(this.interaction, message);
         }
       } catch (error) {
@@ -482,7 +485,7 @@ class BalanceChecker extends EventEmitter {
 
       // Process successful transaction
       await this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString);
-      await this.instanceManager.initializeMarketMakerInstance(this.chatId);
+      await this.instanceManager.initializeMarketMakerInstance(this.chatId, this.interaction);
 
       const TOKEN_BALANCE = formatTokenAmount(tokenBalance);
 
@@ -498,7 +501,33 @@ class BalanceChecker extends EventEmitter {
   }
 
   async returnSol(senderPublicKeyString, amountReceived, interaction = null) {
+    // Check if a transaction is already in progress
+    if (this.isProcessingTransaction) {
+      const busyMessage = "⏳ A transaction is already in progress. Please wait.";
+      if (this.platform === 'telegram') {
+        await this.telegramNotifier.sendTelegramMessage(this.chatId, busyMessage, {
+          parse_mode: 'HTML'
+        });
+      } else if (this.platform === 'discord' && interaction) {
+        await this.discordNotifier.sendDiscordMessage(interaction, {
+          content: busyMessage,
+          flags: 64
+        });
+      }
+      return;
+    }
+
+    this.isProcessingTransaction = true;
+
     try {
+      // Check balance before proceeding
+      const balance = await this.connection.getBalance(this.receiverKeypair.publicKey);
+      const balanceInSol = balance / 1_000_000_000;
+      
+      if (balanceInSol < amountReceived) {
+        throw new Error(`Insufficient balance. Available: ${balanceInSol.toFixed(4)} SOL, Requested: ${amountReceived} SOL`);
+      }
+
       // Create transaction to calculate fees first
       let transaction = new Transaction();
       const senderPubKey = new PublicKey(senderPublicKeyString);
@@ -526,12 +555,11 @@ class BalanceChecker extends EventEmitter {
       // Calculate fee
       const message = transaction.compileMessage();
       const { value: fee } = await this.connection.getFeeForMessage(message);
-
-      // Adjust transfer amount to account for fee
       const adjustedAmount = amountReceived - (fee / 1_000_000_000);
 
+      // Check if amount is too small
       if (adjustedAmount <= 0) {
-        throw new Error('Amount too small to cover transaction fee');
+        throw new Error(`Amount (${amountReceived} SOL) is too small to cover transaction fee (${fee / 1_000_000_000} SOL)`);
       }
 
       // Create new transaction with adjusted amount
@@ -610,30 +638,35 @@ class BalanceChecker extends EventEmitter {
 
     } catch (error) {
       console.error('Send error:', error);
-      
+      const formattedError = this.formatErrorMessage(error.message);
+
       try {
         if (this.platform === 'telegram') {
-          const telegramErrorMessage = `❌ <strong>Error returning SOL:</strong> ${error.message}`;
-          
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, telegramErrorMessage, {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, formattedError, {
             parse_mode: 'HTML',
             disable_web_page_preview: true
           });
-          this.cleanup();
         } else if (this.platform === 'discord' && interaction) {
-          const discordErrorMessage = {
-            content: `❌ **Error returning SOL:** ${error.message}`,
-            flags: 64 // Ephemeral flag
-          };
-          
-          await this.discordNotifier.sendDiscordMessage(interaction, discordErrorMessage);
-          this.cleanup();
+          await this.discordNotifier.sendDiscordMessage(interaction, {
+            content: formattedError,
+            flags: 64
+          });
         }
       } catch (msgError) {
         console.error('Failed to send error notification:', msgError);
-        this.cleanup();
       }
-      throw error;
+    } finally {
+      this.isProcessingTransaction = false;
+      this.cleanup();
+    }
+  }
+
+  formatErrorMessage(message) {
+    // Helper method to format error messages consistently
+    if (this.platform === 'telegram') {
+      return `❌ <b>Error returning SOL:</b> ${message}`;
+    } else {
+      return `❌ **Error returning SOL:** ${message}`;
     }
   }
 

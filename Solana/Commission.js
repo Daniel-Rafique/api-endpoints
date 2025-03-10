@@ -35,6 +35,7 @@ class Commission {
     this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
     this.discordNotifier = new Discord();
     this.messageCache = new Map();
+    this.isProcessingCommission = false;
 
     if (!KOYNLABS_WALLET || !KOYNLABS_COMMS) {
       throw new Error('Missing required environment variables');
@@ -53,109 +54,121 @@ class Commission {
     }
   }
 
-  async sendToCommissionWallet(userData, retries = 3) {
-    let transaction = new Transaction();
-
-    if (!userData?.userKeypair?.secretKey) {
-      throw new Error('Invalid user data or missing keypair');
+  async sendToCommissionWallet(chatId, userData, interaction, retries = 3) {
+    if (this.isProcessingCommission) {
+      console.log('Commission transaction already in progress');
+      return;
     }
 
-    const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userData.userKeypair.secretKey)));
-    const commissionRate = parseFloat(KOYNLABS_COMMS);
+    this.isProcessingCommission = true;
 
     try {
-      const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
-      console.log(`Initial balance: ${senderBalance / 1e9} SOL`);
+      let transaction = new Transaction();
 
-      if (senderBalance <= 0) {
-        throw new InsufficientBalanceError('Insufficient balance in sender wallet');
+      if (!userData?.userKeypair?.secretKey) {
+        throw new Error('Invalid user data or missing keypair');
       }
 
-      const amountToSend = Math.floor(senderBalance * commissionRate);
-      console.log(`Commission amount: ${amountToSend / 1e9} SOL (${commissionRate * 100}%)`);
+      const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userData.userKeypair.secretKey)));
+      const commissionRate = parseFloat(KOYNLABS_COMMS);
 
-      // Get fresh blockhash
-      const response = await fetch('http://localhost:3000/api/wallet/solana');
-      const data = await response.json();
+      try {
+        const senderBalance = await this.connection.getBalance(senderKeypair.publicKey);
+        console.log(`Initial balance: ${senderBalance / 1e9} SOL`);
 
-      if (!data.success) {
-        throw new Error('Failed to get blockhash');
+        if (senderBalance <= 0) {
+          throw new InsufficientBalanceError('Insufficient balance in sender wallet');
+        }
+
+        const amountToSend = Math.floor(senderBalance * commissionRate);
+        console.log(`Commission amount: ${amountToSend / 1e9} SOL (${commissionRate * 100}%)`);
+
+        // Get fresh blockhash
+        const response = await fetch('http://localhost:3000/api/wallet/solana');
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error('Failed to get blockhash');
+        }
+
+        transaction.recentBlockhash = data.blockhash.blockhash;
+        transaction.feePayer = senderKeypair.publicKey;
+
+        // Add transfer instruction
+        transaction.add(
+          SystemProgram.transfer({
+            fromPubkey: senderKeypair.publicKey.toString(),
+            toPubkey: new PublicKey(KOYNLABS_WALLET),
+            lamports: amountToSend * 1_000_000_000
+          })
+        );
+
+        // Calculate fee
+        const message = transaction.compileMessage();
+        const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+        const { value: fee } = await this.connection.getFeeForMessage(message);
+        const totalFee = fee + minRentExemption;
+
+        const adjustedAmount = amountToSend - totalFee
+
+        if (adjustedAmount <= 0) {
+          throw new Error('Amount too small to cover transaction fee');
+        }
+
+        // Create new transaction with adjusted amount
+        transaction = new Transaction();
+        transaction.recentBlockhash = data.blockhash.blockhash;
+        transaction.feePayer = senderKeypair.publicKey.toString();
+
+        transaction.add(
+          SystemProgram.transfer({
+            fromPubkey: senderKeypair.publicKey.toString(),
+            toPubkey: new PublicKey(KOYNLABS_WALLET),
+            lamports: adjustedAmount * 1_000_000_000
+          })
+        );
+
+        transaction.sign(senderKeypair);
+
+        const serializedTransaction = transaction.serialize();
+        const encodedTx = bs58.encode(serializedTransaction);
+
+        // Submit transaction through API
+        const submitResponse = await fetch('http://localhost:3000/api/transaction/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId: this.chatId,
+            publicKey: senderKeypair.publicKey.toString(),
+            signedTransaction: encodedTx,
+            type: 'send'
+          })
+        });
+
+        const result = await submitResponse.json();
+        if (!result.success) throw new Error(result.error || 'Transaction failed');
+
+        console.log(`Commission transaction successful:
+          Amount: ${amountToSend / 1e9} SOL
+          From: ${senderKeypair.publicKey.toString()}
+          To: ${KOYNLABS_WALLET}
+          Signature: ${result.signature}
+        `);
+
+        return result.signature;
+      } catch (error) {
+        console.error(`Commission transaction failed:`, error);
+
+        if (retries > 0) {
+          console.log(`Retrying... (${retries} attempts left)`);
+          this.isProcessingCommission = false;
+          await new Promise(resolve => setTimeout(resolve, 2000 * (4 - retries)));
+          return this.sendToCommissionWallet(chatId, userData, interaction, retries - 1);
+        }
+        throw error;
       }
-
-      transaction.recentBlockhash = data.blockhash.blockhash;
-      transaction.feePayer = senderKeypair.publicKey;
-
-      // Add transfer instruction
-      transaction.add(
-        SystemProgram.transfer({
-          fromPubkey: senderKeypair.publicKey.toString(),
-          toPubkey: new PublicKey(KOYNLABS_WALLET),
-          lamports: amountToSend * 1_000_000_000
-        })
-      );
-
-      // Calculate fee
-      const message = transaction.compileMessage();
-      const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
-      const { value: fee } = await this.connection.getFeeForMessage(message);
-      const totalFee = fee + minRentExemption;
-
-      const adjustedAmount = amountToSend - totalFee
-
-      if (adjustedAmount <= 0) {
-        throw new Error('Amount too small to cover transaction fee');
-      }
-
-      // Create new transaction with adjusted amount
-      transaction = new Transaction();
-      transaction.recentBlockhash = data.blockhash.blockhash;
-      transaction.feePayer = senderKeypair.publicKey.toString();
-
-      transaction.add(
-        SystemProgram.transfer({
-          fromPubkey: senderKeypair.publicKey.toString(),
-          toPubkey: new PublicKey(KOYNLABS_WALLET),
-          lamports: adjustedAmount * 1_000_000_000
-        })
-      );
-
-      transaction.sign(senderKeypair);
-
-      const serializedTransaction = transaction.serialize();
-      const encodedTx = bs58.encode(serializedTransaction);
-
-      // Submit transaction through API
-      const submitResponse = await fetch('http://localhost:3000/api/transaction/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatId: this.chatId,
-          publicKey: senderKeypair.publicKey.toString(),
-          signedTransaction: encodedTx,
-          type: 'send'
-        })
-      });
-
-      const result = await submitResponse.json();
-      if (!result.success) throw new Error(result.error || 'Transaction failed');
-
-      console.log(`Commission transaction successful:
-        Amount: ${amountToSend / 1e9} SOL
-        From: ${senderKeypair.publicKey.toString()}
-        To: ${KOYNLABS_WALLET}
-        Signature: ${result.signature}
-      `);
-
-      return result.signature;
-    } catch (error) {
-      console.error(`Commission transaction failed:`, error);
-
-      if (retries > 0) {
-        console.log(`Retrying... (${retries} attempts left)`);
-        await new Promise(resolve => setTimeout(resolve, 2000 * (4 - retries)));
-        return this.sendToCommissionWallet(userData, retries - 1);
-      }
-      throw error;
+    } finally {
+      this.isProcessingCommission = false;
     }
   }
 }
