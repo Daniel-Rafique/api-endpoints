@@ -197,7 +197,7 @@ class BalanceChecker extends EventEmitter {
                   }
                   Transaction {
                     Signer
-                    Hash
+                    Signature
                   }
                 }
               }
@@ -242,8 +242,8 @@ class BalanceChecker extends EventEmitter {
 
             // Extract transaction signature if available
             let transactionSignature = null;
-            if (data?.Solana?.BalanceUpdates?.[0]?.Transaction?.Hash) {
-              transactionSignature = data.Solana.BalanceUpdates[0].Transaction.Hash;
+            if (data?.Solana?.BalanceUpdates?.[0]?.Transaction?.Signature) {
+              transactionSignature = data.Solana.BalanceUpdates[0].Transaction.Signature;
               console.log("Transaction signature:", transactionSignature);
             }
 
@@ -353,7 +353,7 @@ class BalanceChecker extends EventEmitter {
       if (transaction.meta && transaction.transaction.message.instructions) {
         for (const instruction of transaction.transaction.message.instructions) {
           // Check if this is a memo instruction
-          const programId = transaction.transaction.message.accountKeys[instruction.programId].toString();
+          const programId = transaction.transaction.message.getAccountKeys([instruction.programId]).toString();
 
           if (programId === MEMO_PROGRAM_ID) {
             try {
