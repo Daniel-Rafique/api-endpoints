@@ -102,7 +102,7 @@ class WalletProcessor {
       try {
         let walletsArray;
         // Get liquidity and market cap from token details
-        const liquidity = tokenDetails.liquidity || 1000;
+        const liquidity = tokenDetails.liquidity.usd || 1000;
         const marketCap = tokenDetails.marketCap || 1000;
 
         console.log(`Token metrics - Liquidity: $${liquidity}, Market Cap: $${marketCap}`);
