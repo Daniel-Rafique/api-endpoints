@@ -55,12 +55,14 @@ class BalanceChecker extends EventEmitter {
     this.maxReconnectAttempts = 10;
     this.reconnectTimeout = null;
     this.listenerActive = true; // Flag to control the listener
-    this.messageCache = {};
+    this.messageCache = new Map();
     this.platform = platform;
     this.maxRetries = 3;
     this.retryDelay = 2000; // 2 seconds
     this.isConnected = false;
     this.isProcessingTransaction = false;
+    this.transactionQueue = [];
+    this.processingTransactionId = null;
     try {
       this.receiverKeypair = Keypair.fromSecretKey(bs58.decode(decrypt(this.receiverKeypairString, ENCRYPTION_KEY)));
     } catch (error) {
@@ -501,31 +503,57 @@ class BalanceChecker extends EventEmitter {
   }
 
   async returnSol(senderPublicKeyString, amountReceived, interaction = null) {
-    // Check if a transaction is already in progress
+    // Generate a unique transaction ID
+    const transactionId = Date.now() + Math.random().toString(36).substring(2, 15);
+    
+    // If a transaction is already in progress, add to queue and return
     if (this.isProcessingTransaction) {
-      const busyMessage = "⏳ A transaction is already in progress. Please wait.";
-      if (this.platform === 'telegram') {
-        await this.telegramNotifier.sendTelegramMessage(this.chatId, busyMessage, {
-          parse_mode: 'HTML'
-        });
-      } else if (this.platform === 'discord' && interaction) {
-        await this.discordNotifier.sendDiscordMessage(interaction, {
-          content: busyMessage,
-          flags: 64
-        });
+      console.log(`Transaction ${transactionId} queued - already processing ${this.processingTransactionId}`);
+      
+      // Only send the busy message once per sender
+      if (!this.transactionQueue.some(item => item.senderPublicKeyString === senderPublicKeyString)) {
+        const busyMessage = "⏳ A transaction is already in progress. Please wait.";
+        if (this.platform === 'telegram') {
+          await this.telegramNotifier.sendTelegramMessage(this.chatId, busyMessage, {
+            parse_mode: 'HTML'
+          });
+        } else if (this.platform === 'discord' && interaction) {
+          await this.discordNotifier.sendDiscordMessage(interaction, {
+            content: busyMessage,
+            flags: 64
+          });
+        }
       }
+      
       return;
     }
 
+    // Set transaction as processing
     this.isProcessingTransaction = true;
+    this.processingTransactionId = transactionId;
+    console.log(`Processing transaction ${transactionId}`);
 
     try {
       // Check balance before proceeding
       const balance = await this.connection.getBalance(this.receiverKeypair.publicKey);
       const balanceInSol = balance / 1_000_000_000;
       
+      // Track if we've already sent an insufficient balance message
+      const insufficientBalanceKey = `insufficient_balance_${senderPublicKeyString}`;
+      
       if (balanceInSol < amountReceived) {
-        throw new Error(`Insufficient balance. Available: ${balanceInSol.toFixed(4)} SOL, Requested: ${amountReceived} SOL`);
+        // Check if we've already sent this error message recently
+        if (!this.messageCache.has(insufficientBalanceKey)) {
+          this.messageCache.set(insufficientBalanceKey, true);
+          // Set a timeout to clear the cache entry after 30 seconds
+          setTimeout(() => this.messageCache.delete(insufficientBalanceKey), 30000);
+          
+          throw new Error(`Insufficient balance. Available: ${balanceInSol.toFixed(4)} SOL, Requested: ${amountReceived} SOL`);
+        } else {
+          // Silently fail if we've already sent this message
+          console.log(`Suppressing duplicate insufficient balance message for ${senderPublicKeyString}`);
+          return;
+        }
       }
 
       // Create transaction to calculate fees first
@@ -637,32 +665,47 @@ class BalanceChecker extends EventEmitter {
       };
 
     } catch (error) {
-      console.error('Send error:', error);
-      const formattedError = this.formatErrorMessage(error.message);
-
-      try {
-        if (this.platform === 'telegram') {
-          await this.telegramNotifier.sendTelegramMessage(this.chatId, formattedError, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: true
-          });
-        } else if (this.platform === 'discord' && interaction) {
-          await this.discordNotifier.sendDiscordMessage(interaction, {
-            content: formattedError,
-            flags: 64
-          });
+      console.error(`Transaction ${transactionId} error:`, error);
+      
+      // Create a cache key based on the error message and sender
+      const errorCacheKey = `error_${senderPublicKeyString}_${error.message.substring(0, 20)}`;
+      
+      // Only send error message if we haven't sent this exact error to this sender recently
+      if (!this.messageCache.has(errorCacheKey)) {
+        this.messageCache.set(errorCacheKey, true);
+        // Set a timeout to clear the cache entry after 30 seconds
+        setTimeout(() => this.messageCache.delete(errorCacheKey), 30000);
+        
+        const formattedError = this.formatErrorMessage(error.message);
+        
+        try {
+          if (this.platform === 'telegram') {
+            await this.telegramNotifier.sendTelegramMessage(this.chatId, formattedError, {
+              parse_mode: 'HTML',
+              disable_web_page_preview: true
+            });
+          } else if (this.platform === 'discord' && interaction) {
+            await this.discordNotifier.sendDiscordMessage(interaction, {
+              content: formattedError,
+              flags: 64
+            });
+          }
+        } catch (msgError) {
+          console.error('Failed to send error notification:', msgError);
         }
-      } catch (msgError) {
-        console.error('Failed to send error notification:', msgError);
+      } else {
+        console.log(`Suppressing duplicate error message: ${error.message}`);
       }
     } finally {
+      console.log(`Completed transaction ${transactionId}`);
       this.isProcessingTransaction = false;
+      this.processingTransactionId = null;
       this.cleanup();
     }
   }
 
+  // Helper method to format error messages
   formatErrorMessage(message) {
-    // Helper method to format error messages consistently
     if (this.platform === 'telegram') {
       return `❌ <b>Error returning SOL:</b> ${message}`;
     } else {
