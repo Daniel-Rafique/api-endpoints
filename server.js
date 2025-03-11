@@ -260,9 +260,9 @@ app.post('/api/profiles', async (req, res) => {
   const { profileId, timestamp, hash } = req.body;
 
   // Validate parameters
-  if (!profileId || !hash) {
-    return res.status(400).json({ error: 'Missing required parameters' });
-  }
+  // if (!profileId || !hash) {
+  //   return res.status(400).json({ error: 'Missing required parameters' });
+  // }
 
   // Validate the hash
   // const expectedHash = generateHash(profileId, timestamp);
