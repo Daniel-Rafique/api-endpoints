@@ -12,15 +12,12 @@ const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
-const DataManager = require('./database');
+const dataManager = require('./database'); // This now imports the singleton instance
 const BalanceChecker = require('./BalanceChecker');
 const DiscordNotifier = require('./Discord');
 const TelegramNotifier = require('./Telegram');
 const InstanceStart = require('./InstanceManager/start')
 const InstanceStop = require('./InstanceManager/stop')
-
-
-const dataManager = new DataManager();
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
@@ -246,6 +243,17 @@ app.post('/api/top-up', async (req, res) => {
   if (hash !== expectedHash) {
     console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
     return res.status(403).send('Invalid request signature');
+  }
+});
+
+// Use dataManager directly
+app.post('/api/mode', async (req, res) => {
+  try {
+    const { chatId, mode } = req.body;
+    await dataManager.setMode(chatId, mode);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

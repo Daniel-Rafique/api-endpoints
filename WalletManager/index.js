@@ -74,7 +74,7 @@ class WalletManager {
             }
 
             // Resolve the path for the file
-            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatIdStr}/.config/wallets.json`);
+            const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/user/${chatIdStr}/.config/wallets.json`);
 
             if (!filePath) {
                 throw new Error('Error resolving filePath.');
