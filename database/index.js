@@ -105,4 +105,5 @@ class DataManager extends EventEmitter {
   }
 }
 
-module.exports = DataManager;
+const dataManagerInstance = new DataManager();
+module.exports = dataManagerInstance;
