@@ -340,7 +340,7 @@ app.post('/api/profiles', async (req, res) => {
 });
 
 app.post('/api/search', async (req, res) => {
-  const { query, timestamp, hash } = req.body;
+  const { query, timestamp, hash, limit = 20, page = 1 } = req.body;
 
   // Validate parameters
   if (!query) {
@@ -354,45 +354,72 @@ app.post('/api/search', async (req, res) => {
   }
 
   try {
-    // Fetch RSS feed with search query
-    const response = await axios.get(`https://koynlabs.com/search/rss`, {
-      params: {
-        f: 'tweets',
-        q: query
-      }
-    });
-    
-    const parser = new xml2js.Parser({
-      explicitArray: false,
-      mergeAttrs: true
-    });
+    // Calculate how many pages we need to fetch to reach the desired limit
+    const pagesToFetch = Math.ceil(limit / 20);
+    let allItems = [];
+    let currentPage = 1;
 
-    // Parse XML to JSON
-    const result = await parser.parseStringPromise(response.data);
+    // Fetch RSS feed with search query for each page
+    while (currentPage <= pagesToFetch) {
+      const response = await axios.get(`https://koynlabs.com/search/rss`, {
+        params: {
+          f: 'tweets',
+          q: query,
+          p: currentPage // Add page parameter
+        }
+      });
+      
+      const parser = new xml2js.Parser({
+        explicitArray: false,
+        mergeAttrs: true
+      });
+
+      // Parse XML to JSON
+      const result = await parser.parseStringPromise(response.data);
+      
+      // Add items from this page to our collection
+      if (result.rss.channel.item) {
+        const items = Array.isArray(result.rss.channel.item) ? 
+          result.rss.channel.item : [result.rss.channel.item];
+        allItems = allItems.concat(items);
+      }
+
+      currentPage++;
+
+      // If we've collected enough items, stop fetching more pages
+      if (allItems.length >= limit) {
+        break;
+      }
+    }
+
+    // Trim to exact limit if we got more items than requested
+    allItems = allItems.slice(0, limit);
     
     // Transform the data structure and strip HTML
     const responseData = {
       status: {
-        code: response.status,
+        code: 200,
         message: 'Success',
         timestamp: new Date().toISOString(),
-        query: query
+        query,
+        limit,
+        totalResults: allItems.length,
+        page
       },
       data: {
         metadata: {
-          title: stripHtmlAndDecodeEntities(result.rss.channel.title),
-          link: result.rss.channel.link,
-          description: stripHtmlAndDecodeEntities(result.rss.channel.description),
-          language: result.rss.channel.language
+          title: `Search results for "${query}"`,
+          link: `https://koynlabs.com/search?q=${encodeURIComponent(query)}`,
+          description: `Search results for "${query}"`,
+          language: "en-us"
         },
-        items: result.rss.channel.item.map(item => ({
+        items: allItems.map(item => ({
           title: stripHtmlAndDecodeEntities(item.title),
           creator: stripHtmlAndDecodeEntities(item['dc:creator']),
           description: stripHtmlAndDecodeEntities(item.description),
           pubDate: item.pubDate,
           guid: item.guid,
           link: item.link,
-          // Extract hashtags from description and title
           hashtags: extractHashtags(item.description + ' ' + item.title)
         }))
       }
@@ -407,7 +434,7 @@ app.post('/api/search', async (req, res) => {
         message: 'Failed to fetch or parse RSS feed',
         error: error.message,
         timestamp: new Date().toISOString(),
-        query: query
+        query
       },
       data: null
     });
