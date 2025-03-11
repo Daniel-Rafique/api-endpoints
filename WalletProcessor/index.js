@@ -26,7 +26,7 @@ class WalletProcessor {
 
     this.dataManager = dataManager;
     this.network = this.initializeNeuralNetwork();
-    this.MIN_WALLETS = 100; // Minimum starting point for 1 SOL
+    this.MIN_WALLETS = 10; // Minimum starting point for 1 SOL
     this.MIN_SOL_PER_WALLET = 0.005; // Minimum SOL per wallet
 
     this.walletQueue = new Queue('walletQueue', {
