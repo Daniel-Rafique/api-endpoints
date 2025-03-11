@@ -1,7 +1,7 @@
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair, sendAndConfirmTransaction, web3 } = require('@solana/web3.js');
 const { TOKEN_PROGRAM_ID, createTransferInstruction, getOrCreateAssociatedTokenAccount, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } = require('@solana/spl-token');
 const bs58 = require('bs58');
-const DataManager = require('../database')
+const dataManager = require('../database')
 const DiscordNotifier = require('../Discord');
 const EventEmitter = require('events');
 const TelegramNotifier = require('../Telegram');
@@ -47,7 +47,7 @@ class BalanceChecker extends EventEmitter {
     this.telegramNotifier = new TelegramNotifier(telegramToken);
     this.instanceManager = new InstanceManager(chatId);
     this.mintAddress = mintAddress;
-    this.dataManager = new DataManager(chatId);
+    this.dataManager = dataManager;
     this.messageQueue = [];
     this.ws = null;
     this.pingInterval = null;
