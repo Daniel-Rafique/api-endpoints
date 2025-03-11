@@ -14,8 +14,6 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const dataManager = require('./database'); // This now imports the singleton instance
 const BalanceChecker = require('./BalanceChecker');
-const DiscordNotifier = require('./Discord');
-const TelegramNotifier = require('./Telegram');
 const InstanceStart = require('./InstanceManager/start')
 const InstanceStop = require('./InstanceManager/stop')
 
@@ -42,14 +40,6 @@ function generateHash(chatId, timestamp) {
   const data = `${chatId}:${timestamp}:${ENCRYPTION_KEY}`;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
-
-// Initialize DiscordNotifier
-const discordToken = process.env.DISCORD_BOT_TOKEN;
-const discordNotifier = new DiscordNotifier(discordToken);
-
-// Initialize TelegramNotifier
-const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
-const telegramNotifier = new TelegramNotifier(telegramToken);
 
 // Endpoint to handle incoming POST requests
 app.post('/api/create', async (req, res) => {
@@ -140,6 +130,17 @@ app.post('/api/create', async (req, res) => {
     return res.status(500).json({
       error: 'Internal server error',
     });
+  }
+});
+
+// Use dataManager directly
+app.post('/api/mode', async (req, res) => {
+  try {
+    const { chatId, mode } = req.body;
+    await dataManager.setMode(chatId, mode);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -243,17 +244,6 @@ app.post('/api/top-up', async (req, res) => {
   if (hash !== expectedHash) {
     console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
     return res.status(403).send('Invalid request signature');
-  }
-});
-
-// Use dataManager directly
-app.post('/api/mode', async (req, res) => {
-  try {
-    const { chatId, mode } = req.body;
-    await dataManager.setMode(chatId, mode);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
 });
 

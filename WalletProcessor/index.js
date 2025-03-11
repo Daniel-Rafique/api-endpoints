@@ -2,7 +2,7 @@ require('dotenv').config();
 const path = require('path');
 const os = require('os');
 const { Queue, Worker } = require('bullmq');
-const DataManager = require('../database');
+const dataManager = require('../database');
 const WalletManager = require('../WalletManager');
 const brain = require('brain.js');
 
@@ -24,7 +24,7 @@ class WalletProcessor {
       throw new Error('Error resolving basePath or instancePath.');
     }
 
-    this.dataManager = new DataManager();
+    this.dataManager = dataManager;
     this.network = this.initializeNeuralNetwork();
 
     this.walletQueue = new Queue('walletQueue', {

@@ -3,7 +3,7 @@ const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
 const pm2 = require('pm2');
-const DataManager = require('../database');
+const dataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
 const WalletProcessor = require('../WalletProcessor');
 const Commission = require('../Solana/Commission');
@@ -17,7 +17,7 @@ class InstanceManager {
   constructor(chatId) {
     this.basePath = path.resolve(os.homedir(), ENV_PATH, '../marketMaker');
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
-    this.dataManager = new DataManager();
+    this.dataManager = dataManager;
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),

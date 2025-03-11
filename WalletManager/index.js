@@ -3,7 +3,7 @@ const bs58 = require('bs58');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const DataManager = require('../database')
+const dataManager = require('../database')
 const { Firestore } = require('@google-cloud/firestore');
 const { Keypair } = require('@solana/web3.js');
 
@@ -13,7 +13,7 @@ class WalletManager {
 
     constructor(chatId) {
         this.chatId = chatId;
-        this.dataManager = new DataManager;
+        this.dataManager = dataManager;
         this.firestore = new Firestore({
             projectId: 'koynlabs-2f749',
             keyFilename: '.config/firebaseServiceAccountKey.json',
