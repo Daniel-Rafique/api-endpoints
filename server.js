@@ -339,7 +339,88 @@ app.post('/api/profiles', async (req, res) => {
   }
 });
 
+app.post('/api/search', async (req, res) => {
+  const { query, timestamp, hash } = req.body;
 
+  // Validate parameters
+  if (!query) {
+    return res.status(400).json({ 
+      status: {
+        code: 400,
+        message: 'Missing search query parameter'
+      },
+      data: null
+    });
+  }
+
+  try {
+    // Fetch RSS feed with search query
+    const response = await axios.get(`https://koynlabs.com/search/rss`, {
+      params: {
+        f: 'tweets',
+        q: query
+      }
+    });
+    
+    const parser = new xml2js.Parser({
+      explicitArray: false,
+      mergeAttrs: true
+    });
+
+    // Parse XML to JSON
+    const result = await parser.parseStringPromise(response.data);
+    
+    // Transform the data structure and strip HTML
+    const responseData = {
+      status: {
+        code: response.status,
+        message: 'Success',
+        timestamp: new Date().toISOString(),
+        query: query
+      },
+      data: {
+        metadata: {
+          title: stripHtmlAndDecodeEntities(result.rss.channel.title),
+          link: result.rss.channel.link,
+          description: stripHtmlAndDecodeEntities(result.rss.channel.description),
+          language: result.rss.channel.language
+        },
+        items: result.rss.channel.item.map(item => ({
+          title: stripHtmlAndDecodeEntities(item.title),
+          creator: stripHtmlAndDecodeEntities(item['dc:creator']),
+          description: stripHtmlAndDecodeEntities(item.description),
+          pubDate: item.pubDate,
+          guid: item.guid,
+          link: item.link,
+          // Extract hashtags from description and title
+          hashtags: extractHashtags(item.description + ' ' + item.title)
+        }))
+      }
+    };
+
+    res.json(responseData);
+  } catch (error) {
+    console.error('Error fetching or parsing RSS feed:', error);
+    res.status(500).json({ 
+      status: {
+        code: error.response?.status || 500,
+        message: 'Failed to fetch or parse RSS feed',
+        error: error.message,
+        timestamp: new Date().toISOString(),
+        query: query
+      },
+      data: null
+    });
+  }
+});
+
+// Helper function to extract hashtags
+function extractHashtags(text) {
+  if (!text) return [];
+  const hashtagRegex = /#[\w\u0590-\u05ff]+/g;
+  const matches = text.match(hashtagRegex);
+  return matches ? [...new Set(matches)] : []; // Remove duplicates
+}
 
 // Create HTTPS server
 const server = https.createServer(options, app);
