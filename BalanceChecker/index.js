@@ -586,9 +586,9 @@ class BalanceChecker extends EventEmitter {
       const adjustedAmount = amountReceived - (fee / 1_000_000_000);
 
       // Check if amount is too small
-      if (adjustedAmount <= 0) {
-        throw new Error(`Amount (${amountReceived} SOL) is too small to cover transaction fee (${fee / 1_000_000_000} SOL)`);
-      }
+      // if (adjustedAmount <= 0) {
+      //   throw new Error(`Amount (${amountReceived} SOL) is too small to cover transaction fee (${fee / 1_000_000_000} SOL)`);
+      // }
 
       // Create new transaction with adjusted amount
       transaction = new Transaction();
