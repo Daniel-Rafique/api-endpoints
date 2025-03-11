@@ -18,6 +18,7 @@ const InstanceStart = require('./InstanceManager/start')
 const InstanceStop = require('./InstanceManager/stop')
 const axios = require('axios');
 const xml2js = require('xml2js');
+const cheerio = require('cheerio');
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
@@ -267,6 +268,35 @@ function stripHtmlAndDecodeEntities(html) {
                .trim();
 }
 
+// Helper function to fetch tweet details
+async function fetchTweetDetails(statusUrl) {
+  try {
+    const response = await axios.get(statusUrl);
+    const $ = cheerio.load(response.data);
+    
+    // Extract tweet data using cheerio selectors
+    // This is an example - adjust selectors based on actual HTML structure
+    const tweetData = {
+      text: $('.tweet-text').text().trim(),
+      timestamp: $('.tweet-timestamp').text().trim(),
+      likes: $('.tweet-likes').text().trim(),
+      retweets: $('.tweet-retweets').text().trim(),
+      // Add more fields as needed
+    };
+
+    return {
+      statusCode: response.status,
+      tweet: tweetData
+    };
+  } catch (error) {
+    console.error('Error fetching tweet:', error);
+    return {
+      statusCode: error.response?.status || 500,
+      error: error.message
+    };
+  }
+}
+
 app.post('/api/profiles', async (req, res) => {
   const { profileId, timestamp, hash } = req.body;
 
@@ -286,31 +316,50 @@ app.post('/api/profiles', async (req, res) => {
     // Parse XML to JSON
     const result = await parser.parseStringPromise(response.data);
     
-    // Transform the data structure and strip HTML
-    const feed = {
-      metadata: {
-        title: stripHtmlAndDecodeEntities(result.rss.channel.title),
-        link: result.rss.channel.link,
-        description: stripHtmlAndDecodeEntities(result.rss.channel.description),
-        language: result.rss.channel.language,
-        image: result.rss.channel.image
-      },
-      items: result.rss.channel.item.map(item => ({
+    // Fetch tweet details for each item
+    const items = await Promise.all(result.rss.channel.item.map(async item => {
+      const tweetDetails = await fetchTweetDetails(item.guid);
+      return {
         title: stripHtmlAndDecodeEntities(item.title),
         creator: stripHtmlAndDecodeEntities(item['dc:creator']),
         description: stripHtmlAndDecodeEntities(item.description),
         pubDate: item.pubDate,
         guid: item.guid,
-        link: item.link
-      }))
+        link: item.link,
+        tweet: tweetDetails.statusCode === 200 ? tweetDetails.tweet : null,
+        tweetStatus: tweetDetails.statusCode
+      };
+    }));
+
+    const responseData = {
+      status: {
+        code: response.status,
+        message: 'Success',
+        timestamp: new Date().toISOString()
+      },
+      data: {
+        metadata: {
+          title: stripHtmlAndDecodeEntities(result.rss.channel.title),
+          link: result.rss.channel.link,
+          description: stripHtmlAndDecodeEntities(result.rss.channel.description),
+          language: result.rss.channel.language,
+          image: result.rss.channel.image
+        },
+        items: items
+      }
     };
 
-    res.json(feed);
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching or parsing RSS feed:', error);
     res.status(500).json({ 
-      error: 'Failed to fetch or parse RSS feed',
-      details: error.message
+      status: {
+        code: error.response?.status || 500,
+        message: 'Failed to fetch or parse RSS feed',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      },
+      data: null
     });
   }
 });
