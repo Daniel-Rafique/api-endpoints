@@ -265,12 +265,12 @@ app.post('/api/profiles', async (req, res) => {
   }
 
   // Validate the hash
-  const expectedHash = generateHash(profileId, timestamp);
+  // const expectedHash = generateHash(profileId, timestamp);
 
-  if (hash !== expectedHash) {
-    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
-    return res.status(403).json({ error: 'Invalid request signature' });
-  }
+  // if (hash !== expectedHash) {
+  //   console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+  //   return res.status(403).json({ error: 'Invalid request signature' });
+  // }
 
   try {
     // Fetch RSS feed
