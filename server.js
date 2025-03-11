@@ -274,7 +274,7 @@ app.post('/api/profiles', async (req, res) => {
 
   try {
     // Fetch RSS feed
-    const response = await axios.get('https://koynlabs.com/koynlabs/rss');
+    const response = await axios.get(`https://koynlabs.com/${profileId}/rss`);
     const parser = new xml2js.Parser({
       explicitArray: false,
       mergeAttrs: true
