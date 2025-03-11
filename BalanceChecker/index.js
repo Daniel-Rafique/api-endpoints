@@ -69,9 +69,6 @@ class BalanceChecker extends EventEmitter {
       console.error('Error decrypting receiver keypair:', error);
       throw error;
     }
-
-    // Set up the mode change listener immediately
-    this.listenForModeChange();
   }
 
   // New method to connect to Bitquery
@@ -779,7 +776,7 @@ class BalanceChecker extends EventEmitter {
   }
 
   // Add this method to listen for mode changes
-  listenForModeChange() {
+  listenForModeChange(dataManager) {
     console.log('Setting up mode change listener in BalanceChecker');
 
     // Create a method to handle mode changes
@@ -794,12 +791,12 @@ class BalanceChecker extends EventEmitter {
       }
     };
 
-    // Register the event listener using the singleton dataManager
-    this.dataManager.on('modeChanged', this.handleModeChange);
+    // Register the event listener on the dataManager
+    dataManager.on('modeChanged', this.handleModeChange);
 
-    // Store the cleanup function
-    this._removeListener = () => {
-      this.dataManager.off('modeChanged', this.handleModeChange);
+    return () => {
+      // Return a cleanup function to remove the listener when needed
+      dataManager.removeListener('modeChanged', this.handleModeChange);
     };
   }
 
@@ -822,8 +819,10 @@ class BalanceChecker extends EventEmitter {
       this.connectionPromise = null;
 
       // Remove all listeners
-      if (this._removeListener) {
-        this._removeListener();
+      if (this.removeAllListeners) {
+        this.removeAllListeners('balanceUpdate');
+        this.removeAllListeners('error');
+        this.removeAllListeners('connected');
       }
 
       console.log('Cleanup completed');
