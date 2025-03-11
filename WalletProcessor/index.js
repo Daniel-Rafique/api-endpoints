@@ -26,6 +26,8 @@ class WalletProcessor {
 
     this.dataManager = dataManager;
     this.network = this.initializeNeuralNetwork();
+    this.MIN_WALLETS = 100; // Minimum starting point for 1 SOL
+    this.MIN_SOL_PER_WALLET = 0.005; // Minimum SOL per wallet
 
     this.walletQueue = new Queue('walletQueue', {
       connection: {
@@ -38,107 +40,156 @@ class WalletProcessor {
   }
 
   initializeNeuralNetwork() {
-    // Create a neural network with a hidden layer
     const network = new brain.NeuralNetwork({
-      hiddenLayers: [4],
-      activation: 'sigmoid'
+      hiddenLayers: [8, 6], // More complex network for better pattern recognition
+      activation: 'leaky-relu', // Better for continuous number prediction
+      learningRate: 0.01
     });
 
-    // Training data: [marketCap, liquidity] => [walletMultiplier]
-    // The walletMultiplier will be used to adjust the number of wallets
-    const trainingData = [
-      // Low market cap, low liquidity - create more wallets to boost visibility
-      { input: { marketCap: 0.01, liquidity: 0.01 }, output: { walletMultiplier: 0.9 } },
-      { input: { marketCap: 0.05, liquidity: 0.05 }, output: { walletMultiplier: 0.85 } },
-      
-      // Low market cap, medium liquidity - create moderate number of wallets
-      { input: { marketCap: 0.05, liquidity: 0.3 }, output: { walletMultiplier: 0.7 } },
-      { input: { marketCap: 0.1, liquidity: 0.4 }, output: { walletMultiplier: 0.65 } },
-      
-      // Medium market cap, low liquidity - create more wallets to boost liquidity
-      { input: { marketCap: 0.3, liquidity: 0.05 }, output: { walletMultiplier: 0.8 } },
-      { input: { marketCap: 0.4, liquidity: 0.1 }, output: { walletMultiplier: 0.75 } },
-      
-      // Medium market cap, medium liquidity - balanced approach
-      { input: { marketCap: 0.3, liquidity: 0.3 }, output: { walletMultiplier: 0.6 } },
-      { input: { marketCap: 0.5, liquidity: 0.5 }, output: { walletMultiplier: 0.5 } },
-      
-      // High market cap, low liquidity - create moderate wallets
-      { input: { marketCap: 0.8, liquidity: 0.1 }, output: { walletMultiplier: 0.6 } },
-      
-      // High market cap, high liquidity - create fewer wallets (already visible)
-      { input: { marketCap: 0.8, liquidity: 0.8 }, output: { walletMultiplier: 0.3 } },
-      { input: { marketCap: 1.0, liquidity: 1.0 }, output: { walletMultiplier: 0.2 } }
-    ];
+    const trainingData = this.generateTrainingData();
     
-    // Train the network
     network.train(trainingData, {
-      iterations: 10000,
-      errorThresh: 0.005,
-      log: false
+      iterations: 50000,
+      errorThresh: 0.001,
+      logPeriod: 5000,
+      log: (stats) => console.log('Network training stats:', stats)
     });
-    
-    console.log('Neural network trained for wallet optimization');
+
     return network;
   }
   
-  normalizeInput(marketCap, liquidity) {
-    // Normalize inputs to 0-1 range using log scale for better distribution
-    const normalizedMarketCap = Math.min(Math.log10(marketCap + 1) / 7, 1);
-    const normalizedLiquidity = Math.min(Math.log10(liquidity + 1) / 7, 1);
+  generateTrainingData() {
+    const data = [];
     
-    return {
-      marketCap: normalizedMarketCap,
-      liquidity: normalizedLiquidity
-    };
+    // Generate training examples across different market conditions
+    for (let marketCap of [1000, 5000, 10000, 50000, 100000, 500000]) {
+      for (let liquidity of [500, 2000, 5000, 20000, 50000, 200000]) {
+        for (let solAmount of [1, 3, 5, 8]) {
+          // Calculate ideal wallet count based on market conditions
+          const baseWalletCount = this.calculateBaseWalletCount(marketCap, liquidity, solAmount);
+          
+          data.push({
+            input: {
+              marketCap: this.normalizeValue(marketCap, 1000000),
+              liquidity: this.normalizeValue(liquidity, 1000000),
+              solAmount: this.normalizeValue(solAmount, 10),
+              mcapToLiq: this.normalizeValue(marketCap / liquidity, 5)
+            },
+            output: {
+              walletMultiplier: this.normalizeValue(baseWalletCount / 100, 10)
+            }
+          });
+        }
+      }
+    }
+
+    return data;
   }
 
-  initializeWorker() {
+  calculateBaseWalletCount(marketCap, liquidity, solAmount) {
+    // Dynamic wallet calculation for training data
+    const mcapFactor = Math.log10(Math.max(marketCap, 1000)) / Math.log10(1000000);
+    const liqFactor = Math.log10(Math.max(liquidity, 500)) / Math.log10(200000);
+    const mcapToLiqRatio = marketCap / liquidity;
+    
+    // More wallets for lower mcap and higher liquidity
+    let baseCount = 100 * solAmount * (1.5 - mcapFactor) * (1 + liqFactor);
+    
+    // Adjust based on mcap/liquidity ratio
+    if (mcapToLiqRatio < 0.5) baseCount *= 1.3; // More fragmented for good liquidity
+    if (mcapToLiqRatio > 2) baseCount *= 0.8; // Less fragmented for poor liquidity
+    
+    return Math.round(baseCount);
+  }
+
+  normalizeValue(value, max) {
+    return Math.log2(1 + value) / Math.log2(1 + max);
+  }
+
+  denormalizeValue(normalized, max) {
+    return Math.pow(2, normalized * Math.log2(1 + max)) - 1;
+  }
+
+  async calculateOptimalWallets(marketCap, liquidity, solAmount) {
+    // Prepare input for neural network
+    const input = {
+      marketCap: this.normalizeValue(marketCap, 1000000),
+      liquidity: this.normalizeValue(liquidity, 1000000),
+      solAmount: this.normalizeValue(solAmount, 10),
+      mcapToLiq: this.normalizeValue(marketCap / liquidity, 5)
+    };
+
+    // Get network prediction
+    const result = this.network.run(input);
+    
+    // Denormalize the result and calculate wallet count
+    const multiplier = this.denormalizeValue(result.walletMultiplier, 10);
+    let walletCount = Math.round(this.MIN_WALLETS * multiplier * solAmount);
+    
+    // Apply constraints
+    const maxWalletsFromSol = Math.floor(solAmount / this.MIN_SOL_PER_WALLET);
+    walletCount = Math.min(walletCount, maxWalletsFromSol);
+    walletCount = Math.max(walletCount, this.MIN_WALLETS);
+
+    // Calculate metrics
+    const solPerWallet = solAmount / walletCount;
+    const expectedImpact = this.calculateExpectedImpact(marketCap, liquidity, solAmount, walletCount);
+
+    console.log(`
+Neural Network Wallet Analysis:
+  Market Metrics:
+    Market Cap: $${marketCap.toFixed(2)}
+    Liquidity: $${liquidity.toFixed(2)}
+    MCap/Liq Ratio: ${(marketCap/liquidity).toFixed(2)}
+    
+  Wallet Distribution:
+    Total SOL: ${solAmount}
+    Optimal Wallet Count: ${walletCount}
+    SOL per Wallet: ${solPerWallet.toFixed(6)}
+    
+  Impact Analysis:
+    Network Multiplier: ${multiplier.toFixed(2)}x
+    Expected Market Impact: ${expectedImpact.toFixed(2)}%
+    Avg Trade Size: $${(solPerWallet * 20).toFixed(2)}
+    
+  Constraints:
+    Max Possible Wallets: ${maxWalletsFromSol}
+    Min Required Wallets: ${this.MIN_WALLETS}
+    Min SOL per Wallet: ${this.MIN_SOL_PER_WALLET}
+    `);
+
+    return walletCount;
+  }
+
+  calculateExpectedImpact(marketCap, liquidity, solAmount, walletCount) {
+    // Estimate potential market impact as percentage
+    const totalValue = solAmount * 20; // Approximate SOL value in USD
+    const impactOnLiquidity = (totalValue / liquidity) * 100;
+    const impactOnMarketCap = (totalValue / marketCap) * 100;
+    
+    return Math.max(impactOnLiquidity, impactOnMarketCap);
+  }
+
+  async initializeWorker() {
     new Worker('walletQueue', async job => {
       const { chatId, userData } = job.data;
-      const { makers, boostType, userKeypair, tokenDetails } = userData;
-      console.log('Processing job for chatId:', chatId); // Log chatId
-
+      const { solAmount, tokenDetails } = userData;
+      
       try {
-        let walletsArray;
-        // Get liquidity and market cap from token details
-        const liquidity = tokenDetails.liquidity.usd || 1000;
-        const marketCap = tokenDetails.marketCap || 1000;
+        const optimalWalletCount = await this.calculateOptimalWallets(
+          tokenDetails.marketCap,
+          tokenDetails.liquidity.usd,
+          solAmount
+        );
 
-        console.log(`Token metrics - Liquidity: $${liquidity}, Market Cap: $${marketCap}`);
-        
-        // Normalize the input values for the neural network
-        const normalizedInput = this.normalizeInput(marketCap, liquidity);
-        
-        // Run the neural network to get the optimal wallet multiplier
-        const result = this.network.run(normalizedInput);
-        
-        // Calculate the optimized number of wallets
-        const walletMultiplier = result.walletMultiplier;
-        const optimizedWalletCount = Math.max(5, Math.round(makers * walletMultiplier));
-        
-        console.log(`Neural network analysis:
-          - Normalized Market Cap: ${normalizedInput.marketCap.toFixed(4)}
-          - Normalized Liquidity: ${normalizedInput.liquidity.toFixed(4)}
-          - Wallet Multiplier: ${walletMultiplier.toFixed(4)}
-          - Original Wallet Count: ${makers}
-          - Optimized Wallet Count: ${optimizedWalletCount}
-        `);
-
-        // Create the optimized number of wallets
-        walletsArray = await this.walletManager.createSolanaWallets(optimizedWalletCount);
-
+        const walletsArray = await this.walletManager.createSolanaWallets(optimalWalletCount);
         await this.walletManager.saveWallets(chatId, walletsArray);
-        console.log(`Processed ${walletsArray.length} wallets for chatId: ${chatId}`);
+        
+        console.log(`Created ${walletsArray.length} wallets for chatId: ${chatId}`);
 
       } catch (error) {
         console.error('Error processing job:', error);
         throw new Error('Failed to process job');
-      }
-    }, {
-      connection: {
-        host: 'localhost',
-        port: 6379
       }
     });
   }
