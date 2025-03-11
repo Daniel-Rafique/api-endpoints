@@ -4,7 +4,7 @@ const db = admin.firestore();
 const EventEmitter = require('events');
 
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION;
-console.log(FIRESTORE_COLLECTION);
+const getServerTimestamp = () => admin.firestore.FieldValue.serverTimestamp();
 
 class DataManager extends EventEmitter {
 
