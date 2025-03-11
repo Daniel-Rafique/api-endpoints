@@ -16,6 +16,8 @@ const dataManager = require('./database'); // This now imports the singleton ins
 const BalanceChecker = require('./BalanceChecker');
 const InstanceStart = require('./InstanceManager/start')
 const InstanceStop = require('./InstanceManager/stop')
+const axios = require('axios');
+const xml2js = require('xml2js');
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
@@ -259,15 +261,51 @@ app.post('/api/profiles', async (req, res) => {
 
   // Validate parameters
   if (!profileId || !hash) {
-    return res.status(400).send('Missing required parameters');
+    return res.status(400).json({ error: 'Missing required parameters' });
   }
 
   // Validate the hash
   const expectedHash = generateHash(profileId, timestamp);
 
-  if (hash !== expectedHash) {  
+  if (hash !== expectedHash) {
     console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
-    return res.status(403).send('Invalid request signature');
+    return res.status(403).json({ error: 'Invalid request signature' });
+  }
+
+  try {
+    // Fetch RSS feed
+    const response = await axios.get('https://koynlabs.com/koynlabs/rss');
+    const parser = new xml2js.Parser({
+      explicitArray: false,
+      mergeAttrs: true
+    });
+
+    // Parse XML to JSON
+    const result = await parser.parseStringPromise(response.data);
+    
+    // Transform the data structure if needed
+    const feed = {
+      metadata: {
+        title: result.rss.channel.title,
+        link: result.rss.channel.link,
+        description: result.rss.channel.description,
+        language: result.rss.channel.language,
+        image: result.rss.channel.image
+      },
+      items: result.rss.channel.item.map(item => ({
+        title: item.title,
+        creator: item['dc:creator'],
+        description: item.description,
+        pubDate: item.pubDate,
+        guid: item.guid,
+        link: item.link
+      }))
+    };
+
+    res.json(feed);
+  } catch (error) {
+    console.error('Error fetching or parsing RSS feed:', error);
+    res.status(500).json({ error: 'Failed to fetch or parse RSS feed' });
   }
 });
 
