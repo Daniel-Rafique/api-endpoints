@@ -249,32 +249,35 @@ app.post('/api/top-up', async (req, res) => {
   }
 });
 
-// let timestamp = Date.now();
-// let hash = generateHash(profileId, timestamp);
-// function generateHash(chatId, timestamp,) {
-//   const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
-//   return crypto.createHash('sha256').update(data).digest('hex');
-// }
-// npm install axios xml2js
+// Add this helper function to strip HTML tags and decode HTML entities
+function stripHtmlAndDecodeEntities(html) {
+  if (!html) return '';
+  
+  // First decode HTML entities
+  let decoded = html.replace(/&lt;/g, '<')
+                   .replace(/&gt;/g, '>')
+                   .replace(/&amp;/g, '&')
+                   .replace(/&quot;/g, '"')
+                   .replace(/&#39;/g, "'")
+                   .replace(/\[\[CDATA\[(.*?)\]\]>/g, '$1');
+  
+  // Then strip HTML tags
+  return decoded.replace(/<[^>]*>/g, '')
+               .replace(/\s+/g, ' ')
+               .trim();
+}
+
 app.post('/api/profiles', async (req, res) => {
   const { profileId, timestamp, hash } = req.body;
 
   // Validate parameters
-  // if (!profileId || !hash) {
-  //   return res.status(400).json({ error: 'Missing required parameters' });
-  // }
-
-  // Validate the hash
-  // const expectedHash = generateHash(profileId, timestamp);
-
-  // if (hash !== expectedHash) {
-  //   console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
-  //   return res.status(403).json({ error: 'Invalid request signature' });
-  // }
+  if (!profileId) {
+    return res.status(400).json({ error: 'Missing profileId parameter' });
+  }
 
   try {
-    // Fetch RSS feed
-    const response = await axios.get(`https://koynlabs.com/koynlabs/rss`);
+    // Fetch RSS feed with profileId
+    const response = await axios.get(`https://koynlabs.com/${profileId}/rss`);
     const parser = new xml2js.Parser({
       explicitArray: false,
       mergeAttrs: true
@@ -283,19 +286,19 @@ app.post('/api/profiles', async (req, res) => {
     // Parse XML to JSON
     const result = await parser.parseStringPromise(response.data);
     
-    // Transform the data structure if needed
+    // Transform the data structure and strip HTML
     const feed = {
       metadata: {
-        title: result.rss.channel.title,
+        title: stripHtmlAndDecodeEntities(result.rss.channel.title),
         link: result.rss.channel.link,
-        description: result.rss.channel.description,
+        description: stripHtmlAndDecodeEntities(result.rss.channel.description),
         language: result.rss.channel.language,
         image: result.rss.channel.image
       },
       items: result.rss.channel.item.map(item => ({
-        title: item.title,
-        creator: item['dc:creator'],
-        description: item.description,
+        title: stripHtmlAndDecodeEntities(item.title),
+        creator: stripHtmlAndDecodeEntities(item['dc:creator']),
+        description: stripHtmlAndDecodeEntities(item.description),
         pubDate: item.pubDate,
         guid: item.guid,
         link: item.link
@@ -305,11 +308,12 @@ app.post('/api/profiles', async (req, res) => {
     res.json(feed);
   } catch (error) {
     console.error('Error fetching or parsing RSS feed:', error);
-    res.status(500).json({ error: 'Failed to fetch or parse RSS feed' });
+    res.status(500).json({ 
+      error: 'Failed to fetch or parse RSS feed',
+      details: error.message
+    });
   }
 });
-
-
 
 // Create HTTPS server
 const server = https.createServer(options, app);
