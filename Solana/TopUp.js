@@ -7,7 +7,7 @@ const { Connection, Keypair } = require('@solana/web3.js'); // Import Keypair
 const Send = require('./Commission');
 const Distribute = require('./Distribute');
 const { MESSAGES } = require('../constants');
-const DataManager = require('../database');
+const dataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
 const Telegram = require('../Telegram');
 
@@ -27,7 +27,7 @@ class Solana {
   constructor(chatId) {
     this.chatId = chatId;
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
-    this.dataManager = new DataManager();
+    this.dataManager = dataManager;
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
