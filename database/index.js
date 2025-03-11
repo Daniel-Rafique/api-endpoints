@@ -93,22 +93,14 @@ class DataManager extends EventEmitter {
 
   async setMode(chatId, mode) {
     try {
-      console.log(`Setting mode for ${chatId} to ${mode}`);
-
-      // Your existing code to set the mode in the database
-      const result = await this.collection.updateOne(
-        { chatId },
-        { $set: { mode } },
-        { upsert: true }
-      );
-
-      // Emit an event when mode changes
+      await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).set({
+        mode: mode,
+        timestamp: getServerTimestamp()
+      }, { merge: true });
+      console.log(`Set mode to ${mode} for chat ID ${chatId}`);
       this.emit('modeChanged', chatId, mode);
-
-      return result;
     } catch (error) {
       console.error('Error setting mode:', error);
-      throw error;
     }
   }
 }
