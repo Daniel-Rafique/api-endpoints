@@ -261,7 +261,13 @@ app.post('/api/profiles', async (req, res) => {
 
   // Validate parameters
   if (!profileId) {
-    return res.status(400).json({ error: 'Missing profileId parameter' });
+    return res.status(400).json({ 
+      status: {
+        code: 400,
+        message: 'Missing profileId parameter'
+      },
+      data: null
+    });
   }
 
   try {
@@ -275,31 +281,43 @@ app.post('/api/profiles', async (req, res) => {
     // Parse XML to JSON
     const result = await parser.parseStringPromise(response.data);
     
-    // Transform the data structure if needed
-    const feed = {
-      metadata: {
-        title: result.rss.channel.title,
-        link: result.rss.channel.link,
-        description: result.rss.channel.description,
-        language: result.rss.channel.language,
-        image: result.rss.channel.image
+    // Transform the data structure and strip HTML
+    const responseData = {
+      status: {
+        code: response.status,
+        message: 'Success',
+        timestamp: new Date().toISOString()
       },
-      items: result.rss.channel.item.map(item => ({
-        title: item.title,
-        creator: item['dc:creator'],
-        description: item.description,
-        pubDate: item.pubDate,
-        guid: item.guid,
-        link: item.link
-      }))
+      data: {
+        metadata: {
+          title: stripHtmlAndDecodeEntities(result.rss.channel.title),
+          link: result.rss.channel.link,
+          description: stripHtmlAndDecodeEntities(result.rss.channel.description),
+          language: result.rss.channel.language,
+          image: result.rss.channel.image
+        },
+        items: result.rss.channel.item.map(item => ({
+          title: stripHtmlAndDecodeEntities(item.title),
+          creator: stripHtmlAndDecodeEntities(item['dc:creator']),
+          description: stripHtmlAndDecodeEntities(item.description),
+          pubDate: item.pubDate,
+          guid: item.guid,
+          link: item.link
+        }))
+      }
     };
 
-    res.json(feed);
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching or parsing RSS feed:', error);
     res.status(500).json({ 
-      error: 'Failed to fetch or parse RSS feed',
-      details: error.message
+      status: {
+        code: error.response?.status || 500,
+        message: 'Failed to fetch or parse RSS feed',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      },
+      data: null
     });
   }
 });
