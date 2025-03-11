@@ -626,7 +626,7 @@ class BalanceChecker extends EventEmitter {
       // Send platform-specific success message
       try {
         if (this.platform === 'telegram') {
-          const telegramSuccessMessage = `✅ <b>Returned ${amountReceived} SOL to sender:</b>\n` +
+          const telegramSuccessMessage = `✅ <b>Returned ${amountReceived} SOL to Koyn Wallet:</b>\n` +
             `<code>${senderPublicKeyString}</code>\n` +
             `<a href="https://solscan.io/tx/${result.signature}">View on Solscan</a>`;
             
@@ -640,7 +640,7 @@ class BalanceChecker extends EventEmitter {
           return;
         } else if (this.platform === 'discord' && interaction) {
           const discordSuccessMessage = {
-            content: `✅ **Returned ${amountReceived} SOL to sender:**\n` +
+            content: `✅ **Returned ${amountReceived} SOL to Koyn Wallet:**\n` +
               `\`${senderPublicKeyString}\`\n` +
               `[View on Solscan](https://solscan.io/tx/${result.signature})`,
             flags: 64 // Ephemeral flag
