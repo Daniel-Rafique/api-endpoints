@@ -247,6 +247,32 @@ app.post('/api/top-up', async (req, res) => {
   }
 });
 
+// let timestamp = Date.now();
+// let hash = generateHash(profileId, timestamp);
+// function generateHash(chatId, timestamp,) {
+//   const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
+//   return crypto.createHash('sha256').update(data).digest('hex');
+// }
+// npm install axios xml2js
+app.post('/api/profiles', async (req, res) => {
+  const { profileId, timestamp, hash } = req.body;
+
+  // Validate parameters
+  if (!profileId || !hash) {
+    return res.status(400).send('Missing required parameters');
+  }
+
+  // Validate the hash
+  const expectedHash = generateHash(profileId, timestamp);
+
+  if (hash !== expectedHash) {  
+    console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+    return res.status(403).send('Invalid request signature');
+  }
+});
+
+
+
 // Create HTTPS server
 const server = https.createServer(options, app);
 server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
