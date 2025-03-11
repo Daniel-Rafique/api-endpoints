@@ -256,6 +256,23 @@ app.post('/api/top-up', async (req, res) => {
 //   return crypto.createHash('sha256').update(data).digest('hex');
 // }
 // npm install axios xml2js
+
+function stripHtmlAndDecodeEntities(html) {
+  if (!html) return '';
+  
+  // First decode HTML entities
+  let decoded = html.replace(/&lt;/g, '<')
+                   .replace(/&gt;/g, '>')
+                   .replace(/&amp;/g, '&')
+                   .replace(/&quot;/g, '"')
+                   .replace(/&#39;/g, "'")
+                   .replace(/\[\[CDATA\[(.*?)\]\]>/g, '$1');
+  
+  // Then strip HTML tags
+  return decoded.replace(/<[^>]*>/g, '')
+               .replace(/\s+/g, ' ')
+               .trim();
+}
 app.post('/api/profiles', async (req, res) => {
   const { profileId, timestamp, hash } = req.body;
 
