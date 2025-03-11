@@ -87,7 +87,7 @@ app.post('/api/create', async (req, res) => {
       }
 
       const mintAddress = userData.contractAddress;
-      const minimumSolBalance = userData.boostCost;
+      const minimumSolBalance = 0.02;
       const minimumTokenBalance = userData.tokenDetails.tokenAmount;
       const platform = userData.platform;
 
