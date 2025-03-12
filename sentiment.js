@@ -10,7 +10,9 @@ const app = express();
 const PORT = 3003;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
+// Load environment variables for SSL
+const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
+const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
 // Check if API key is loaded
 if (!OPENAI_API_KEY) {
   console.error("WARNING: OPENAI_API_KEY not found in environment variables");
