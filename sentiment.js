@@ -26,10 +26,13 @@ const detectAsset = async (query) => {
         const response = await axios.get("https://api.coingecko.com/api/v3/coins/list");
         const assets = response.data;
         
-        const foundAsset = assets.find(asset => 
-            query.toLowerCase().includes(asset.name.toLowerCase()) || 
-            query.toLowerCase().includes(asset.symbol.toLowerCase())
-        );
+        // Exact match first
+        let foundAsset = assets.find(asset => query.toLowerCase() === asset.name.toLowerCase() || query.toLowerCase() === asset.symbol.toLowerCase());
+        
+        // If no exact match, check for partial match (ensures relevance)
+        if (!foundAsset) {
+            foundAsset = assets.find(asset => query.toLowerCase().includes(asset.name.toLowerCase()) || query.toLowerCase().includes(asset.symbol.toLowerCase()));
+        }
         
         return foundAsset ? foundAsset.id : "bitcoin";
     } catch (error) {
