@@ -104,7 +104,27 @@ const getTwitterSentiment = async (text) => {
 const analyzeSentiment = (tweets) => {
     if (tweets.length === 0) return "Neutral";
 
-    const sentiments = tweets.map(tweet => vader.SentimentAnalyzer.polarity_scores(tweet).compound);
+    // Check if vader is properly imported and initialized
+    if (!vader || !vader.SentimentIntensityAnalyzer) {
+        console.error("VADER sentiment analyzer not properly initialized");
+        return "Neutral";
+    }
+    
+    // Create a new instance of the SentimentIntensityAnalyzer
+    const analyzer = new vader.SentimentIntensityAnalyzer();
+    
+    // Calculate sentiment for each tweet
+    const sentiments = tweets.map(tweet => {
+        try {
+            // Use the polarity_scores method on the analyzer instance
+            const scores = analyzer.polarity_scores(tweet);
+            return scores.compound;
+        } catch (error) {
+            console.error(`Error analyzing tweet: "${tweet.substring(0, 50)}..."`, error);
+            return 0; // Neutral score for tweets that can't be analyzed
+        }
+    });
+    
     const avgSentiment = sentiments.reduce((a, b) => a + b, 0) / sentiments.length;
 
     return avgSentiment > 0.1 ? "Positive" : avgSentiment < -0.1 ? "Negative" : "Neutral";
