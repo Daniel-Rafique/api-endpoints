@@ -25,50 +25,64 @@ const detectAsset = async (query) => {
     try {
         const response = await axios.get("https://api.coingecko.com/api/v3/coins/list");
         const assets = response.data;
-        const queryWords = query.toLowerCase().split(/\s+/);
         
         console.log(`Detecting assets in query: "${query}"`);
         
-        // List of common English words to ignore
-        const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 'or', 'for', 'should', 'i', 'my', 'about', 'what', 'how', 'when', 'price', 'value'];
+        // Define major cryptocurrencies with their exact IDs from CoinGecko
+        const majorCryptos = {
+            'bitcoin': 'bitcoin',
+            'btc': 'bitcoin',
+            'ethereum': 'ethereum',
+            'eth': 'ethereum',
+            'solana': 'solana',
+            'sol': 'solana',
+            'cardano': 'cardano',
+            'ada': 'cardano',
+            'dogecoin': 'dogecoin',
+            'doge': 'dogecoin',
+            'ripple': 'ripple',
+            'xrp': 'ripple',
+            'binance coin': 'binancecoin',
+            'bnb': 'binancecoin',
+            'tether': 'tether',
+            'usdt': 'tether',
+            'polkadot': 'polkadot',
+            'dot': 'polkadot',
+            'avalanche': 'avalanche-2',
+            'avax': 'avalanche-2',
+            'shiba inu': 'shiba-inu',
+            'shib': 'shiba-inu'
+        };
         
-        // List of popular cryptocurrencies to prioritize
-        const popularCryptos = [
-            'bitcoin', 'btc', 
-            'ethereum', 'eth', 
-            'solana', 'sol', 
-            'cardano', 'ada', 
-            'dogecoin', 'doge', 
-            'ripple', 'xrp', 
-            'binance', 'bnb',
-            'tether', 'usdt',
-            'polkadot', 'dot',
-            'avalanche', 'avax',
-            'shiba', 'shib'
-        ];
+        // Common words to ignore
+        const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 
+                            'or', 'for', 'should', 'i', 'my', 'about', 'what', 'how', 'when', 'price', 'value', 
+                            'which', 'better', 'worse', 'best', 'worst', 'crypto', 'cryptocurrency'];
         
-        // Step 1: First check if any popular crypto is mentioned directly
-        for (const word of queryWords) {
-            if (commonWords.includes(word)) continue; // Skip common words
-            
-            if (popularCryptos.includes(word)) {
-                // Find the matching asset for this popular crypto
-                const match = assets.find(asset => 
-                    asset.name.toLowerCase() === word || 
-                    asset.symbol.toLowerCase() === word
-                );
-                
-                if (match) {
-                    console.log(`Found popular crypto match: ${match.name} (${match.symbol})`);
-                    return match.id;
-                }
+        // Step 1: Check for major cryptocurrencies in the query
+        const lowerQuery = query.toLowerCase();
+        const foundMajorCryptos = [];
+        
+        for (const [cryptoName, cryptoId] of Object.entries(majorCryptos)) {
+            // Check if the crypto name is mentioned as a whole word
+            const regex = new RegExp(`\\b${cryptoName}\\b`, 'i');
+            if (regex.test(lowerQuery)) {
+                console.log(`Found major cryptocurrency: ${cryptoName} (ID: ${cryptoId})`);
+                foundMajorCryptos.push(cryptoId);
             }
         }
         
-        // Step 2: Check for exact matches of non-common words
+        // If we found major cryptocurrencies, return the first one
+        if (foundMajorCryptos.length > 0) {
+            console.log(`Selecting ${foundMajorCryptos[0]} from found major cryptocurrencies`);
+            return foundMajorCryptos[0];
+        }
+        
+        // Step 2: If no major cryptos found, try to find any cryptocurrency by name or symbol
+        // Split the query into words and filter out common words
+        const queryWords = lowerQuery.split(/\s+/).filter(word => !commonWords.includes(word) && word.length > 2);
+        
         for (const word of queryWords) {
-            if (commonWords.includes(word) || word.length <= 2) continue; // Skip common words and very short words
-            
             const exactMatch = assets.find(asset => 
                 word === asset.name.toLowerCase() || 
                 word === asset.symbol.toLowerCase()
@@ -80,22 +94,7 @@ const detectAsset = async (query) => {
             }
         }
         
-        // Step 3: Check if the entire query contains mentions of popular cryptos
-        for (const crypto of popularCryptos) {
-            if (query.toLowerCase().includes(crypto)) {
-                const match = assets.find(asset => 
-                    asset.name.toLowerCase() === crypto || 
-                    asset.symbol.toLowerCase() === crypto
-                );
-                
-                if (match) {
-                    console.log(`Found crypto in full query: ${match.name} (${match.symbol})`);
-                    return match.id;
-                }
-            }
-        }
-        
-        // Step 4: Default to bitcoin if no matches found
+        // Step 3: Default to bitcoin if no matches found
         console.log("No asset matches found, defaulting to bitcoin");
         return "bitcoin";
     } catch (error) {
@@ -105,12 +104,12 @@ const detectAsset = async (query) => {
 };
 
 const getAssetData = async (asset) => {
-    try {
-        const response = await axios.get("https://api.coingecko.com/api/v3/simple/price", {
-            params: { ids: asset.toLowerCase(), vs_currencies: "usd" }
-        });
+        try {
+            const response = await axios.get("https://api.coingecko.com/api/v3/simple/price", {
+                params: { ids: asset.toLowerCase(), vs_currencies: "usd" }
+            });
         return response.data[asset.toLowerCase()]?.usd || "N/A";
-    } catch (error) {
+        } catch (error) {
         console.error(`Error fetching ${asset} price:`, error);
         return "N/A";
     }
@@ -183,26 +182,28 @@ app.post("/api/sentiment", async (req, res) => {
     console.log("Received request:", req.body);
     const userQuery = req.body.question || "Is now a good time to buy crypto?";
     const asset = await detectAsset(userQuery);
-    const assetPrice = await getAssetData(asset);
+        const assetPrice = await getAssetData(asset);
     const priceData = await getHistoricalData(asset);
     const priceChartUrl = generateChartUrl(priceData);
-    const tweets = await getTwitterSentiment(asset);
-    const sentiment = analyzeSentiment(tweets);
+        const tweets = await getTwitterSentiment(asset);
+        const sentiment = analyzeSentiment(tweets);
 
-    if (assetPrice === "N/A") {
+        if (assetPrice === "N/A") {
         return res.status(500).json({ error: `Failed to fetch ${asset} price` });
     }
 
     const openAIResponse = await getOpenAIAnalysis(asset, assetPrice, sentiment, userQuery);
 
     res.json({
-        asset,
-        asset_price: assetPrice,
+                asset,
+                asset_price: assetPrice,
         price_chart: priceChartUrl,
-        social_sentiment: sentiment,
+                social_sentiment: sentiment,
         analysis: openAIResponse,
         sources: [
             "https://coinmarketcap.com/",
+            "https://www.coingecko.com/en/coins/bitcoin",
+            "https://dexscreener.com/",
             "https://www.marketwatch.com",
             "https://www.barrons.com"
         ]
