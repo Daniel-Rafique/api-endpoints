@@ -25,16 +25,58 @@ const detectAsset = async (query) => {
     try {
         const response = await axios.get("https://api.coingecko.com/api/v3/coins/list");
         const assets = response.data;
+        const queryWords = query.toLowerCase().split(/\s+/);
         
-        // Exact match first
-        let foundAsset = assets.find(asset => query.toLowerCase() === asset.name.toLowerCase() || query.toLowerCase() === asset.symbol.toLowerCase());
+        console.log(`Detecting assets in query: "${query}"`);
         
-        // If no exact match, check for partial match (ensures relevance)
-        if (!foundAsset) {
-            foundAsset = assets.find(asset => query.toLowerCase().includes(asset.name.toLowerCase()) || query.toLowerCase().includes(asset.symbol.toLowerCase()));
+        // Step 1: Look for exact matches first (highest priority)
+        for (const word of queryWords) {
+            const exactMatch = assets.find(asset => 
+                word === asset.name.toLowerCase() || 
+                word === asset.symbol.toLowerCase()
+            );
+            
+            if (exactMatch) {
+                console.log(`Found exact match: ${exactMatch.name} (${exactMatch.symbol})`);
+                return exactMatch.id;
+            }
         }
         
-        return foundAsset ? foundAsset.id : "bitcoin";
+        // Step 2: Look for word matches (medium priority)
+        // This checks if any complete word in the query matches an asset name or symbol
+        for (const word of queryWords) {
+            if (word.length <= 2) continue; // Skip very short words
+            
+            const wordMatch = assets.find(asset => 
+                asset.name.toLowerCase() === word || 
+                asset.symbol.toLowerCase() === word
+            );
+            
+            if (wordMatch) {
+                console.log(`Found word match: ${wordMatch.name} (${wordMatch.symbol})`);
+                return wordMatch.id;
+            }
+        }
+        
+        // Step 3: Look for popular assets mentioned in the query (lower priority)
+        const popularAssets = ['bitcoin', 'ethereum', 'solana', 'cardano', 'dogecoin', 'ripple', 'xrp', 'bnb'];
+        for (const popularAsset of popularAssets) {
+            if (query.toLowerCase().includes(popularAsset)) {
+                const match = assets.find(asset => 
+                    asset.name.toLowerCase() === popularAsset || 
+                    asset.symbol.toLowerCase() === popularAsset
+                );
+                
+                if (match) {
+                    console.log(`Found popular asset match: ${match.name} (${match.symbol})`);
+                    return match.id;
+                }
+            }
+        }
+        
+        // Step 4: Default to bitcoin if no matches found
+        console.log("No asset matches found, defaulting to bitcoin");
+        return "bitcoin";
     } catch (error) {
         console.error("Error detecting asset:", error);
         return "bitcoin";
