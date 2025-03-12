@@ -91,24 +91,38 @@ const getOpenAIAnalysis = async (asset, assetPrice, sentiment, userQuestion) => 
 
 
 // API Endpoint: Returns asset price, sentiment, and OpenAI analysis based on user query
-app.get("/api/sentiment", async (req, res) => {
-    const asset = req.query.asset || "bitcoin";
-    const userQuestion = req.query.question || `What's your take on ${asset} right now?`;
+app.use(express.json()); // Enable JSON parsing for POST requests
 
-    const assetPrice = await getAssetData(asset);
-    const tweets = await getTwitterSentiment(asset);
-    const sentiment = analyzeSentiment(tweets);
+app.post("/api/sentiment", async (req, res) => {
+    const userQuestion = req.body.question || "Is now a good time to buy crypto?";
+    let assets = req.body.assets || ["bitcoin", "ethereum", "solana", "dogecoin", "shiba-inu", "cardano", "polkadot", "avalanche", "matic-network", "uniswap", "xrp"]; // Default to major cryptos
 
-    const openAIResponse = await getOpenAIAnalysis(asset, assetPrice, sentiment, userQuestion);
+    let results = [];
 
-    res.json({
-        asset,
-        asset_price: assetPrice,
-        social_sentiment: sentiment,
-        user_question: userQuestion,
-        analysis: openAIResponse
-    });
+    for (const asset of assets) {
+        const assetPrice = await getAssetData(asset);
+        const tweets = await getTwitterSentiment(asset);
+        const sentiment = analyzeSentiment(tweets);
+
+        if (assetPrice === "N/A") {
+            continue; // Skip assets with no price data
+        }
+
+        const openAIResponse = await getOpenAIAnalysis(asset, assetPrice, sentiment, userQuestion);
+
+        results.push({
+            asset,
+            asset_price: assetPrice,
+            social_sentiment: sentiment,
+            analysis: openAIResponse
+        });
+    }
+
+    if (results.length === 0) {
+        return res.status(500).json({ error: "No financial data available." });
+    }
+
+    res.json({ question: userQuestion, results });
 });
-
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
