@@ -216,7 +216,7 @@ app.post("/api/sentiment", async (req, res) => {
         social_sentiment: sentiment,
         analysis: openAIResponse,
         sources: [
-            "https://www.coingecko.com/en/coins/bitcoin",
+            "https://coinmarketcap.com/",
             "https://www.marketwatch.com",
             "https://www.barrons.com"
         ]
