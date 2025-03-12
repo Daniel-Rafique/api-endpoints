@@ -3,6 +3,8 @@ const express = require('express');
 const axios = require('axios');
 const { OpenAI } = require('openai');
 const vader = require('vader-sentiment');
+const https = require('https');
+const fs = require('fs');
 
 const app = express();
 const PORT = 3003;
@@ -57,7 +59,7 @@ const getAssetData = async (asset) => {
 // Function to fetch recent tweets about Bitcoin
 const getTwitterSentiment = async (text) => {
     try {
-        const response = await axios.get("http://localhost:3443/api/search", {
+        const response = await axios.get("https://api.koynlabs.com:3443/api/search", {
             params: { query: text, limit: 50 }
         });
         return response.data.data?.map(tweet => tweet.text) || [];
@@ -216,4 +218,9 @@ app.get("/api/sentiment", async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const options = {
+  key: fs.readFileSync(SSL_KEY_PATH),
+  cert: fs.readFileSync(SSL_CERT_PATH)
+};
+const server = https.createServer(options, app);
+server.listen(PORT, () => console.log(`HTTPS server running on port ${PORT}`));
