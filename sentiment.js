@@ -29,8 +29,46 @@ const detectAsset = async (query) => {
         
         console.log(`Detecting assets in query: "${query}"`);
         
-        // Step 1: Look for exact matches first (highest priority)
+        // List of common English words to ignore
+        const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 'or', 'for', 'should', 'i', 'my', 'about', 'what', 'how', 'when', 'price', 'value'];
+        
+        // List of popular cryptocurrencies to prioritize
+        const popularCryptos = [
+            'bitcoin', 'btc', 
+            'ethereum', 'eth', 
+            'solana', 'sol', 
+            'cardano', 'ada', 
+            'dogecoin', 'doge', 
+            'ripple', 'xrp', 
+            'binance', 'bnb',
+            'tether', 'usdt',
+            'polkadot', 'dot',
+            'avalanche', 'avax',
+            'shiba', 'shib'
+        ];
+        
+        // Step 1: First check if any popular crypto is mentioned directly
         for (const word of queryWords) {
+            if (commonWords.includes(word)) continue; // Skip common words
+            
+            if (popularCryptos.includes(word)) {
+                // Find the matching asset for this popular crypto
+                const match = assets.find(asset => 
+                    asset.name.toLowerCase() === word || 
+                    asset.symbol.toLowerCase() === word
+                );
+                
+                if (match) {
+                    console.log(`Found popular crypto match: ${match.name} (${match.symbol})`);
+                    return match.id;
+                }
+            }
+        }
+        
+        // Step 2: Check for exact matches of non-common words
+        for (const word of queryWords) {
+            if (commonWords.includes(word) || word.length <= 2) continue; // Skip common words and very short words
+            
             const exactMatch = assets.find(asset => 
                 word === asset.name.toLowerCase() || 
                 word === asset.symbol.toLowerCase()
@@ -42,33 +80,16 @@ const detectAsset = async (query) => {
             }
         }
         
-        // Step 2: Look for word matches (medium priority)
-        // This checks if any complete word in the query matches an asset name or symbol
-        for (const word of queryWords) {
-            if (word.length <= 2) continue; // Skip very short words
-            
-            const wordMatch = assets.find(asset => 
-                asset.name.toLowerCase() === word || 
-                asset.symbol.toLowerCase() === word
-            );
-            
-            if (wordMatch) {
-                console.log(`Found word match: ${wordMatch.name} (${wordMatch.symbol})`);
-                return wordMatch.id;
-            }
-        }
-        
-        // Step 3: Look for popular assets mentioned in the query (lower priority)
-        const popularAssets = ['bitcoin', 'ethereum', 'solana', 'cardano', 'dogecoin', 'ripple', 'xrp', 'bnb'];
-        for (const popularAsset of popularAssets) {
-            if (query.toLowerCase().includes(popularAsset)) {
+        // Step 3: Check if the entire query contains mentions of popular cryptos
+        for (const crypto of popularCryptos) {
+            if (query.toLowerCase().includes(crypto)) {
                 const match = assets.find(asset => 
-                    asset.name.toLowerCase() === popularAsset || 
-                    asset.symbol.toLowerCase() === popularAsset
+                    asset.name.toLowerCase() === crypto || 
+                    asset.symbol.toLowerCase() === crypto
                 );
                 
                 if (match) {
-                    console.log(`Found popular asset match: ${match.name} (${match.symbol})`);
+                    console.log(`Found crypto in full query: ${match.name} (${match.symbol})`);
                     return match.id;
                 }
             }
