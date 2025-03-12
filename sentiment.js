@@ -5,7 +5,7 @@ const OpenAI = require('openai');
 const vader = require('vader-sentiment');
 
 const app = express();
-const PORT = process.env.PORT || 3003;
+const PORT = 3003;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
