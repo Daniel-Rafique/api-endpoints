@@ -193,8 +193,9 @@ app.get("/api/sentiment/test", (req, res) => {
 });
 
 // API Endpoint: Returns asset price, sentiment, price chart, and OpenAI analysis
-app.get("/api/sentiment", async (req, res) => {
-    const userQuery = req.query.query || "";
+app.post("/api/sentiment", async (req, res) => {
+    console.log("Received request:", req.body);
+    const userQuery = req.body.query || "";
     const asset = await detectAsset(userQuery);
     const assetPrice = await getAssetData(asset);
     const priceData = await getHistoricalData(asset);
