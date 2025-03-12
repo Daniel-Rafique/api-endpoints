@@ -57,7 +57,7 @@ const getAssetData = async (asset) => {
 // Function to fetch recent tweets about Bitcoin
 const getTwitterSentiment = async (text) => {
     try {
-        const response = await axios.get("https://api.koynlabs.com:3443/api/search", {
+        const response = await axios.get("http://localhost:3443/api/search", {
             params: { query: text, limit: 50 }
         });
         return response.data.data?.map(tweet => tweet.text) || [];
