@@ -61,12 +61,41 @@ const getAssetData = async (asset) => {
 // Function to fetch recent tweets about Bitcoin
 const getTwitterSentiment = async (text) => {
     try {
-        const response = await axios.get("https://api.koynlabs.com:3443/api/search", {
-            params: { query: text, limit: 50 }
+        const response = await axios.post("https://api.koynlabs.com:3443/api/search", {
+            query: text,
+            limit: 50
         });
-        return response.data.data?.map(tweet => tweet.text) || [];
+        
+        // Check if the response has the expected structure
+        if (response.data && response.data.data && response.data.data.items && Array.isArray(response.data.data.items)) {
+            console.log(`Found ${response.data.data.items.length} tweets for analysis`);
+            
+            // Extract both title and description from each item for better sentiment analysis
+            const tweets = response.data.data.items.map(item => {
+                // Combine title and description for more context, but avoid duplication
+                let text = "";
+                
+                if (item.title) {
+                    text += item.title;
+                }
+                
+                if (item.description && item.description !== item.title) {
+                    if (text) text += " ";
+                    text += item.description;
+                }
+                
+                return text;
+            }).filter(text => text.trim().length > 0); // Remove empty texts
+            
+            console.log(`Extracted ${tweets.length} non-empty tweet texts`);
+            return tweets;
+        } else {
+            console.error("Unexpected response structure:", JSON.stringify(response.data).substring(0, 200) + "...");
+            return [];
+        }
     } catch (error) {
         console.error("Error fetching tweets:", error);
+        console.error("Error details:", error.response?.data || error.message);
         return [];
     }
 };
