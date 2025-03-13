@@ -976,19 +976,6 @@ const getAssetData = async (asset) => {
             
             // If we get here, all API sources have failed
             console.error(`All API sources failed for ${asset.name}`);
-            
-            // Only use hardcoded values as an absolute last resort for critical assets
-            if (asset.type === 'commodity' && asset.symbol === 'XAU') {
-                console.log(`Using emergency fallback price for Gold: $2450.75`);
-                return "2450.75";
-            } else if (asset.type === 'index' && asset.symbol === 'SPX') {
-                console.log(`Using emergency fallback price for S&P 500: $5250.25`);
-                return "5250.25";
-            } else if (asset.type === 'crypto' && asset.symbol === 'BTC') {
-                console.log(`Using emergency fallback price for Bitcoin: $65250.00`);
-                return "65250.00";
-            }
-            
             return "N/A";
         }
     } catch (error) {
@@ -997,9 +984,11 @@ const getAssetData = async (asset) => {
     }
 };
 
-// Update the getPrimaryAssetPrice function to handle gold specifically
+// Update the getPrimaryAssetPrice function to better handle commodities
 const getPrimaryAssetPrice = async (asset) => {
     try {
+        console.log(`Fetching primary price data for ${asset.name} (${asset.type})`);
+        
         switch(asset.type) {
             case 'crypto':
                 // Use CoinGecko for crypto prices
@@ -1015,94 +1004,14 @@ const getPrimaryAssetPrice = async (asset) => {
                 break;
                 
             case 'commodity':
-                // Special handling for gold
-                if (asset.symbol === 'XAU') {
-                    console.log("Fetching gold price specifically...");
-                    
-                    // Try FMP API with specific endpoint for gold
-                    if (process.env.FMP_API_KEY) {
-                        try {
-                            // Use commodities/GOLD endpoint which returns the proper gold price per ounce
-                            const goldResponse = await axios.get(`https://financialmodelingprep.com/api/v3/quote/GOLD`, {
-                                params: {
-                                    apikey: process.env.FMP_API_KEY
-                                }
-                            });
-                            
-                            if (goldResponse.data && goldResponse.data.length > 0 && goldResponse.data[0].price) {
-                                const goldPrice = goldResponse.data[0].price;
-                                
-                                // Validate the gold price is in a reasonable range (typically $1500-$3000 per ounce)
-                                if (goldPrice > 1000 && goldPrice < 5000) {
-                                    console.log(`Retrieved valid gold price: $${goldPrice}`);
-                                    return goldPrice.toFixed(2);
-                                } else {
-                                    console.log(`Retrieved suspicious gold price: $${goldPrice}, trying alternative source`);
-                                }
-                            }
-                        } catch (error) {
-                            console.error("Error fetching gold price from FMP:", error.message);
-                        }
-                        
-                        // Try alternative FMP endpoint for commodities
-                        try {
-                            const commodityResponse = await axios.get(`https://financialmodelingprep.com/api/v3/historical-price-full/commodity/GOLD`, {
-                                params: {
-                                    apikey: process.env.FMP_API_KEY
-                                }
-                            });
-                            
-                            if (commodityResponse.data && 
-                                commodityResponse.data.historical && 
-                                commodityResponse.data.historical.length > 0) {
-                                
-                                // Get the most recent price
-                                const latestPrice = commodityResponse.data.historical[0].close;
-                                
-                                // Validate the gold price is in a reasonable range
-                                if (latestPrice > 1000 && latestPrice < 5000) {
-                                    console.log(`Retrieved valid gold price from historical data: $${latestPrice}`);
-                                    return latestPrice.toFixed(2);
-                                }
-                            }
-                        } catch (error) {
-                            console.error("Error fetching gold historical price from FMP:", error.message);
-                        }
-                    }
-                    
-                    // Try Alpha Vantage as another source for gold
-                    if (process.env.ALPHA_VANTAGE_API_KEY) {
-                        try {
-                            const avResponse = await axios.get("https://www.alphavantage.co/query", {
-                                params: {
-                                    function: "GLOBAL_QUOTE",
-                                    symbol: "GLD", // GLD ETF tracks gold prices
-                                    apikey: process.env.ALPHA_VANTAGE_API_KEY
-                                }
-                            });
-                            
-                            if (avResponse.data && avResponse.data["Global Quote"] && 
-                                avResponse.data["Global Quote"]["05. price"]) {
-                                
-                                // GLD price is roughly 1/10 of gold price per ounce, so multiply by 10
-                                const gldPrice = parseFloat(avResponse.data["Global Quote"]["05. price"]);
-                                const estimatedGoldPrice = gldPrice * 10;
-                                
-                                console.log(`Retrieved gold price via GLD ETF: $${estimatedGoldPrice}`);
-                                return estimatedGoldPrice.toFixed(2);
-                            }
-                        } catch (error) {
-                            console.error("Error fetching gold price via GLD from Alpha Vantage:", error.message);
-                        }
-                    }
-                    
-                    // If all API calls fail, use a recent hardcoded price as last resort
-                    console.log("All gold price API calls failed, using emergency fallback price");
-                    return "2450.75";
-                } else {
-                    // For other commodities, use the standard FMP API
-                    if (process.env.FMP_API_KEY) {
+                // Try multiple sources for commodity prices
+                
+                // 1. Try FMP API first
+                if (process.env.FMP_API_KEY) {
+                    try {
                         const fmpSymbol = getCommodityTickerForFMP(asset.symbol);
+                        console.log(`Trying FMP API for ${asset.name} with symbol: ${fmpSymbol}`);
+                        
                         const fmpResponse = await axios.get(`https://financialmodelingprep.com/api/v3/quote/${fmpSymbol}`, {
                             params: {
                                 apikey: process.env.FMP_API_KEY
@@ -1110,11 +1019,92 @@ const getPrimaryAssetPrice = async (asset) => {
                         });
                         
                         if (fmpResponse.data && fmpResponse.data.length > 0 && fmpResponse.data[0].price) {
+                            console.log(`FMP API returned price for ${asset.name}: $${fmpResponse.data[0].price}`);
                             return fmpResponse.data[0].price.toFixed(2);
                         }
+                    } catch (error) {
+                        console.error(`Error fetching ${asset.name} price from FMP:`, error.message);
+                    }
+                    
+                    // Try alternative FMP endpoint
+                    try {
+                        const fmpSymbol = getCommodityTickerForFMP(asset.symbol);
+                        console.log(`Trying alternative FMP endpoint for ${asset.name}`);
+                        
+                        const fmpAltResponse = await axios.get(`https://financialmodelingprep.com/api/v3/historical-price-full/commodity/${fmpSymbol}`, {
+                            params: {
+                                apikey: process.env.FMP_API_KEY
+                            }
+                        });
+                        
+                        if (fmpAltResponse.data && 
+                            fmpAltResponse.data.historical && 
+                            fmpAltResponse.data.historical.length > 0) {
+                            
+                            const latestPrice = fmpAltResponse.data.historical[0].close;
+                            console.log(`FMP historical endpoint returned price for ${asset.name}: $${latestPrice}`);
+                            return latestPrice.toFixed(2);
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching ${asset.name} historical price from FMP:`, error.message);
                     }
                 }
-                break;
+                
+                // 2. Try Alpha Vantage
+                if (process.env.ALPHA_VANTAGE_API_KEY) {
+                    try {
+                        // Map commodity symbols to Alpha Vantage symbols
+                        const avSymbol = getCommodityTickerForAlphaVantage(asset.symbol);
+                        console.log(`Trying Alpha Vantage for ${asset.name} with symbol: ${avSymbol}`);
+                        
+                        const avResponse = await axios.get("https://www.alphavantage.co/query", {
+                            params: {
+                                function: "GLOBAL_QUOTE",
+                                symbol: avSymbol,
+                                apikey: process.env.ALPHA_VANTAGE_API_KEY
+                            }
+                        });
+                        
+                        if (avResponse.data && avResponse.data["Global Quote"] && 
+                            avResponse.data["Global Quote"]["05. price"]) {
+                            
+                            const price = parseFloat(avResponse.data["Global Quote"]["05. price"]);
+                            console.log(`Alpha Vantage returned price for ${asset.name}: $${price}`);
+                            return price.toFixed(2);
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching ${asset.name} price from Alpha Vantage:`, error.message);
+                    }
+                }
+                
+                // 3. Try Yahoo Finance
+                try {
+                    // Map commodity symbols to Yahoo Finance symbols
+                    const yahooSymbol = getCommodityTickerForYahoo(asset.symbol);
+                    console.log(`Trying Yahoo Finance for ${asset.name} with symbol: ${yahooSymbol}`);
+                    
+                    const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`, {
+                        params: {
+                            interval: '1d',
+                            range: '1d'
+                        }
+                    });
+                    
+                    if (yahooResponse.data && yahooResponse.data.chart && 
+                        yahooResponse.data.chart.result && 
+                        yahooResponse.data.chart.result[0].meta && 
+                        yahooResponse.data.chart.result[0].meta.regularMarketPrice) {
+                        
+                        const price = yahooResponse.data.chart.result[0].meta.regularMarketPrice;
+                        console.log(`Yahoo Finance returned price for ${asset.name}: $${price}`);
+                        return price.toFixed(2);
+                    }
+                } catch (error) {
+                    console.error(`Error fetching ${asset.name} price from Yahoo Finance:`, error.message);
+                }
+                
+                // If we get here, all commodity price sources failed
+                throw new Error(`All commodity price sources failed for ${asset.name}`);
                 
             case 'stock':
                 // Use Alpha Vantage for stock prices
@@ -1219,73 +1209,173 @@ const getPrimaryAssetPrice = async (asset) => {
     }
 };
 
-// Also update the getFallbackAssetPrice function to handle gold specifically
+// Add new helper functions for mapping commodity symbols to different API formats
+const getCommodityTickerForFMP = (symbol) => {
+    const mapping = {
+        'XAU': 'GOLD',      // Gold
+        'XAG': 'SILVER',    // Silver
+        'XPT': 'PLATINUM',  // Platinum
+        'XPD': 'PALLADIUM', // Palladium
+        'CL': 'USOIL',      // Crude Oil WTI
+        'BZ': 'UKOIL',      // Brent Crude Oil
+        'NG': 'NATGAS',     // Natural Gas
+        'HG': 'COPPER',     // Copper
+        'ALU': 'ALUMINUM',  // Aluminum
+        'NI': 'NICKEL',     // Nickel
+        'ZNC': 'ZINC',      // Zinc
+        'LD': 'LEAD',       // Lead
+        'ZC': 'CORN',       // Corn
+        'ZW': 'WHEAT',      // Wheat
+        'ZS': 'SOYBEAN',    // Soybeans
+        'KC': 'COFFEE',     // Coffee
+        'SB': 'SUGAR',      // Sugar
+        'CT': 'COTTON',     // Cotton
+        'CC': 'COCOA'       // Cocoa
+    };
+    
+    return mapping[symbol] || symbol;
+};
+
+const getCommodityTickerForAlphaVantage = (symbol) => {
+    const mapping = {
+        'XAU': 'GC=F',      // Gold Futures
+        'XAG': 'SI=F',      // Silver Futures
+        'XPT': 'PL=F',      // Platinum Futures
+        'XPD': 'PA=F',      // Palladium Futures
+        'CL': 'CL=F',       // Crude Oil WTI Futures
+        'BZ': 'BZ=F',       // Brent Crude Oil Futures
+        'NG': 'NG=F',       // Natural Gas Futures
+        'HG': 'HG=F',       // Copper Futures
+        'ALU': 'ALI=F',     // Aluminum Futures
+        'NI': 'NI=F',       // Nickel Futures
+        'ZNC': 'ZN=F',      // Zinc Futures
+        'LD': 'LD=F',       // Lead Futures
+        'ZC': 'ZC=F',       // Corn Futures
+        'ZW': 'ZW=F',       // Wheat Futures
+        'ZS': 'ZS=F',       // Soybean Futures
+        'KC': 'KC=F',       // Coffee Futures
+        'SB': 'SB=F',       // Sugar Futures
+        'CT': 'CT=F',       // Cotton Futures
+        'CC': 'CC=F'        // Cocoa Futures
+    };
+    
+    return mapping[symbol] || symbol;
+};
+
+const getCommodityTickerForYahoo = (symbol) => {
+    const mapping = {
+        'XAU': 'GC=F',      // Gold Futures
+        'XAG': 'SI=F',      // Silver Futures
+        'XPT': 'PL=F',      // Platinum Futures
+        'XPD': 'PA=F',      // Palladium Futures
+        'CL': 'CL=F',       // Crude Oil WTI Futures
+        'BZ': 'BZ=F',       // Brent Crude Oil Futures
+        'NG': 'NG=F',       // Natural Gas Futures
+        'HG': 'HG=F',       // Copper Futures
+        'ALU': 'ALI=F',     // Aluminum Futures
+        'NI': 'NI=F',       // Nickel Futures
+        'ZNC': 'ZN=F',      // Zinc Futures
+        'LD': 'LD=F',       // Lead Futures
+        'ZC': 'ZC=F',       // Corn Futures
+        'ZW': 'ZW=F',       // Wheat Futures
+        'ZS': 'ZS=F',       // Soybean Futures
+        'KC': 'KC=F',       // Coffee Futures
+        'SB': 'SB=F',       // Sugar Futures
+        'CT': 'CT=F',       // Cotton Futures
+        'CC': 'CC=F'        // Cocoa Futures
+    };
+    
+    // For ETFs as alternatives
+    const etfMapping = {
+        'XAU': 'GLD',       // SPDR Gold Shares ETF
+        'XAG': 'SLV',       // iShares Silver Trust ETF
+        'CL': 'USO',        // United States Oil Fund ETF
+        'NG': 'UNG'         // United States Natural Gas Fund ETF
+    };
+    
+    return mapping[symbol] || etfMapping[symbol] || symbol;
+};
+
+// Update the getFallbackAssetPrice function to use more sources for commodities
 const getFallbackAssetPrice = async (asset) => {
     try {
         console.log(`Trying fallback sources for ${asset.name} (${asset.type})`);
         
-        // Special handling for gold in fallback
-        if (asset.type === 'commodity' && asset.symbol === 'XAU') {
-            console.log("Trying fallback sources specifically for gold...");
-            
-            // Try Yahoo Finance for gold price via GLD ETF
-            try {
-                const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/GLD`, {
-                    params: {
-                        interval: '1d',
-                        range: '1d'
-                    }
-                });
-                
-                if (yahooResponse.data && yahooResponse.data.chart && 
-                    yahooResponse.data.chart.result && 
-                    yahooResponse.data.chart.result[0].meta && 
-                    yahooResponse.data.chart.result[0].meta.regularMarketPrice) {
-                    
-                    // GLD price is roughly 1/10 of gold price per ounce, so multiply by 10
-                    const gldPrice = yahooResponse.data.chart.result[0].meta.regularMarketPrice;
-                    const estimatedGoldPrice = gldPrice * 10;
-                    
-                    console.log(`Retrieved gold price via Yahoo Finance GLD ETF: $${estimatedGoldPrice}`);
-                    return estimatedGoldPrice.toFixed(2);
-                }
-            } catch (error) {
-                console.error(`Yahoo Finance gold fallback failed: ${error.message}`);
-            }
-            
-            // Try a different Yahoo Finance symbol for gold
-            try {
-                const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/GOLD`, {
-                    params: {
-                        interval: '1d',
-                        range: '1d'
-                    }
-                });
-                
-                if (yahooResponse.data && yahooResponse.data.chart && 
-                    yahooResponse.data.chart.result && 
-                    yahooResponse.data.chart.result[0].meta && 
-                    yahooResponse.data.chart.result[0].meta.regularMarketPrice) {
-                    
-                    const goldPrice = yahooResponse.data.chart.result[0].meta.regularMarketPrice;
-                    
-                    // Validate the gold price is in a reasonable range
-                    if (goldPrice > 1000 && goldPrice < 5000) {
-                        console.log(`Retrieved valid gold price from Yahoo Finance: $${goldPrice}`);
-                        return goldPrice.toFixed(2);
-                    }
-                }
-            } catch (error) {
-                console.error(`Yahoo Finance GOLD symbol fallback failed: ${error.message}`);
-            }
-            
-            // If all fallbacks fail, use a recent hardcoded price
-            console.log("All gold price fallbacks failed, using emergency fallback price");
-            return "2450.75";
-        }
-        
-        // For other assets, use the standard fallback logic
         switch(asset.type) {
+            case 'commodity':
+                // Try ETF proxies for commodities
+                try {
+                    // Get ETF symbol that tracks this commodity
+                    const etfSymbol = getCommodityETFProxy(asset.symbol);
+                    console.log(`Trying ETF proxy for ${asset.name}: ${etfSymbol}`);
+                    
+                    if (etfSymbol) {
+                        const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${etfSymbol}`, {
+                            params: {
+                                interval: '1d',
+                                range: '1d'
+                            }
+                        });
+                        
+                        if (yahooResponse.data && yahooResponse.data.chart && 
+                            yahooResponse.data.chart.result && 
+                            yahooResponse.data.chart.result[0].meta && 
+                            yahooResponse.data.chart.result[0].meta.regularMarketPrice) {
+                            
+                            const etfPrice = yahooResponse.data.chart.result[0].meta.regularMarketPrice;
+                            const commodityPrice = convertETFPriceToCommodityPrice(asset.symbol, etfPrice);
+                            
+                            console.log(`ETF proxy ${etfSymbol} price: $${etfPrice}, converted ${asset.name} price: $${commodityPrice}`);
+                            return commodityPrice.toFixed(2);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`ETF proxy fallback failed for ${asset.name}:`, error.message);
+                }
+                
+                // Try MarketData API
+                try {
+                    console.log(`Trying MarketData API for ${asset.name}`);
+                    const marketDataSymbol = getCommodityTickerForMarketData(asset.symbol);
+                    
+                    const marketDataResponse = await axios.get(`https://api.marketdata.app/v1/commodities/${marketDataSymbol}/quote`);
+                    
+                    if (marketDataResponse.data && marketDataResponse.data.c) {
+                        console.log(`MarketData API returned price for ${asset.name}: $${marketDataResponse.data.c}`);
+                        return marketDataResponse.data.c.toFixed(2);
+                    }
+                } catch (error) {
+                    console.error(`MarketData API fallback failed for ${asset.name}:`, error.message);
+                }
+                
+                // Try Metals-API for precious metals
+                if (['XAU', 'XAG', 'XPT', 'XPD'].includes(asset.symbol) && process.env.METALS_API_KEY) {
+                    try {
+                        console.log(`Trying Metals-API for ${asset.name}`);
+                        
+                        const metalsResponse = await axios.get('https://metals-api.com/api/latest', {
+                            params: {
+                                access_key: process.env.METALS_API_KEY,
+                                base: 'USD',
+                                symbols: asset.symbol
+                            }
+                        });
+                        
+                        if (metalsResponse.data && metalsResponse.data.success && metalsResponse.data.rates) {
+                            const rate = metalsResponse.data.rates[asset.symbol];
+                            if (rate) {
+                                // Metals-API returns rates as USD per ounce, so we need to invert
+                                const price = 1 / rate;
+                                console.log(`Metals-API returned price for ${asset.name}: $${price}`);
+                                return price.toFixed(2);
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`Metals-API fallback failed for ${asset.name}:`, error.message);
+                    }
+                }
+                break;
+                
             case 'crypto':
                 // Try CoinMarketCap API as fallback for crypto
                 if (process.env.COINMARKETCAP_API_KEY) {
@@ -1321,50 +1411,6 @@ const getFallbackAssetPrice = async (asset) => {
                         }
                     } catch (error) {
                         console.error(`FMP crypto fallback failed: ${error.message}`);
-                    }
-                }
-                break;
-                
-            case 'commodity':
-                // Try Alpha Vantage as fallback for commodities
-                if (process.env.ALPHA_VANTAGE_API_KEY) {
-                    try {
-                        // Map commodity symbols to Alpha Vantage symbols
-                        const avSymbol = asset.symbol === 'XAG' ? 'SILVER' : 
-                                        (asset.symbol === 'CL' ? 'WTI' : asset.symbol);
-                        
-                        const response = await axios.get("https://www.alphavantage.co/query", {
-                            params: {
-                                function: "GLOBAL_QUOTE",
-                                symbol: avSymbol,
-                                apikey: process.env.ALPHA_VANTAGE_API_KEY
-                            }
-                        });
-                        
-                        if (response.data && response.data["Global Quote"] && 
-                            response.data["Global Quote"]["05. price"]) {
-                            return parseFloat(response.data["Global Quote"]["05. price"]).toFixed(2);
-                        }
-                    } catch (error) {
-                        console.error(`Alpha Vantage commodity fallback failed: ${error.message}`);
-                    }
-                }
-                
-                // Try a different endpoint on FMP as another fallback
-                if (process.env.FMP_API_KEY) {
-                    try {
-                        const fmpSymbol = getCommodityTickerForFMP(asset.symbol);
-                        const fmpResponse = await axios.get(`https://financialmodelingprep.com/api/v3/quote/${fmpSymbol}`, {
-                            params: {
-                                apikey: process.env.FMP_API_KEY
-                            }
-                        });
-                        
-                        if (fmpResponse.data && fmpResponse.data.length > 0 && fmpResponse.data[0].price) {
-                            return fmpResponse.data[0].price.toFixed(2);
-                        }
-                    } catch (error) {
-                        console.error(`FMP commodity fallback failed: ${error.message}`);
                     }
                 }
                 break;
@@ -1449,35 +1495,74 @@ const getFallbackAssetPrice = async (asset) => {
     }
 };
 
-// Helper function to map commodity symbols to FMP API symbols
-const getCommodityTickerForFMP = (symbol) => {
+// Helper function to get ETF proxies for commodities
+const getCommodityETFProxy = (symbol) => {
     const mapping = {
-        'XAU': 'GOLD',      // Gold
-        'XAG': 'SILVER',    // Silver
-        'XPT': 'PLATINUM',  // Platinum
-        'XPD': 'PALLADIUM', // Palladium
-        'CL': 'USOIL',      // Crude Oil WTI
-        'BZ': 'UKOIL',      // Brent Crude Oil
-        'NG': 'NATGAS',     // Natural Gas
-        'HG': 'COPPER',     // Copper
-        'ALU': 'ALUMINUM',  // Aluminum
-        'NI': 'NICKEL',     // Nickel
-        'ZNC': 'ZINC',      // Zinc
-        'LD': 'LEAD',       // Lead
-        'ZC': 'CORN',       // Corn
-        'ZW': 'WHEAT',      // Wheat
-        'ZS': 'SOYBEAN',    // Soybeans
-        'KC': 'COFFEE',     // Coffee
-        'SB': 'SUGAR',      // Sugar
-        'CT': 'COTTON',     // Cotton
-        'CC': 'COCOA'       // Cocoa
+        'XAU': 'GLD',       // SPDR Gold Shares ETF
+        'XAG': 'SLV',       // iShares Silver Trust ETF
+        'XPT': 'PPLT',      // Aberdeen Physical Platinum Shares ETF
+        'XPD': 'PALL',      // Aberdeen Physical Palladium Shares ETF
+        'CL': 'USO',        // United States Oil Fund ETF
+        'BZ': 'BNO',        // United States Brent Oil Fund ETF
+        'NG': 'UNG',        // United States Natural Gas Fund ETF
+        'HG': 'CPER',       // United States Copper Index Fund ETF
+        'ZC': 'CORN',       // Teucrium Corn Fund ETF
+        'ZW': 'WEAT',       // Teucrium Wheat Fund ETF
+        'ZS': 'SOYB',       // Teucrium Soybean Fund ETF
+    };
+    
+    return mapping[symbol] || null;
+};
+
+// Helper function to convert ETF prices to commodity prices
+const convertETFPriceToCommodityPrice = (symbol, etfPrice) => {
+    // Conversion factors based on how ETFs track the underlying commodity
+    const conversionFactors = {
+        'XAU': 10,          // Each GLD share is roughly 1/10 oz of gold
+        'XAG': 1,           // Each SLV share is roughly 1 oz of silver
+        'XPT': 10,          // Approximate conversion for platinum
+        'XPD': 10,          // Approximate conversion for palladium
+        'CL': 1,            // Approximate conversion for oil
+        'BZ': 1,            // Approximate conversion for brent
+        'NG': 1,            // Approximate conversion for natural gas
+        'HG': 1,            // Approximate conversion for copper
+        'ZC': 1,            // Approximate conversion for corn
+        'ZW': 1,            // Approximate conversion for wheat
+        'ZS': 1,            // Approximate conversion for soybeans
+    };
+    
+    const factor = conversionFactors[symbol] || 1;
+    return etfPrice * factor;
+};
+
+// Helper function to map commodity symbols to MarketData API format
+const getCommodityTickerForMarketData = (symbol) => {
+    const mapping = {
+        'XAU': 'GC',        // Gold
+        'XAG': 'SI',        // Silver
+        'XPT': 'PL',        // Platinum
+        'XPD': 'PA',        // Palladium
+        'CL': 'CL',         // Crude Oil WTI
+        'BZ': 'BZ',         // Brent Crude Oil
+        'NG': 'NG',         // Natural Gas
+        'HG': 'HG',         // Copper
+        'ZC': 'ZC',         // Corn
+        'ZW': 'ZW',         // Wheat
+        'ZS': 'ZS',         // Soybeans
+        'KC': 'KC',         // Coffee
+        'SB': 'SB',         // Sugar
+        'CT': 'CT',         // Cotton
+        'CC': 'CC'          // Cocoa
     };
     
     return mapping[symbol] || symbol;
 };
 
+// Update the getHistoricalData function to handle API failures better
 const getHistoricalData = async (asset) => {
     try {
+        console.log(`Fetching historical data for ${asset.name} (${asset.type})`);
+        
         // If we have DexScreener data but no historical data,
         // generate some dummy data based on the current price
         if (asset.priceUsd && !asset.historicalData) {
@@ -1500,7 +1585,18 @@ const getHistoricalData = async (asset) => {
         switch(asset.type) {
             case 'crypto':
                 try {
-                    const cryptoResponse = await axios.get(`https://api.coingecko.com/api/v3/coins/${asset.id}/market_chart`, {
+                    // Updated CoinGecko endpoint - use symbol instead of ID
+                    console.log(`Trying CoinGecko API for ${asset.name} historical data`);
+                    
+                    // First try with the asset ID
+                    let cryptoId = asset.id.toString().toLowerCase();
+                    
+                    // For Bitcoin, ensure we're using the correct ID
+                    if (asset.symbol === 'BTC' || cryptoId === '1') {
+                        cryptoId = 'bitcoin';
+                    }
+                    
+                    const cryptoResponse = await axios.get(`https://api.coingecko.com/api/v3/coins/${cryptoId}/market_chart`, {
                         params: { 
                             vs_currency: "usd", 
                             days: "1" 
@@ -1509,10 +1605,75 @@ const getHistoricalData = async (asset) => {
                     
                     if (cryptoResponse.data && cryptoResponse.data.prices && 
                         cryptoResponse.data.prices.length > 0) {
+                        console.log(`Successfully fetched historical data from CoinGecko for ${asset.name}`);
                         return cryptoResponse.data.prices;
                     }
                 } catch (error) {
-                    console.error(`Error fetching crypto historical data:`, error);
+                    console.error(`Error fetching crypto historical data from CoinGecko:`, error.message);
+                    
+                    // Try alternative CoinGecko endpoint with symbol
+                    try {
+                        console.log(`Trying alternative CoinGecko endpoint for ${asset.name}`);
+                        
+                        // Map common symbols to their CoinGecko IDs
+                        const symbolToId = {
+                            'BTC': 'bitcoin',
+                            'ETH': 'ethereum',
+                            'USDT': 'tether',
+                            'BNB': 'binancecoin',
+                            'SOL': 'solana',
+                            'XRP': 'ripple',
+                            'USDC': 'usd-coin',
+                            'ADA': 'cardano',
+                            'AVAX': 'avalanche-2',
+                            'DOGE': 'dogecoin'
+                        };
+                        
+                        const coinId = symbolToId[asset.symbol] || asset.symbol.toLowerCase();
+                        
+                        const altResponse = await axios.get(`https://api.coingecko.com/api/v3/coins/${coinId}/market_chart`, {
+          params: {
+                                vs_currency: "usd", 
+                                days: "1" 
+                            }
+                        });
+                        
+                        if (altResponse.data && altResponse.data.prices && 
+                            altResponse.data.prices.length > 0) {
+                            console.log(`Successfully fetched historical data from alternative CoinGecko endpoint for ${asset.name}`);
+                            return altResponse.data.prices;
+                        }
+                    } catch (altError) {
+                        console.error(`Alternative CoinGecko endpoint also failed:`, altError.message);
+                    }
+                }
+                
+                // Try CryptoCompare as a fallback for crypto
+                try {
+                    console.log(`Trying CryptoCompare API for ${asset.name} historical data`);
+                    const cryptoCompareResponse = await axios.get('https://min-api.cryptocompare.com/data/v2/histohour', {
+                        params: {
+                            fsym: asset.symbol,
+                            tsym: 'USD',
+                            limit: 24
+                        }
+                    });
+                    
+                    if (cryptoCompareResponse.data && 
+                        cryptoCompareResponse.data.Data && 
+                        cryptoCompareResponse.data.Data.Data) {
+                        
+                        const data = cryptoCompareResponse.data.Data.Data;
+                        const formattedData = data.map(point => [
+                            point.time * 1000, // Convert to milliseconds
+                            point.close
+                        ]);
+                        
+                        console.log(`Successfully fetched historical data from CryptoCompare for ${asset.name}`);
+                        return formattedData;
+                    }
+                } catch (cryptoCompareError) {
+                    console.error(`CryptoCompare API failed:`, cryptoCompareError.message);
                 }
                 break;
                 
@@ -1522,8 +1683,18 @@ const getHistoricalData = async (asset) => {
             case 'fx':
                 if (process.env.ALPHA_VANTAGE_API_KEY) {
                     try {
-                        const symbol = asset.type === 'index' ? `^${asset.symbol}` : 
-                                      (asset.type === 'fx' ? `${asset.base}${asset.quote}` : asset.symbol);
+                        console.log(`Trying Alpha Vantage for ${asset.name} historical data`);
+                        let symbol;
+                        
+                        if (asset.type === 'index') {
+                            symbol = asset.symbol.startsWith('^') ? asset.symbol : `^${asset.symbol}`;
+                        } else if (asset.type === 'fx') {
+                            symbol = `${asset.base}${asset.quote}`;
+                        } else if (asset.type === 'commodity') {
+                            symbol = getCommodityTickerForAlphaVantage(asset.symbol);
+                        } else {
+                            symbol = asset.symbol;
+                        }
                         
                         const response = await axios.get("https://www.alphavantage.co/query", {
                             params: {
@@ -1541,11 +1712,55 @@ const getHistoricalData = async (asset) => {
                             }).reverse();
                             
                             if (priceData.length > 0) {
+                                console.log(`Successfully fetched historical data from Alpha Vantage for ${asset.name}`);
                                 return priceData;
                             }
                         }
                     } catch (error) {
-                        console.error(`Error fetching historical data from Alpha Vantage:`, error);
+                        console.error(`Error fetching historical data from Alpha Vantage:`, error.message);
+                    }
+                }
+                
+                // Try FMP API for stocks, indices, and commodities
+                if (process.env.FMP_API_KEY && ['stock', 'index', 'commodity'].includes(asset.type)) {
+                    try {
+                        console.log(`Trying FMP API for ${asset.name} historical data`);
+                        let endpoint, symbol;
+                        
+                        if (asset.type === 'commodity') {
+                            endpoint = 'historical-price-full/commodity';
+                            symbol = getCommodityTickerForFMP(asset.symbol);
+                        } else if (asset.type === 'index') {
+                            endpoint = 'historical-price-full/index';
+                            symbol = asset.symbol === 'SPX' ? 'S&P500' : 
+                                    (asset.symbol === 'DJIA' ? 'DOW' : 
+                                    (asset.symbol === 'COMP' ? 'NASDAQ' : asset.symbol));
+                        } else {
+                            endpoint = 'historical-price-full';
+                            symbol = asset.symbol;
+                        }
+                        
+                        const fmpResponse = await axios.get(`https://financialmodelingprep.com/api/v3/${endpoint}/${symbol}`, {
+                            params: {
+                                apikey: process.env.FMP_API_KEY,
+                                timeseries: 24
+                            }
+                        });
+                        
+                        if (fmpResponse.data && fmpResponse.data.historical) {
+                            const historicalData = fmpResponse.data.historical;
+                            const formattedData = historicalData.map(point => [
+                                new Date(point.date).getTime(),
+                                point.close
+                            ]).reverse();
+                            
+                            if (formattedData.length > 0) {
+                                console.log(`Successfully fetched historical data from FMP for ${asset.name}`);
+                                return formattedData;
+                            }
+                        }
+                    } catch (fmpError) {
+                        console.error(`FMP API historical data failed:`, fmpError.message);
                     }
                 }
                 break;
@@ -1553,9 +1768,20 @@ const getHistoricalData = async (asset) => {
         
         // If primary source fails, try Yahoo Finance as fallback
         try {
-            const symbol = asset.type === 'crypto' ? `${asset.symbol}-USD` :
-                          (asset.type === 'index' ? `^${asset.symbol}` : 
-                          (asset.type === 'fx' ? `${asset.base}${asset.quote}=X` : asset.symbol));
+            console.log(`Trying Yahoo Finance for ${asset.name} historical data`);
+            let symbol;
+            
+            if (asset.type === 'crypto') {
+                symbol = `${asset.symbol}-USD`;
+            } else if (asset.type === 'index') {
+                symbol = `^${asset.symbol}`;
+            } else if (asset.type === 'fx') {
+                symbol = `${asset.base}${asset.quote}=X`;
+            } else if (asset.type === 'commodity') {
+                symbol = getCommodityTickerForYahoo(asset.symbol);
+            } else {
+                symbol = asset.symbol;
+            }
             
             const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
                 params: {
@@ -1579,15 +1805,17 @@ const getHistoricalData = async (asset) => {
                 }).filter(point => point[1] !== null);
                 
                 if (priceData.length > 0) {
+                    console.log(`Successfully fetched historical data from Yahoo Finance for ${asset.name}`);
                     return priceData;
                 }
             }
         } catch (yahooError) {
-            console.error(`Yahoo Finance fallback failed for historical data:`, yahooError);
+            console.error(`Yahoo Finance fallback failed for historical data:`, yahooError.message);
         }
         
         // If all else fails, generate some dummy data based on the current price
         // This ensures the chart always shows something
+        console.log(`All API sources failed for ${asset.name} historical data, generating dummy data`);
         const assetPrice = await getAssetData(asset);
         if (assetPrice !== "N/A") {
             const basePrice = parseFloat(assetPrice);
@@ -1601,11 +1829,24 @@ const getHistoricalData = async (asset) => {
                 dummyData.push([timePoint, basePrice + randomVariation]);
             }
             
+            console.log(`Generated dummy historical data for ${asset.name}`);
             return dummyData;
         }
         
         return [];
     } catch (error) {
+        console.error(`Error fetching historical data for ${asset.name}:`, error.message);
+        
+        // Generate dummy data as a last resort
+        console.log(`Generating emergency dummy data for ${asset.name}`);
+        const dummyData = [];
+        const now = Date.now();
+        const basePrice = 100; // Default base price if we don't know the actual price
+        
+        for (let i = 0; i < 10; i++) {
+            const timePoint = now - (9 - i) * 3600000;
+            const randomVariation = (Math.random() - 0.5) * 2; // ±1% variation
+            dummyData.push([timePoint, basePrice + randomVariation]);
         console.error(`Error fetching historical data for ${asset.name}:`, error);
         return [];
     }
