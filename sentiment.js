@@ -140,47 +140,25 @@ const detectAsset = async (query) => {
     }
 };
 
-const getFinancialNews = async (asset) => {
+const getFinancialNews = async (query) => {
     try {
-        // You can replace this with a real news API
-        // Example using a hypothetical financial news API
-        const response = await axios.get(`https://api.example.com/news`, {
-            params: { q: asset, limit: 5 }
+        const response = await axios.get(`https://newsapi.org/v2/everything`, {
+            params: {
+                q: query,
+                apiKey: process.env.NEWS_API_KEY,
+                language: "en",
+                sources: "barrons,marketwatch,investors"
+            }
         });
-        
-        return response.data.articles.map(article => ({
+
+        return response.data.articles.slice(0, 5).map(article => ({
             title: article.title,
-            description: article.description,
             url: article.url,
-            source: article.source.name,
-            publishedAt: article.publishedAt
+            source: article.source.name
         }));
     } catch (error) {
-        console.error(`Error fetching news for ${asset}:`, error);
-        // Return some default news if the API fails
-        return [
-            {
-                title: `Latest ${asset} Updates`,
-                description: `Stay tuned for the latest ${asset} news and market analysis.`,
-                url: `https://www.barrons.com/search?q=${asset}`,
-                source: "Barron's",
-                publishedAt: new Date().toISOString()
-            },
-            {
-                title: `${asset} Market Trends`,
-                description: `Analysis of current ${asset} market trends and future outlook.`,
-                url: `https://www.investors.com/search/?q=${asset}`,
-                source: "Investors.com",
-                publishedAt: new Date().toISOString()
-            },
-            {
-                title: `${asset} Investment Strategies`,
-                description: `Expert recommendations on ${asset} investment strategies.`,
-                url: `https://www.marketwatch.com/search?q=${asset}`,
-                source: "MarketWatch",
-                publishedAt: new Date().toISOString()
-            }
-        ];
+        console.error("Error fetching financial news:", error);
+        return [];
     }
 };
 
