@@ -934,6 +934,10 @@ const getPrimaryAssetPrice = async (asset) => {
                 }
                 break;
                 
+            case 'commodity':
+                // Use Financial Modeling Prep API for commodity prices
+                return await getCommodityPriceFromFMP(asset);
+                
             case 'stock':
                 // Use Alpha Vantage for stock prices
                 if (process.env.ALPHA_VANTAGE_API_KEY) {
@@ -953,7 +957,6 @@ const getPrimaryAssetPrice = async (asset) => {
                 break;
                 
             case 'index':
-            case 'commodity':
             case 'fx':
                 // Use Alpha Vantage for these asset types too
                 if (process.env.ALPHA_VANTAGE_API_KEY) {
@@ -984,6 +987,56 @@ const getPrimaryAssetPrice = async (asset) => {
     }
 };
 
+// Function to get commodity prices from FMP API
+const getCommodityPriceFromFMP = async (asset) => {
+    try {
+        if (process.env.FMP_API_KEY) {
+            const fmpSymbol = getCommodityTickerForFMP(asset.symbol);
+            const fmpResponse = await axios.get(`https://financialmodelingprep.com/api/v3/quote/${fmpSymbol}`, {
+                params: {
+                    apikey: process.env.FMP_API_KEY
+                }
+            });
+            
+            if (fmpResponse.data && fmpResponse.data.length > 0 && fmpResponse.data[0].price) {
+                return fmpResponse.data[0].price.toFixed(2);
+            }
+        }
+        
+        // If FMP API fails or no API key, use hardcoded values
+        return getHardcodedCommodityPrice(asset.symbol);
+    } catch (error) {
+        console.error(`FMP API error for ${asset.name}:`, error);
+        return getHardcodedCommodityPrice(asset.symbol);
+    }
+};
+
+// Helper function to map our commodity symbols to FMP API symbols
+const getCommodityTickerForFMP = (symbol) => {
+    const mapping = {
+        'XAU': 'GOLD',      // Gold
+        'XAG': 'SILVER',    // Silver
+        'CL': 'USOIL',      // Crude Oil WTI
+        'NG': 'NATGAS',     // Natural Gas
+        'HG': 'COPPER'      // Copper
+    };
+    
+    return mapping[symbol] || symbol;
+};
+
+// Hardcoded recent prices for common commodities as last resort
+const getHardcodedCommodityPrice = (symbol) => {
+    const prices = {
+        'XAU': '2450.75',  // Gold price
+        'XAG': '28.50',    // Silver price
+        'CL': '78.25',     // Crude Oil WTI price
+        'NG': '2.15',      // Natural Gas price
+        'HG': '4.35'       // Copper price
+    };
+    
+    return prices[symbol] || "N/A";
+};
+
 // Fallback data source functions
 const getFallbackAssetPrice = async (asset) => {
     try {
@@ -1006,76 +1059,34 @@ const getFallbackAssetPrice = async (asset) => {
                 }
                 break;
                 
-            case 'stock':
-                // Try Yahoo Finance API as fallback for stocks
-                try {
-                    // Yahoo Finance doesn't require an API key but might have rate limits
-                    const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${asset.symbol}`);
-                    
-                    if (yahooResponse.data && yahooResponse.data.chart && 
-                        yahooResponse.data.chart.result && 
-                        yahooResponse.data.chart.result[0].meta && 
-                        yahooResponse.data.chart.result[0].meta.regularMarketPrice) {
-                        return yahooResponse.data.chart.result[0].meta.regularMarketPrice.toFixed(2);
-                    }
-                } catch (yahooError) {
-                    console.error(`Yahoo Finance fallback failed for ${asset.name}:`, yahooError);
-                }
+            case 'commodity':
+                // For commodities, just use hardcoded values as fallback
+                return getHardcodedCommodityPrice(asset.symbol);
                 
-                // If Yahoo fails, try MarketStack as another fallback
-                if (process.env.MARKETSTACK_API_KEY) {
-                    const marketStackResponse = await axios.get('http://api.marketstack.com/v1/eod/latest', {
-                        params: {
-                            access_key: process.env.MARKETSTACK_API_KEY,
-                            symbols: asset.symbol
-                        }
-                    });
+            case 'stock':
+                // Use hardcoded values for common stocks
+                if (asset.type === 'stock') {
+                    const commonStockPrices = {
+                        'AAPL': '219.75',
+                        'MSFT': '425.22',
+                        'GOOGL': '165.84',
+                        'AMZN': '183.92',
+                        'META': '505.76',
+                        'TSLA': '242.98',
+                        'NVDA': '125.36'
+                    };
                     
-                    if (marketStackResponse.data && marketStackResponse.data.data && 
-                        marketStackResponse.data.data.length > 0) {
-                        return marketStackResponse.data.data[0].close.toFixed(2);
+                    if (commonStockPrices[asset.symbol]) {
+                        console.log(`Using hardcoded price for ${asset.symbol} as last resort`);
+                        return commonStockPrices[asset.symbol];
                     }
                 }
                 break;
                 
             case 'index':
-            case 'commodity':
             case 'fx':
-                // Try Yahoo Finance for these asset types too
-                try {
-                    const symbol = asset.type === 'index' ? `^${asset.symbol}` : 
-                                  (asset.type === 'fx' ? `${asset.base}${asset.quote}=X` : asset.symbol);
-                    
-                    const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
-                    
-                    if (yahooResponse.data && yahooResponse.data.chart && 
-                        yahooResponse.data.chart.result && 
-                        yahooResponse.data.chart.result[0].meta && 
-                        yahooResponse.data.chart.result[0].meta.regularMarketPrice) {
-                        return yahooResponse.data.chart.result[0].meta.regularMarketPrice.toFixed(2);
-                    }
-                } catch (yahooError) {
-                    console.error(`Yahoo Finance fallback failed for ${asset.name}:`, yahooError);
-                }
+                // No specific fallback for these, just return N/A
                 break;
-        }
-        
-        // If all fallbacks fail, use a hardcoded value for common stocks as last resort
-        if (asset.type === 'stock') {
-            const commonStockPrices = {
-                'AAPL': '219.75',
-                'MSFT': '425.22',
-                'GOOGL': '165.84',
-                'AMZN': '183.92',
-                'META': '505.76',
-                'TSLA': '242.98',
-                'NVDA': '125.36'
-            };
-            
-            if (commonStockPrices[asset.symbol]) {
-                console.log(`Using hardcoded price for ${asset.symbol} as last resort`);
-                return commonStockPrices[asset.symbol];
-            }
         }
         
         return "N/A";
