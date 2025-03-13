@@ -1558,11 +1558,8 @@ const getCommodityTickerForMarketData = (symbol) => {
     return mapping[symbol] || symbol;
 };
 
-// Update the getHistoricalData function to handle API failures better
 const getHistoricalData = async (asset) => {
     try {
-        console.log(`Fetching historical data for ${asset.name} (${asset.type})`);
-        
         // If we have DexScreener data but no historical data,
         // generate some dummy data based on the current price
         if (asset.priceUsd && !asset.historicalData) {
@@ -1585,18 +1582,7 @@ const getHistoricalData = async (asset) => {
         switch(asset.type) {
             case 'crypto':
                 try {
-                    // Updated CoinGecko endpoint - use symbol instead of ID
-                    console.log(`Trying CoinGecko API for ${asset.name} historical data`);
-                    
-                    // First try with the asset ID
-                    let cryptoId = asset.id.toString().toLowerCase();
-                    
-                    // For Bitcoin, ensure we're using the correct ID
-                    if (asset.symbol === 'BTC' || cryptoId === '1') {
-                        cryptoId = 'bitcoin';
-                    }
-                    
-                    const cryptoResponse = await axios.get(`https://api.coingecko.com/api/v3/coins/${cryptoId}/market_chart`, {
+                    const cryptoResponse = await axios.get(`https://api.coingecko.com/api/v3/coins/${asset.id}/market_chart`, {
                         params: { 
                             vs_currency: "usd", 
                             days: "1" 
@@ -1605,75 +1591,10 @@ const getHistoricalData = async (asset) => {
                     
                     if (cryptoResponse.data && cryptoResponse.data.prices && 
                         cryptoResponse.data.prices.length > 0) {
-                        console.log(`Successfully fetched historical data from CoinGecko for ${asset.name}`);
                         return cryptoResponse.data.prices;
                     }
                 } catch (error) {
-                    console.error(`Error fetching crypto historical data from CoinGecko:`, error.message);
-                    
-                    // Try alternative CoinGecko endpoint with symbol
-                    try {
-                        console.log(`Trying alternative CoinGecko endpoint for ${asset.name}`);
-                        
-                        // Map common symbols to their CoinGecko IDs
-                        const symbolToId = {
-                            'BTC': 'bitcoin',
-                            'ETH': 'ethereum',
-                            'USDT': 'tether',
-                            'BNB': 'binancecoin',
-                            'SOL': 'solana',
-                            'XRP': 'ripple',
-                            'USDC': 'usd-coin',
-                            'ADA': 'cardano',
-                            'AVAX': 'avalanche-2',
-                            'DOGE': 'dogecoin'
-                        };
-                        
-                        const coinId = symbolToId[asset.symbol] || asset.symbol.toLowerCase();
-                        
-                        const altResponse = await axios.get(`https://api.coingecko.com/api/v3/coins/${coinId}/market_chart`, {
-          params: {
-                                vs_currency: "usd", 
-                                days: "1" 
-                            }
-                        });
-                        
-                        if (altResponse.data && altResponse.data.prices && 
-                            altResponse.data.prices.length > 0) {
-                            console.log(`Successfully fetched historical data from alternative CoinGecko endpoint for ${asset.name}`);
-                            return altResponse.data.prices;
-                        }
-                    } catch (altError) {
-                        console.error(`Alternative CoinGecko endpoint also failed:`, altError.message);
-                    }
-                }
-                
-                // Try CryptoCompare as a fallback for crypto
-                try {
-                    console.log(`Trying CryptoCompare API for ${asset.name} historical data`);
-                    const cryptoCompareResponse = await axios.get('https://min-api.cryptocompare.com/data/v2/histohour', {
-                        params: {
-                            fsym: asset.symbol,
-                            tsym: 'USD',
-                            limit: 24
-                        }
-                    });
-                    
-                    if (cryptoCompareResponse.data && 
-                        cryptoCompareResponse.data.Data && 
-                        cryptoCompareResponse.data.Data.Data) {
-                        
-                        const data = cryptoCompareResponse.data.Data.Data;
-                        const formattedData = data.map(point => [
-                            point.time * 1000, // Convert to milliseconds
-                            point.close
-                        ]);
-                        
-                        console.log(`Successfully fetched historical data from CryptoCompare for ${asset.name}`);
-                        return formattedData;
-                    }
-                } catch (cryptoCompareError) {
-                    console.error(`CryptoCompare API failed:`, cryptoCompareError.message);
+                    console.error(`Error fetching crypto historical data:`, error);
                 }
                 break;
                 
@@ -1683,18 +1604,8 @@ const getHistoricalData = async (asset) => {
             case 'fx':
                 if (process.env.ALPHA_VANTAGE_API_KEY) {
                     try {
-                        console.log(`Trying Alpha Vantage for ${asset.name} historical data`);
-                        let symbol;
-                        
-                        if (asset.type === 'index') {
-                            symbol = asset.symbol.startsWith('^') ? asset.symbol : `^${asset.symbol}`;
-                        } else if (asset.type === 'fx') {
-                            symbol = `${asset.base}${asset.quote}`;
-                        } else if (asset.type === 'commodity') {
-                            symbol = getCommodityTickerForAlphaVantage(asset.symbol);
-                        } else {
-                            symbol = asset.symbol;
-                        }
+                        const symbol = asset.type === 'index' ? `^${asset.symbol}` : 
+                                      (asset.type === 'fx' ? `${asset.base}${asset.quote}` : asset.symbol);
                         
                         const response = await axios.get("https://www.alphavantage.co/query", {
                             params: {
@@ -1712,55 +1623,11 @@ const getHistoricalData = async (asset) => {
                             }).reverse();
                             
                             if (priceData.length > 0) {
-                                console.log(`Successfully fetched historical data from Alpha Vantage for ${asset.name}`);
                                 return priceData;
                             }
                         }
                     } catch (error) {
-                        console.error(`Error fetching historical data from Alpha Vantage:`, error.message);
-                    }
-                }
-                
-                // Try FMP API for stocks, indices, and commodities
-                if (process.env.FMP_API_KEY && ['stock', 'index', 'commodity'].includes(asset.type)) {
-                    try {
-                        console.log(`Trying FMP API for ${asset.name} historical data`);
-                        let endpoint, symbol;
-                        
-                        if (asset.type === 'commodity') {
-                            endpoint = 'historical-price-full/commodity';
-                            symbol = getCommodityTickerForFMP(asset.symbol);
-                        } else if (asset.type === 'index') {
-                            endpoint = 'historical-price-full/index';
-                            symbol = asset.symbol === 'SPX' ? 'S&P500' : 
-                                    (asset.symbol === 'DJIA' ? 'DOW' : 
-                                    (asset.symbol === 'COMP' ? 'NASDAQ' : asset.symbol));
-                        } else {
-                            endpoint = 'historical-price-full';
-                            symbol = asset.symbol;
-                        }
-                        
-                        const fmpResponse = await axios.get(`https://financialmodelingprep.com/api/v3/${endpoint}/${symbol}`, {
-                            params: {
-                                apikey: process.env.FMP_API_KEY,
-                                timeseries: 24
-                            }
-                        });
-                        
-                        if (fmpResponse.data && fmpResponse.data.historical) {
-                            const historicalData = fmpResponse.data.historical;
-                            const formattedData = historicalData.map(point => [
-                                new Date(point.date).getTime(),
-                                point.close
-                            ]).reverse();
-                            
-                            if (formattedData.length > 0) {
-                                console.log(`Successfully fetched historical data from FMP for ${asset.name}`);
-                                return formattedData;
-                            }
-                        }
-                    } catch (fmpError) {
-                        console.error(`FMP API historical data failed:`, fmpError.message);
+                        console.error(`Error fetching historical data from Alpha Vantage:`, error);
                     }
                 }
                 break;
@@ -1768,20 +1635,9 @@ const getHistoricalData = async (asset) => {
         
         // If primary source fails, try Yahoo Finance as fallback
         try {
-            console.log(`Trying Yahoo Finance for ${asset.name} historical data`);
-            let symbol;
-            
-            if (asset.type === 'crypto') {
-                symbol = `${asset.symbol}-USD`;
-            } else if (asset.type === 'index') {
-                symbol = `^${asset.symbol}`;
-            } else if (asset.type === 'fx') {
-                symbol = `${asset.base}${asset.quote}=X`;
-            } else if (asset.type === 'commodity') {
-                symbol = getCommodityTickerForYahoo(asset.symbol);
-            } else {
-                symbol = asset.symbol;
-            }
+            const symbol = asset.type === 'crypto' ? `${asset.symbol}-USD` :
+                          (asset.type === 'index' ? `^${asset.symbol}` : 
+                          (asset.type === 'fx' ? `${asset.base}${asset.quote}=X` : asset.symbol));
             
             const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
                 params: {
@@ -1805,17 +1661,15 @@ const getHistoricalData = async (asset) => {
                 }).filter(point => point[1] !== null);
                 
                 if (priceData.length > 0) {
-                    console.log(`Successfully fetched historical data from Yahoo Finance for ${asset.name}`);
                     return priceData;
                 }
             }
         } catch (yahooError) {
-            console.error(`Yahoo Finance fallback failed for historical data:`, yahooError.message);
+            console.error(`Yahoo Finance fallback failed for historical data:`, yahooError);
         }
         
         // If all else fails, generate some dummy data based on the current price
         // This ensures the chart always shows something
-        console.log(`All API sources failed for ${asset.name} historical data, generating dummy data`);
         const assetPrice = await getAssetData(asset);
         if (assetPrice !== "N/A") {
             const basePrice = parseFloat(assetPrice);
@@ -1829,24 +1683,11 @@ const getHistoricalData = async (asset) => {
                 dummyData.push([timePoint, basePrice + randomVariation]);
             }
             
-            console.log(`Generated dummy historical data for ${asset.name}`);
             return dummyData;
         }
         
         return [];
     } catch (error) {
-        console.error(`Error fetching historical data for ${asset.name}:`, error.message);
-        
-        // Generate dummy data as a last resort
-        console.log(`Generating emergency dummy data for ${asset.name}`);
-        const dummyData = [];
-        const now = Date.now();
-        const basePrice = 100; // Default base price if we don't know the actual price
-        
-        for (let i = 0; i < 10; i++) {
-            const timePoint = now - (9 - i) * 3600000;
-            const randomVariation = (Math.random() - 0.5) * 2; // ±1% variation
-            dummyData.push([timePoint, basePrice + randomVariation]);
         console.error(`Error fetching historical data for ${asset.name}:`, error);
         return [];
     }
@@ -2300,4 +2141,3 @@ const options = {
 };
 const server = https.createServer(options, app);
 server.listen(PORT, () => console.log(`HTTPS server running on port ${PORT}`));
-}
