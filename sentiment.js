@@ -215,7 +215,7 @@ const generateChartUrl = (priceData) => {
 
 const getTwitterSentiment = async (text) => {
     try {
-        const response = await axios.post("https://api.koynlabs.com:3443/api/search", {
+        const response = await axios.post("https://api.koynlabs.com:3003/api/search", {
             query: text,
             limit: 50
         });
