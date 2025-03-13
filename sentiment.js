@@ -5,6 +5,7 @@ const { OpenAI } = require('openai');
 const vader = require('vader-sentiment');
 const https = require('https');
 const fs = require('fs');
+const { zodTextFormat } = require('openai/src/helpers/zod.js');
 
 const app = express();
 const PORT = 3003;
@@ -21,68 +22,88 @@ if (!OPENAI_API_KEY) {
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
+// let timestamp = Date.now();
+// let hash = generateHash(profileId, timestamp);
+// function generateHash(chatId, timestamp,) {
+//   const data = `${chatId}:${timestamp}:${SECRET_KEY}`;
+//   return crypto.createHash('sha256').update(data).digest('hex');
+// }
+// npm install axios xml2js
+
+function stripHtmlAndDecodeEntities(html) {
+    if (!html) return '';
+    
+    // First decode HTML entities
+    let decoded = html.replace(/&lt;/g, '<')
+                     .replace(/&gt;/g, '>')
+                     .replace(/&amp;/g, '&')
+                     .replace(/&quot;/g, '"')
+                     .replace(/&#39;/g, "'")
+                     .replace(/\[\[CDATA\[(.*?)\]\]>/g, '$1');
+    
+    // Then strip HTML tags
+    return decoded.replace(/<[^>]*>/g, '')
+                 .replace(/\s+/g, ' ')
+                 .trim();
+  }
+  
+  
+  // Helper function to extract hashtags
+  function extractHashtags(text) {
+    if (!text) return [];
+    const hashtagRegex = /#[\w\u0590-\u05ff]+/g;
+    const matches = text.match(hashtagRegex);
+    return matches ? [...new Set(matches)] : []; // Remove duplicates
+  }
+
 const detectAsset = async (query) => {
     try {
         const response = await axios.get("https://api.coingecko.com/api/v3/coins/list");
         const assets = response.data;
+        const queryWords = query.toLowerCase().split(/\s+/);
         
         console.log(`Detecting assets in query: "${query}"`);
         
-        // Define major cryptocurrencies with their exact IDs from CoinGecko
-        const majorCryptos = {
-            'bitcoin': 'bitcoin',
-            'btc': 'bitcoin',
-            'ethereum': 'ethereum',
-            'eth': 'ethereum',
-            'solana': 'solana',
-            'sol': 'solana',
-            'cardano': 'cardano',
-            'ada': 'cardano',
-            'dogecoin': 'dogecoin',
-            'doge': 'dogecoin',
-            'ripple': 'ripple',
-            'xrp': 'ripple',
-            'binance coin': 'binancecoin',
-            'bnb': 'binancecoin',
-            'tether': 'tether',
-            'usdt': 'tether',
-            'polkadot': 'polkadot',
-            'dot': 'polkadot',
-            'avalanche': 'avalanche-2',
-            'avax': 'avalanche-2',
-            'shiba inu': 'shiba-inu',
-            'shib': 'shiba-inu'
-        };
+        // List of common English words to ignore
+        const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 'or', 'for', 'should', 'i', 'my', 'about', 'what', 'how', 'when', 'price', 'value'];
         
-        // Common words to ignore
-        const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 
-                            'or', 'for', 'should', 'i', 'my', 'about', 'what', 'how', 'when', 'price', 'value', 
-                            'which', 'better', 'worse', 'best', 'worst', 'crypto', 'cryptocurrency'];
+        // List of popular cryptocurrencies to prioritize
+        const popularCryptos = [
+            'bitcoin', 'btc', 
+            'ethereum', 'eth', 
+            'solana', 'sol', 
+            'cardano', 'ada', 
+            'dogecoin', 'doge', 
+            'ripple', 'xrp', 
+            'binance', 'bnb',
+            'tether', 'usdt',
+            'polkadot', 'dot',
+            'avalanche', 'avax',
+            'shiba', 'shib'
+        ];
         
-        // Step 1: Check for major cryptocurrencies in the query
-        const lowerQuery = query.toLowerCase();
-        const foundMajorCryptos = [];
-        
-        for (const [cryptoName, cryptoId] of Object.entries(majorCryptos)) {
-            // Check if the crypto name is mentioned as a whole word
-            const regex = new RegExp(`\\b${cryptoName}\\b`, 'i');
-            if (regex.test(lowerQuery)) {
-                console.log(`Found major cryptocurrency: ${cryptoName} (ID: ${cryptoId})`);
-                foundMajorCryptos.push(cryptoId);
+        // Step 1: First check if any popular crypto is mentioned directly
+        for (const word of queryWords) {
+            if (commonWords.includes(word)) continue; // Skip common words
+            
+            if (popularCryptos.includes(word)) {
+                // Find the matching asset for this popular crypto
+                const match = assets.find(asset => 
+                    asset.name.toLowerCase() === word || 
+                    asset.symbol.toLowerCase() === word
+                );
+                
+                if (match) {
+                    console.log(`Found popular crypto match: ${match.name} (${match.symbol})`);
+                    return match.id;
+                }
             }
         }
         
-        // If we found major cryptocurrencies, return the first one
-        if (foundMajorCryptos.length > 0) {
-            console.log(`Selecting ${foundMajorCryptos[0]} from found major cryptocurrencies`);
-            return foundMajorCryptos[0];
-        }
-        
-        // Step 2: If no major cryptos found, try to find any cryptocurrency by name or symbol
-        // Split the query into words and filter out common words
-        const queryWords = lowerQuery.split(/\s+/).filter(word => !commonWords.includes(word) && word.length > 2);
-        
+        // Step 2: Check for exact matches of non-common words
         for (const word of queryWords) {
+            if (commonWords.includes(word) || word.length <= 2) continue; // Skip common words and very short words
+            
             const exactMatch = assets.find(asset => 
                 word === asset.name.toLowerCase() || 
                 word === asset.symbol.toLowerCase()
@@ -94,7 +115,22 @@ const detectAsset = async (query) => {
             }
         }
         
-        // Step 3: Default to bitcoin if no matches found
+        // Step 3: Check if the entire query contains mentions of popular cryptos
+        for (const crypto of popularCryptos) {
+            if (query.toLowerCase().includes(crypto)) {
+                const match = assets.find(asset => 
+                    asset.name.toLowerCase() === crypto || 
+                    asset.symbol.toLowerCase() === crypto
+                );
+                
+                if (match) {
+                    console.log(`Found crypto in full query: ${match.name} (${match.symbol})`);
+                    return match.id;
+                }
+            }
+        }
+        
+        // Step 4: Default to bitcoin if no matches found
         console.log("No asset matches found, defaulting to bitcoin");
         return "bitcoin";
     } catch (error) {
@@ -104,12 +140,12 @@ const detectAsset = async (query) => {
 };
 
 const getAssetData = async (asset) => {
-        try {
-            const response = await axios.get("https://api.coingecko.com/api/v3/simple/price", {
-                params: { ids: asset.toLowerCase(), vs_currencies: "usd" }
-            });
+    try {
+        const response = await axios.get("https://api.coingecko.com/api/v3/simple/price", {
+            params: { ids: asset.toLowerCase(), vs_currencies: "usd" }
+        });
         return response.data[asset.toLowerCase()]?.usd || "N/A";
-        } catch (error) {
+    } catch (error) {
         console.error(`Error fetching ${asset} price:`, error);
         return "N/A";
     }
@@ -161,7 +197,11 @@ const getOpenAIAnalysis = async (asset, assetPrice, sentiment, userQuery) => {
     try {
         const messages = [
             { role: "system", content: "You are a financial analyst. Provide insights based on asset price and social sentiment." },
-            { role: "user", content: `${userQuery}\n\n${asset} is currently priced at $${assetPrice}. Social media sentiment is ${sentiment}. Should I invest?` }
+            { 
+                role: "user", 
+                content: `${userQuery}\n\n${asset} is currently priced at $${assetPrice}. Social media sentiment is ${sentiment}. Should I invest?` +
+                         "\n\nInclude relevant financial sources in your response using these placeholders: {{BARRONS}}, {{INVESTORS}}, {{MARKETWATCH}}."
+            }
         ];
 
         const response = await openai.chat.completions.create({
@@ -182,33 +222,212 @@ app.post("/api/sentiment", async (req, res) => {
     console.log("Received request:", req.body);
     const userQuery = req.body.question || "Is now a good time to buy crypto?";
     const asset = await detectAsset(userQuery);
-        const assetPrice = await getAssetData(asset);
+    const assetPrice = await getAssetData(asset);
     const priceData = await getHistoricalData(asset);
     const priceChartUrl = generateChartUrl(priceData);
-        const tweets = await getTwitterSentiment(asset);
-        const sentiment = analyzeSentiment(tweets);
-
-        if (assetPrice === "N/A") {
-        return res.status(500).json({ error: `Failed to fetch ${asset} price` });
-    }
-
+    const tweets = await getTwitterSentiment(asset);
+    const sentiment = analyzeSentiment(tweets);
     const openAIResponse = await getOpenAIAnalysis(asset, assetPrice, sentiment, userQuery);
 
+    // Get latest news headlines
+    const financialNews = await getFinancialNews(asset);
+
+    // Mapping placeholders to news sources
+    const newsSources = {
+        "{{BARRONS}}": `<span class="news-source" data-source="barrons">${financialNews[0]?.source || "Barron's"}</span>`,
+        "{{INVESTORS}}": `<span class="news-source" data-source="investors">${financialNews[1]?.source || "Investors.com"}</span>`,
+        "{{MARKETWATCH}}": `<span class="news-source" data-source="marketwatch">${financialNews[2]?.source || "MarketWatch"}</span>`
+    };
+
+    // Replace placeholders in OpenAI response with actual news source elements
+    let formattedResponse = openAIResponse;
+    Object.keys(newsSources).forEach(key => {
+        formattedResponse = formattedResponse.replace(key, newsSources[key]);
+    });
+
     res.json({
+        question: userQuery,
+        results: [
+            {
                 asset,
                 asset_price: assetPrice,
-        price_chart: priceChartUrl,
+                price_chart: priceChartUrl,
                 social_sentiment: sentiment,
-        analysis: openAIResponse,
-        sources: [
-            "https://coinmarketcap.com/",
-            "https://www.coingecko.com/en/coins/bitcoin",
-            "https://dexscreener.com/",
-            "https://www.marketwatch.com",
-            "https://www.barrons.com"
-        ]
+                analysis: formattedResponse
+            }
+        ],
+        news: financialNews
     });
 });
+
+
+app.post('/api/profiles', async (req, res) => {
+    const { profileId, timestamp, hash } = req.body;
+  
+    // Validate parameters
+    if (!profileId) {
+      return res.status(400).json({ 
+        status: {
+          code: 400,
+          message: 'Missing profileId parameter'
+        },
+        data: null
+      });
+    }
+  
+    try {
+      // Fetch RSS feed with profileId
+      const response = await axios.get(`https://koynlabs.com/${profileId}/rss`);
+      const parser = new xml2js.Parser({
+        explicitArray: false,
+        mergeAttrs: true
+      });
+  
+      // Parse XML to JSON
+      const result = await parser.parseStringPromise(response.data);
+      
+      // Transform the data structure and strip HTML
+      const responseData = {
+        status: {
+          code: response.status,
+          message: 'Success',
+          timestamp: new Date().toISOString()
+        },
+        data: {
+          metadata: {
+            title: stripHtmlAndDecodeEntities(result.rss.channel.title),
+            link: result.rss.channel.link,
+            description: stripHtmlAndDecodeEntities(result.rss.channel.description),
+            language: result.rss.channel.language,
+            image: result.rss.channel.image
+          },
+          items: result.rss.channel.item.map(item => ({
+            title: stripHtmlAndDecodeEntities(item.title),
+            creator: stripHtmlAndDecodeEntities(item['dc:creator']),
+            description: stripHtmlAndDecodeEntities(item.description),
+            pubDate: item.pubDate,
+            guid: item.guid,
+            link: item.link
+          }))
+        }
+      };
+  
+      res.json(responseData);
+    } catch (error) {
+      console.error('Error fetching or parsing RSS feed:', error);
+      res.status(500).json({ 
+        status: {
+          code: error.response?.status || 500,
+          message: 'Failed to fetch or parse RSS feed',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        },
+        data: null
+      });
+    }
+  });
+  
+  app.post('/api/search', async (req, res) => {
+    const { query, timestamp, hash, limit = 20, page = 1 } = req.body;
+  
+    // Validate parameters
+    if (!query) {
+      return res.status(400).json({ 
+        status: {
+          code: 400,
+          message: 'Missing search query parameter'
+        },
+        data: null
+      });
+    }
+  
+    try {
+      // Calculate how many pages we need to fetch to reach the desired limit
+      const pagesToFetch = Math.ceil(limit / 20);
+      let allItems = [];
+      let currentPage = 1;
+  
+      // Fetch RSS feed with search query for each page
+      while (currentPage <= pagesToFetch) {
+        const response = await axios.get(`https://koynlabs.com/search/rss`, {
+          params: {
+            f: 'tweets',
+            q: query,
+            p: currentPage // Add page parameter
+          }
+        });
+        
+        const parser = new xml2js.Parser({
+          explicitArray: false,
+          mergeAttrs: true
+        });
+  
+        // Parse XML to JSON
+        const result = await parser.parseStringPromise(response.data);
+        
+        // Add items from this page to our collection
+        if (result.rss.channel.item) {
+          const items = Array.isArray(result.rss.channel.item) ? 
+            result.rss.channel.item : [result.rss.channel.item];
+          allItems = allItems.concat(items);
+        }
+  
+        currentPage++;
+  
+        // If we've collected enough items, stop fetching more pages
+        if (allItems.length >= limit) {
+          break;
+        }
+      }
+  
+      // Trim to exact limit if we got more items than requested
+      allItems = allItems.slice(0, limit);
+      
+      // Transform the data structure and strip HTML
+      const responseData = {
+        status: {
+          code: 200,
+          message: 'Success',
+          timestamp: new Date().toISOString(),
+          query,
+          limit,
+          totalResults: allItems.length,
+          page
+        },
+        data: {
+          metadata: {
+            title: `Search results for "${query}"`,
+            link: `https://koynlabs.com/search?q=${encodeURIComponent(query)}`,
+            description: `Search results for "${query}"`,
+            language: "en-us"
+          },
+          items: allItems.map(item => ({
+            title: stripHtmlAndDecodeEntities(item.title),
+            creator: stripHtmlAndDecodeEntities(item['dc:creator']),
+            description: stripHtmlAndDecodeEntities(item.description),
+            pubDate: item.pubDate,
+            guid: item.guid,
+            link: item.link,
+            hashtags: extractHashtags(item.description + ' ' + item.title)
+          }))
+        }
+      };
+  
+      res.json(responseData);
+    } catch (error) {
+      console.error('Error fetching or parsing RSS feed:', error);
+      res.status(500).json({ 
+        status: {
+          code: error.response?.status || 500,
+          message: 'Failed to fetch or parse RSS feed',
+          error: error.message,
+          timestamp: new Date().toISOString(),
+          query
+        },
+        data: null
+      });
+    }
+  });
 
 const options = {
   key: fs.readFileSync(SSL_KEY_PATH),
