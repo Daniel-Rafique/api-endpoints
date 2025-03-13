@@ -6,6 +6,7 @@ const vader = require('vader-sentiment');
 const https = require('https');
 const fs = require('fs');
 const { zodTextFormat } = require('openai/src/helpers/zod.js');
+const xml2js = require('xml2js');
 
 const app = express();
 const PORT = 3003;
@@ -136,6 +137,50 @@ const detectAsset = async (query) => {
     } catch (error) {
         console.error("Error detecting asset:", error);
         return "bitcoin";
+    }
+};
+
+const getFinancialNews = async (asset) => {
+    try {
+        // You can replace this with a real news API
+        // Example using a hypothetical financial news API
+        const response = await axios.get(`https://api.example.com/news`, {
+            params: { q: asset, limit: 5 }
+        });
+        
+        return response.data.articles.map(article => ({
+            title: article.title,
+            description: article.description,
+            url: article.url,
+            source: article.source.name,
+            publishedAt: article.publishedAt
+        }));
+    } catch (error) {
+        console.error(`Error fetching news for ${asset}:`, error);
+        // Return some default news if the API fails
+        return [
+            {
+                title: `Latest ${asset} Updates`,
+                description: `Stay tuned for the latest ${asset} news and market analysis.`,
+                url: `https://www.barrons.com/search?q=${asset}`,
+                source: "Barron's",
+                publishedAt: new Date().toISOString()
+            },
+            {
+                title: `${asset} Market Trends`,
+                description: `Analysis of current ${asset} market trends and future outlook.`,
+                url: `https://www.investors.com/search/?q=${asset}`,
+                source: "Investors.com",
+                publishedAt: new Date().toISOString()
+            },
+            {
+                title: `${asset} Investment Strategies`,
+                description: `Expert recommendations on ${asset} investment strategies.`,
+                url: `https://www.marketwatch.com/search?q=${asset}`,
+                source: "MarketWatch",
+                publishedAt: new Date().toISOString()
+            }
+        ];
     }
 };
 
