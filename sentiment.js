@@ -99,81 +99,254 @@ const loadCryptoData = () => {
 const loadMarketData = () => {
   try {
     const marketDataPath = path.join(__dirname, 'assetDetection', 'latest100.json');
-    const rawData = fs.readFileSync(marketDataPath, 'utf8');
-    const marketData = JSON.parse(rawData);
+    let marketData;
+    
+    try {
+      // Try to read and parse the file
+      const rawData = fs.readFileSync(marketDataPath, 'utf8');
+      
+      // Check if the file is empty
+      if (!rawData || rawData.trim() === '') {
+        console.log("Market data file is empty, using default data");
+        marketData = getDefaultMarketData();
+      } else {
+        marketData = JSON.parse(rawData);
+      }
+    } catch (fileError) {
+      // Handle file not found or JSON parse error
+      console.log(`Error reading market data file: ${fileError.message}, using default data`);
+      marketData = getDefaultMarketData();
+    }
     
     // Create a unified map for easier lookup
     const assetMap = {};
     
     // Process FX pairs
-    marketData.fx_pairs.forEach(pair => {
-      // Add by ID
-      assetMap[pair.id.toLowerCase()] = pair;
-      
-      // Add by symbol
-      assetMap[pair.symbol.toLowerCase()] = pair;
-      
-      // Add by name
-      assetMap[pair.name.toLowerCase()] = pair;
-      
-      // Add by individual currencies
-      assetMap[pair.base.toLowerCase()] = {
-        ...pair,
-        name: getCurrencyName(pair.base)
-      };
-      
-      assetMap[pair.quote.toLowerCase()] = {
-        ...pair,
-        name: getCurrencyName(pair.quote)
-      };
-    });
+    if (marketData.fx_pairs && Array.isArray(marketData.fx_pairs)) {
+      marketData.fx_pairs.forEach(pair => {
+        // Add by ID
+        assetMap[pair.id.toLowerCase()] = pair;
+        
+        // Add by symbol
+        assetMap[pair.symbol.toLowerCase()] = pair;
+        
+        // Add by name
+        assetMap[pair.name.toLowerCase()] = pair;
+        
+        // Add by individual currencies
+        assetMap[pair.base.toLowerCase()] = {
+          ...pair,
+          name: getCurrencyName(pair.base)
+        };
+        
+        assetMap[pair.quote.toLowerCase()] = {
+          ...pair,
+          name: getCurrencyName(pair.quote)
+        };
+      });
+    }
     
     // Process indices
-    marketData.indices.forEach(index => {
-      // Add by ID
-      assetMap[index.id.toLowerCase()] = index;
-      
-      // Add by symbol
-      assetMap[index.symbol.toLowerCase()] = index;
-      
-      // Add by name
-      assetMap[index.name.toLowerCase()] = index;
-      
-      // Add common variations
-      if (index.name.includes('&')) {
-        const simplifiedName = index.name.replace('&', 'and').toLowerCase();
-        assetMap[simplifiedName] = index;
-      }
-    });
+    if (marketData.indices && Array.isArray(marketData.indices)) {
+      marketData.indices.forEach(index => {
+        // Add by ID
+        assetMap[index.id.toLowerCase()] = index;
+        
+        // Add by symbol
+        assetMap[index.symbol.toLowerCase()] = index;
+        
+        // Add by name
+        assetMap[index.name.toLowerCase()] = index;
+        
+        // Add common variations
+        if (index.name.includes('&')) {
+          const simplifiedName = index.name.replace('&', 'and').toLowerCase();
+          assetMap[simplifiedName] = index;
+        }
+      });
+    }
     
     // Process commodities
-    marketData.commodities.forEach(commodity => {
-      // Add by ID
-      assetMap[commodity.id.toLowerCase()] = commodity;
-      
-      // Add by symbol
-      assetMap[commodity.symbol.toLowerCase()] = commodity;
-      
-      // Add by name
-      assetMap[commodity.name.toLowerCase()] = commodity;
-      
-      // Add common variations (e.g., "Crude Oil" for "Crude Oil WTI")
-      if (commodity.name.includes(' ')) {
-        const parts = commodity.name.split(' ');
-        if (parts.length > 1) {
-          const simplifiedName = parts.slice(0, 2).join(' ').toLowerCase();
-          if (simplifiedName.length > 3 && !assetMap[simplifiedName]) {
-            assetMap[simplifiedName] = commodity;
+    if (marketData.commodities && Array.isArray(marketData.commodities)) {
+      marketData.commodities.forEach(commodity => {
+        // Add by ID
+        assetMap[commodity.id.toLowerCase()] = commodity;
+        
+        // Add by symbol
+        assetMap[commodity.symbol.toLowerCase()] = commodity;
+        
+        // Add by name
+        assetMap[commodity.name.toLowerCase()] = commodity;
+        
+        // Add common variations (e.g., "Crude Oil" for "Crude Oil WTI")
+        if (commodity.name.includes(' ')) {
+          const parts = commodity.name.split(' ');
+          if (parts.length > 1) {
+            const simplifiedName = parts.slice(0, 2).join(' ').toLowerCase();
+            if (simplifiedName.length > 3 && !assetMap[simplifiedName]) {
+              assetMap[simplifiedName] = commodity;
+            }
           }
         }
-      }
-    });
+      });
+    }
     
     return assetMap;
   } catch (error) {
     console.error("Error loading market data:", error);
-    return {};
+    return getDefaultMarketDataMap();
   }
+};
+
+// Function to provide default market data when the file is missing or empty
+const getDefaultMarketData = () => {
+  return {
+    fx_pairs: [
+      {
+        "id": "EUR_USD",
+        "name": "Euro / US Dollar",
+        "symbol": "EUR/USD",
+        "base": "EUR",
+        "quote": "USD",
+        "type": "fx"
+      },
+      {
+        "id": "USD_JPY",
+        "name": "US Dollar / Japanese Yen",
+        "symbol": "USD/JPY",
+        "base": "USD",
+        "quote": "JPY",
+        "type": "fx"
+      },
+      {
+        "id": "GBP_USD",
+        "name": "British Pound / US Dollar",
+        "symbol": "GBP/USD",
+        "base": "GBP",
+        "quote": "USD",
+        "type": "fx"
+      },
+      {
+        "id": "USD_CHF",
+        "name": "US Dollar / Swiss Franc",
+        "symbol": "USD/CHF",
+        "base": "USD",
+        "quote": "CHF",
+        "type": "fx"
+      },
+      {
+        "id": "AUD_USD",
+        "name": "Australian Dollar / US Dollar",
+        "symbol": "AUD/USD",
+        "base": "AUD",
+        "quote": "USD",
+        "type": "fx"
+      }
+    ],
+    indices: [
+      {
+        "id": "SPX",
+        "name": "S&P 500",
+        "symbol": "SPX",
+        "country": "US",
+        "type": "index"
+      },
+      {
+        "id": "DJIA",
+        "name": "Dow Jones Industrial Average",
+        "symbol": "DJIA",
+        "country": "US",
+        "type": "index"
+      },
+      {
+        "id": "COMP",
+        "name": "NASDAQ Composite",
+        "symbol": "COMP",
+        "country": "US",
+        "type": "index"
+      },
+      {
+        "id": "NDX",
+        "name": "NASDAQ-100",
+        "symbol": "NDX",
+        "country": "US",
+        "type": "index"
+      },
+      {
+        "id": "RUT",
+        "name": "Russell 2000",
+        "symbol": "RUT",
+        "country": "US",
+        "type": "index"
+      }
+    ],
+    commodities: [
+      {
+        "id": "GOLD",
+        "name": "Gold",
+        "symbol": "XAU",
+        "category": "Precious Metals",
+        "type": "commodity"
+      },
+      {
+        "id": "SILVER",
+        "name": "Silver",
+        "symbol": "XAG",
+        "category": "Precious Metals",
+        "type": "commodity"
+      },
+      {
+        "id": "CRUDE_OIL_WTI",
+        "name": "Crude Oil WTI",
+        "symbol": "CL",
+        "category": "Energy",
+        "type": "commodity"
+      },
+      {
+        "id": "NATURAL_GAS",
+        "name": "Natural Gas",
+        "symbol": "NG",
+        "category": "Energy",
+        "type": "commodity"
+      },
+      {
+        "id": "COPPER",
+        "name": "Copper",
+        "symbol": "HG",
+        "category": "Base Metals",
+        "type": "commodity"
+      }
+    ]
+  };
+};
+
+// Function to provide a pre-processed map of default market data
+const getDefaultMarketDataMap = () => {
+  const defaultData = getDefaultMarketData();
+  const assetMap = {};
+  
+  // Process FX pairs
+  defaultData.fx_pairs.forEach(pair => {
+    assetMap[pair.id.toLowerCase()] = pair;
+    assetMap[pair.symbol.toLowerCase()] = pair;
+    assetMap[pair.name.toLowerCase()] = pair;
+  });
+  
+  // Process indices
+  defaultData.indices.forEach(index => {
+    assetMap[index.id.toLowerCase()] = index;
+    assetMap[index.symbol.toLowerCase()] = index;
+    assetMap[index.name.toLowerCase()] = index;
+  });
+  
+  // Process commodities
+  defaultData.commodities.forEach(commodity => {
+    assetMap[commodity.id.toLowerCase()] = commodity;
+    assetMap[commodity.symbol.toLowerCase()] = commodity;
+    assetMap[commodity.name.toLowerCase()] = commodity;
+  });
+  
+  return assetMap;
 };
 
 // Helper function to get full currency names
