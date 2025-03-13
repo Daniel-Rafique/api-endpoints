@@ -1395,7 +1395,6 @@ app.post("/api/sentiment", async (req, res) => {
     const asset = await detectAsset(userQuery);
     const assetPrice = await getAssetData(asset);
     const priceData = await getHistoricalData(asset);
-    const priceChartUrl = generateChartUrl(priceData);
     const tweets = await getTwitterSentiment(asset);
     const sentiment = analyzeSentiment(tweets);
     const openAIResponse = await getOpenAIAnalysis(asset, assetPrice, sentiment, userQuery);
@@ -1416,7 +1415,41 @@ app.post("/api/sentiment", async (req, res) => {
         formattedResponse = formattedResponse.replace(key, newsSources[key]);
     });
 
-    // Build the base response object
+    // Prepare chart data for Chart.js
+    const chartData = {
+        type: 'line',
+        data: {
+            labels: priceData.map((point, index) => index + 1), // X-axis labels
+            datasets: [{
+                label: `${asset.name} Price`,
+                data: priceData.map(point => point[1]), // Y-axis values
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    title: {
+                        display: true,
+                        text: 'Price (USD)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                }
+            }
+        }
+    };
+
+    // Build the response object
     const responseData = {
         question: userQuery,
         results: [
@@ -1428,7 +1461,7 @@ app.post("/api/sentiment", async (req, res) => {
                     price: assetPrice
                 },
                 asset_price: assetPrice,
-                price_chart: priceChartUrl,
+                chart: chartData, // Include Chart.js configuration
                 social_sentiment: sentiment,
                 analysis: formattedResponse
             }
