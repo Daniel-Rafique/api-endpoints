@@ -609,12 +609,79 @@ const detectAsset = async (query) => {
             }
         }
         
-        // Rest of your existing detectAsset logic...
+        // Load all asset data
         const cryptoAssets = loadCryptoData();
         const stockAssets = await loadStockData();
         const marketAssets = loadMarketData(); // FX, indices, commodities
         
         console.log(`Detecting assets in query: "${query}"`);
+        
+        // Improved commodity detection - check for commodity names first
+        const commodityKeywords = {
+            'gold': { id: "GOLD", name: "Gold", symbol: "XAU", category: "Precious Metals", type: "commodity" },
+            'silver': { id: "SILVER", name: "Silver", symbol: "XAG", category: "Precious Metals", type: "commodity" },
+            'platinum': { id: "PLATINUM", name: "Platinum", symbol: "XPT", category: "Precious Metals", type: "commodity" },
+            'palladium': { id: "PALLADIUM", name: "Palladium", symbol: "XPD", category: "Precious Metals", type: "commodity" },
+            'crude oil': { id: "CRUDE_OIL_WTI", name: "Crude Oil WTI", symbol: "CL", category: "Energy", type: "commodity" },
+            'crude': { id: "CRUDE_OIL_WTI", name: "Crude Oil WTI", symbol: "CL", category: "Energy", type: "commodity" },
+            'oil': { id: "CRUDE_OIL_WTI", name: "Crude Oil WTI", symbol: "CL", category: "Energy", type: "commodity" },
+            'brent': { id: "BRENT_CRUDE", name: "Brent Crude Oil", symbol: "BZ", category: "Energy", type: "commodity" },
+            'brent crude': { id: "BRENT_CRUDE", name: "Brent Crude Oil", symbol: "BZ", category: "Energy", type: "commodity" },
+            'natural gas': { id: "NATURAL_GAS", name: "Natural Gas", symbol: "NG", category: "Energy", type: "commodity" },
+            'copper': { id: "COPPER", name: "Copper", symbol: "HG", category: "Base Metals", type: "commodity" },
+            'aluminum': { id: "ALUMINUM", name: "Aluminum", symbol: "ALU", category: "Base Metals", type: "commodity" },
+            'aluminium': { id: "ALUMINUM", name: "Aluminum", symbol: "ALU", category: "Base Metals", type: "commodity" },
+            'nickel': { id: "NICKEL", name: "Nickel", symbol: "NI", category: "Base Metals", type: "commodity" },
+            'zinc': { id: "ZINC", name: "Zinc", symbol: "ZNC", category: "Base Metals", type: "commodity" },
+            'lead': { id: "LEAD", name: "Lead", symbol: "LD", category: "Base Metals", type: "commodity" },
+            'corn': { id: "CORN", name: "Corn", symbol: "ZC", category: "Agriculture", type: "commodity" },
+            'wheat': { id: "WHEAT", name: "Wheat", symbol: "ZW", category: "Agriculture", type: "commodity" },
+            'soybeans': { id: "SOYBEANS", name: "Soybeans", symbol: "ZS", category: "Agriculture", type: "commodity" },
+            'coffee': { id: "COFFEE", name: "Coffee", symbol: "KC", category: "Agriculture", type: "commodity" },
+            'sugar': { id: "SUGAR", name: "Sugar", symbol: "SB", category: "Agriculture", type: "commodity" },
+            'cotton': { id: "COTTON", name: "Cotton", symbol: "CT", category: "Agriculture", type: "commodity" },
+            'cocoa': { id: "COCOA", name: "Cocoa", symbol: "CC", category: "Agriculture", type: "commodity" }
+        };
+        
+        // Check for commodity keywords in the query
+        const lowerQuery = query.toLowerCase();
+        for (const [keyword, commodity] of Object.entries(commodityKeywords)) {
+            if (lowerQuery.includes(keyword)) {
+                console.log(`Found commodity keyword match: ${commodity.name} (${commodity.symbol})`);
+                return commodity;
+            }
+        }
+        
+        // Check for commodity symbols
+        const commoditySymbols = {
+            'XAU': commodityKeywords['gold'],
+            'XAG': commodityKeywords['silver'],
+            'XPT': commodityKeywords['platinum'],
+            'XPD': commodityKeywords['palladium'],
+            'CL': commodityKeywords['crude oil'],
+            'BZ': commodityKeywords['brent crude'],
+            'NG': commodityKeywords['natural gas'],
+            'HG': commodityKeywords['copper'],
+            'ALU': commodityKeywords['aluminum'],
+            'NI': commodityKeywords['nickel'],
+            'ZNC': commodityKeywords['zinc'],
+            'LD': commodityKeywords['lead'],
+            'ZC': commodityKeywords['corn'],
+            'ZW': commodityKeywords['wheat'],
+            'ZS': commodityKeywords['soybeans'],
+            'KC': commodityKeywords['coffee'],
+            'SB': commodityKeywords['sugar'],
+            'CT': commodityKeywords['cotton'],
+            'CC': commodityKeywords['cocoa']
+        };
+        
+        const queryUpperCase = query.toUpperCase();
+        for (const [symbol, commodity] of Object.entries(commoditySymbols)) {
+            if (queryUpperCase.includes(symbol)) {
+                console.log(`Found commodity symbol match: ${commodity.name} (${commodity.symbol})`);
+                return commodity;
+            }
+        }
         
         // Common words to ignore
         const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 
@@ -622,9 +689,6 @@ const detectAsset = async (query) => {
                             'which', 'better', 'worse', 'best', 'worst', 'crypto', 'cryptocurrency', 'stock',
                             'market', 'trading', 'shares', 'equity', 'securities', 'commodity', 'index', 'forex',
                             'currency', 'exchange', 'rate', 'pair'];
-        
-        // Check for exact ticker/symbol matches first (prioritize these)
-        const queryUpperCase = query.toUpperCase();
         
         // Check for currency pairs in the format XXX/YYY
         const currencyPairRegex = /([A-Z]{3})\/([A-Z]{3})/g;
@@ -689,14 +753,6 @@ const detectAsset = async (query) => {
         const fullQuery = query.toLowerCase();
         
         // First check for specific asset types mentioned
-        if (fullQuery.includes('gold') || fullQuery.includes('xau')) {
-            return marketAssets['gold'];
-        }
-        
-        if (fullQuery.includes('oil') || fullQuery.includes('crude')) {
-            return marketAssets['crude_oil_wti'];
-        }
-        
         if (fullQuery.includes('s&p') || fullQuery.includes('s and p') || fullQuery.includes('spx')) {
             return marketAssets['spx'];
         }
@@ -1011,27 +1067,55 @@ const getCommodityPriceFromFMP = async (asset) => {
     }
 };
 
-// Helper function to map our commodity symbols to FMP API symbols
+// Update the getCommodityTickerForFMP function with more mappings
 const getCommodityTickerForFMP = (symbol) => {
     const mapping = {
         'XAU': 'GOLD',      // Gold
         'XAG': 'SILVER',    // Silver
+        'XPT': 'PLATINUM',  // Platinum
+        'XPD': 'PALLADIUM', // Palladium
         'CL': 'USOIL',      // Crude Oil WTI
+        'BZ': 'UKOIL',      // Brent Crude Oil
         'NG': 'NATGAS',     // Natural Gas
-        'HG': 'COPPER'      // Copper
+        'HG': 'COPPER',     // Copper
+        'ALU': 'ALUMINUM',  // Aluminum
+        'NI': 'NICKEL',     // Nickel
+        'ZNC': 'ZINC',      // Zinc
+        'LD': 'LEAD',       // Lead
+        'ZC': 'CORN',       // Corn
+        'ZW': 'WHEAT',      // Wheat
+        'ZS': 'SOYBEAN',    // Soybeans
+        'KC': 'COFFEE',     // Coffee
+        'SB': 'SUGAR',      // Sugar
+        'CT': 'COTTON',     // Cotton
+        'CC': 'COCOA'       // Cocoa
     };
     
     return mapping[symbol] || symbol;
 };
 
-// Hardcoded recent prices for common commodities as last resort
+// Update the hardcoded commodity prices with more commodities
 const getHardcodedCommodityPrice = (symbol) => {
     const prices = {
         'XAU': '2450.75',  // Gold price
         'XAG': '28.50',    // Silver price
+        'XPT': '980.25',   // Platinum price
+        'XPD': '1050.80',  // Palladium price
         'CL': '78.25',     // Crude Oil WTI price
+        'BZ': '82.15',     // Brent Crude Oil price
         'NG': '2.15',      // Natural Gas price
-        'HG': '4.35'       // Copper price
+        'HG': '4.35',      // Copper price
+        'ALU': '2.45',     // Aluminum price
+        'NI': '17.85',     // Nickel price
+        'ZNC': '2.75',     // Zinc price
+        'LD': '2.10',      // Lead price
+        'ZC': '4.50',      // Corn price
+        'ZW': '5.75',      // Wheat price
+        'ZS': '12.25',     // Soybeans price
+        'KC': '2.15',      // Coffee price
+        'SB': '0.22',      // Sugar price
+        'CT': '0.85',      // Cotton price
+        'CC': '4.25'       // Cocoa price
     };
     
     return prices[symbol] || "N/A";
