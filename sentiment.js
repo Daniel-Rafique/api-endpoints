@@ -142,28 +142,31 @@ const detectAsset = async (query) => {
 
 const getFinancialNews = async (query) => {
     try {
-        // First, try with domains instead of sources
+        // Fetch news related to the query
         const response = await axios.get(`https://newsapi.org/v2/everything`, {
             params: {
                 q: query,
                 apiKey: process.env.NEWS_API_KEY,
                 language: "en",
-                domains: "barrons.com,marketwatch.com,investors.com",
                 sortBy: "publishedAt"
             }
         });
+
+        if (!response.data.articles || response.data.articles.length === 0) {
+            throw new Error("No articles found, falling back...");
+        }
 
         return response.data.articles.slice(0, 5).map(article => ({
             title: article.title,
             url: article.url,
             source: article.source.name,
-            description: article.description,
+            description: article.description || "No description available.",
             publishedAt: article.publishedAt
         }));
     } catch (error) {
-        console.error("Error fetching financial news:", error);
-        
-        // Fallback to a more general query without specific sources
+        console.error("Error fetching financial news:", error.message);
+
+        // Fallback: Use general finance-related terms
         try {
             const fallbackResponse = await axios.get(`https://newsapi.org/v2/everything`, {
                 params: {
@@ -173,18 +176,22 @@ const getFinancialNews = async (query) => {
                     sortBy: "relevancy"
                 }
             });
-            
+
+            if (!fallbackResponse.data.articles || fallbackResponse.data.articles.length === 0) {
+                throw new Error("No fallback articles found.");
+            }
+
             return fallbackResponse.data.articles.slice(0, 5).map(article => ({
                 title: article.title,
                 url: article.url,
                 source: article.source.name,
-                description: article.description,
+                description: article.description || "No description available.",
                 publishedAt: article.publishedAt
             }));
         } catch (fallbackError) {
-            console.error("Error fetching fallback news:", fallbackError);
-            
-            // Return mock data if all else fails
+            console.error("Error fetching fallback news:", fallbackError.message);
+
+            // If both fail, return mock data
             return [
                 {
                     title: `Latest ${query} Updates`,
@@ -211,6 +218,79 @@ const getFinancialNews = async (query) => {
         }
     }
 };
+
+
+// const getFinancialNews = async (query) => {
+//     try {
+//         // First, try with domains instead of sources
+//         const response = await axios.get(`https://newsapi.org/v2/everything`, {
+//             params: {
+//                 q: query,
+//                 apiKey: process.env.NEWS_API_KEY,
+//                 language: "en",
+//                 domains: "barrons.com,marketwatch.com,investors.com",
+//                 sortBy: "publishedAt"
+//             }
+//         });
+
+//         return response.data.articles.slice(0, 5).map(article => ({
+//             title: article.title,
+//             url: article.url,
+//             source: article.source.name,
+//             description: article.description,
+//             publishedAt: article.publishedAt
+//         }));
+//     } catch (error) {
+//         console.error("Error fetching financial news:", error);
+        
+//         // Fallback to a more general query without specific sources
+//         try {
+//             const fallbackResponse = await axios.get(`https://newsapi.org/v2/everything`, {
+//                 params: {
+//                     q: `${query} finance OR investing OR market`,
+//                     apiKey: process.env.NEWS_API_KEY,
+//                     language: "en",
+//                     sortBy: "relevancy"
+//                 }
+//             });
+            
+//             return fallbackResponse.data.articles.slice(0, 5).map(article => ({
+//                 title: article.title,
+//                 url: article.url,
+//                 source: article.source.name,
+//                 description: article.description,
+//                 publishedAt: article.publishedAt
+//             }));
+//         } catch (fallbackError) {
+//             console.error("Error fetching fallback news:", fallbackError);
+            
+//             // Return mock data if all else fails
+//             return [
+//                 {
+//                     title: `Latest ${query} Updates`,
+//                     url: `https://www.barrons.com/search?q=${query}`,
+//                     source: "Barron's",
+//                     description: `Stay updated on the latest ${query} news and market analysis.`,
+//                     publishedAt: new Date().toISOString()
+//                 },
+//                 {
+//                     title: `${query} Market Trends`,
+//                     url: `https://www.marketwatch.com/search?q=${query}`,
+//                     source: "MarketWatch",
+//                     description: `Analysis of current ${query} market trends and future outlook.`,
+//                     publishedAt: new Date().toISOString()
+//                 },
+//                 {
+//                     title: `${query} Investment Strategies`,
+//                     url: `https://www.investors.com/search/?q=${query}`,
+//                     source: "Investors.com",
+//                     description: `Expert recommendations on ${query} investment strategies.`,
+//                     publishedAt: new Date().toISOString()
+//                 }
+//             ];
+//         }
+//     }
+// };
 
 const getAssetData = async (asset) => {
     try {
