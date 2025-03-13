@@ -1416,7 +1416,8 @@ app.post("/api/sentiment", async (req, res) => {
         formattedResponse = formattedResponse.replace(key, newsSources[key]);
     });
 
-    res.json({
+    // Build the base response object
+    const responseData = {
         question: userQuery,
         results: [
             {
@@ -1424,8 +1425,7 @@ app.post("/api/sentiment", async (req, res) => {
                     name: asset.name,
                     symbol: asset.symbol,
                     type: asset.type,
-                    price: assetPrice,
-                    dexInfo: asset.dexInfo
+                    price: assetPrice
                 },
                 asset_price: assetPrice,
                 price_chart: priceChartUrl,
@@ -1434,7 +1434,30 @@ app.post("/api/sentiment", async (req, res) => {
             }
         ],
         news: financialNews
-    });
+    };
+
+    // If it's a token with DexScreener data, add additional information
+    if (asset.dexInfo) {
+        responseData.results[0].asset = {
+            ...responseData.results[0].asset,
+            priceUsd: asset.priceUsd,
+            priceNative: asset.priceNative,
+            volume24h: asset.volume24h,
+            priceChange24h: asset.priceChange24h,
+            liquidity: asset.liquidity,
+            marketCap: asset.marketCap,
+            dexInfo: {
+                dexId: asset.dexInfo.dexId,
+                pairAddress: asset.dexInfo.pairAddress,
+                chainId: asset.dexInfo.chainId,
+                url: asset.dexInfo.url,
+                quoteToken: asset.dexInfo.quoteToken,
+                info: asset.dexInfo.info
+            }
+        };
+    }
+
+    res.json(responseData);
 });
 
 
