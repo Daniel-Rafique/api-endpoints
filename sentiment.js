@@ -642,6 +642,61 @@ const detectAsset = async (query) => {
             return marketAssets['comp'];
         }
         
+        // Add specific checks for common companies that might not be in the data
+        if (fullQuery.includes('amazon')) {
+            return {
+                id: "AMZN",
+                name: "Amazon.com Inc.",
+                symbol: "AMZN",
+                type: "stock"
+            };
+        }
+        
+        if (fullQuery.includes('apple')) {
+            return {
+                id: "AAPL",
+                name: "Apple Inc.",
+                symbol: "AAPL",
+                type: "stock"
+            };
+        }
+        
+        if (fullQuery.includes('google') || fullQuery.includes('alphabet')) {
+            return {
+                id: "GOOGL",
+                name: "Alphabet Inc. (Google)",
+                symbol: "GOOGL",
+                type: "stock"
+            };
+        }
+        
+        if (fullQuery.includes('microsoft')) {
+            return {
+                id: "MSFT",
+                name: "Microsoft Corporation",
+                symbol: "MSFT",
+                type: "stock"
+            };
+        }
+        
+        if (fullQuery.includes('tesla')) {
+            return {
+                id: "TSLA",
+                name: "Tesla Inc.",
+                symbol: "TSLA",
+                type: "stock"
+            };
+        }
+        
+        if (fullQuery.includes('meta') || fullQuery.includes('facebook')) {
+            return {
+                id: "META",
+                name: "Meta Platforms Inc.",
+                symbol: "META",
+                type: "stock"
+            };
+        }
+        
         // Check for longer asset names
         for (const [key, asset] of Object.entries(marketAssets)) {
             if (key.length > 5 && fullQuery.includes(key)) {
