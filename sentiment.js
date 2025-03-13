@@ -387,11 +387,14 @@ const analyzeSentiment = (tweets) => {
 const getOpenAIAnalysis = async (asset, assetPrice, sentiment, userQuery) => {
     try {
         const messages = [
-            { role: "system", content: "You are a financial analyst. Provide insights based on asset price and social sentiment." },
+            { 
+                role: "system", 
+                content: "You are a financial analyst. Provide insights based on asset price and social sentiment. Format your response in clear paragraphs with proper spacing between them. Tag news sources inline using <span class=\"news-source\" data-source=\"SOURCE_NAME\">[SOURCE_NAME]</span> format. At the end of your analysis, include a 'Sources:' section with numbered links to each source you referenced."
+            },
             { 
                 role: "user", 
                 content: `${userQuery}\n\n${asset} is currently priced at $${assetPrice}. Social media sentiment is ${sentiment}. Should I invest?` +
-                         "\n\nInclude relevant financial sources in your response using these placeholders: {{BARRONS}}, {{INVESTORS}}, {{MARKETWATCH}}."
+                         "\n\nReference these news sources in your analysis where relevant: Barron's, Investor's Business Daily, MarketWatch, Bloomberg, CNBC, Wall Street Journal, Financial Times, Reuters, CoinDesk, and CoinTelegraph. Tag each source appropriately in your response."
             }
         ];
 
