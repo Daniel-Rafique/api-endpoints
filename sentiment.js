@@ -604,24 +604,143 @@ const getFinancialNews = async (asset) => {
 
 const getAssetData = async (asset) => {
     try {
-        const response = await axios.get("https://api.coingecko.com/api/v3/simple/price", {
-            params: { ids: asset.toLowerCase(), vs_currencies: "usd" }
-        });
-        return response.data[asset.toLowerCase()]?.usd || "N/A";
+        // Primary data source
+        const price = await getPrimaryAssetPrice(asset);
+        if (price !== "N/A") return price;
+        
+        // Fallback to secondary data source if primary fails
+        console.log(`Primary data source failed for ${asset.name}, trying fallback...`);
+        const fallbackPrice = await getFallbackAssetPrice(asset);
+        return fallbackPrice;
     } catch (error) {
-        console.error(`Error fetching ${asset} price:`, error);
+        console.error(`All attempts to fetch price for ${asset.name} failed:`, error);
+        return "N/A";
+    }
+};
+
+// Primary data source functions
+const getPrimaryAssetPrice = async (asset) => {
+    try {
+        // Use a unified API for all asset types
+        // This example uses Financial Modeling Prep API
+        let endpoint;
+        let params = {
+            apikey: process.env.FMP_API_KEY
+        };
+        
+        switch(asset.type) {
+            case 'crypto':
+                endpoint = `https://financialmodelingprep.com/api/v3/quote/${asset.symbol}USD`;
+                break;
+            case 'stock':
+                endpoint = `https://financialmodelingprep.com/api/v3/quote/${asset.symbol}`;
+                break;
+            case 'index':
+                endpoint = `https://financialmodelingprep.com/api/v3/quote/${asset.symbol}`;
+                break;
+            case 'fx':
+                endpoint = `https://financialmodelingprep.com/api/v3/fx/${asset.base}${asset.quote}`;
+                break;
+            case 'commodity':
+                // Map commodity symbols to their FMP equivalents
+                const commodityMap = {
+                    'XAU': 'GOLD',
+                    'XAG': 'SILVER',
+                    'CL': 'USOIL'
+                    // Add more mappings as needed
+                };
+                const fmpSymbol = commodityMap[asset.symbol] || asset.symbol;
+                endpoint = `https://financialmodelingprep.com/api/v3/quote/${fmpSymbol}`;
+                break;
+            default:
+                endpoint = `https://financialmodelingprep.com/api/v3/quote/${asset.symbol}`;
+        }
+        
+        const response = await axios.get(endpoint, { params });
+        
+        if (response.data && response.data.length > 0) {
+            return response.data[0].price;
+        }
+        
+        return "N/A";
+    } catch (error) {
+        console.error(`Error fetching price for ${asset.name} (${asset.symbol}):`, error);
+        return "N/A";
+    }
+};
+
+// Fallback data source functions
+const getFallbackAssetPrice = async (asset) => {
+    try {
+        // Alternative implementation
+        // Could use a different API or data source
+        // This is a placeholder and should be replaced with the actual implementation
+        return "N/A";
+    } catch (error) {
+        console.error(`Fallback data source error for ${asset.name}:`, error);
         return "N/A";
     }
 };
 
 const getHistoricalData = async (asset) => {
     try {
-        const response = await axios.get(`https://api.coingecko.com/api/v3/coins/${asset}/market_chart`, {
-            params: { vs_currency: "usd", days: "1" }
-        });
-        return response.data.prices;
+        switch(asset.type) {
+            case 'crypto':
+                // Use existing CoinGecko endpoint for cryptocurrencies
+                const cryptoResponse = await axios.get(`https://api.coingecko.com/api/v3/coins/${asset.id}/market_chart`, {
+                    params: { 
+                        vs_currency: "usd", 
+                        days: "1" 
+                    }
+                });
+                return cryptoResponse.data.prices;
+            
+            case 'stock':
+                // Use Alpha Vantage for stock historical data
+                const stockResponse = await axios.get("https://www.alphavantage.co/query", {
+                    params: {
+                        function: "TIME_SERIES_INTRADAY",
+                        symbol: asset.symbol,
+                        interval: "5min",
+                        apikey: process.env.ALPHA_VANTAGE_API_KEY
+                    }
+                });
+                
+                // Transform Alpha Vantage data to match the format expected by generateChartUrl
+                const timeSeries = stockResponse.data["Time Series (5min)"];
+                if (!timeSeries) return [];
+                
+                return Object.entries(timeSeries).map(([timestamp, data]) => {
+                    return [new Date(timestamp).getTime(), parseFloat(data["4. close"])];
+                }).reverse(); // Reverse to get chronological order
+            
+            case 'commodity':
+            case 'fx':
+            case 'index':
+                // For these asset types, we can use a more general API like Alpha Vantage
+                // with appropriate symbols/parameters
+                const response = await axios.get("https://www.alphavantage.co/query", {
+                    params: {
+                        function: "TIME_SERIES_INTRADAY",
+                        symbol: asset.type === 'index' ? `^${asset.symbol}` : asset.symbol,
+                        interval: "5min",
+                        apikey: process.env.ALPHA_VANTAGE_API_KEY
+                    }
+                });
+                
+                const series = response.data["Time Series (5min)"];
+                if (!series) return [];
+                
+                return Object.entries(series).map(([timestamp, data]) => {
+                    return [new Date(timestamp).getTime(), parseFloat(data["4. close"])];
+                }).reverse();
+            
+            default:
+                console.log(`Unknown asset type: ${asset.type}, returning empty data`);
+                return [];
+        }
     } catch (error) {
-        console.error("Error fetching historical data:", error);
+        console.error(`Error fetching historical data for ${asset.name} (${asset.symbol}):`, error);
         return [];
     }
 };
