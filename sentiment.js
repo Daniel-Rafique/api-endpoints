@@ -2300,3 +2300,4 @@ const options = {
 };
 const server = https.createServer(options, app);
 server.listen(PORT, () => console.log(`HTTPS server running on port ${PORT}`));
+}
