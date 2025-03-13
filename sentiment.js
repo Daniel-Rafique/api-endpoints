@@ -5,7 +5,7 @@ const { OpenAI } = require('openai');
 const vader = require('vader-sentiment');
 const https = require('https');
 const fs = require('fs');
-const { zodTextFormat } = require('openai/src/helpers/zod.js');
+// const { zodTextFormat } = require('openai/src/helpers/zod.js');
 const xml2js = require('xml2js');
 
 const app = express();
