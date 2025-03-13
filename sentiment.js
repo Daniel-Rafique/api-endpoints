@@ -61,78 +61,116 @@ const detectAsset = async (query) => {
     try {
         const response = await axios.get("https://api.coingecko.com/api/v3/coins/list");
         const assets = response.data;
-        const queryWords = query.toLowerCase().split(/\s+/);
         
         console.log(`Detecting assets in query: "${query}"`);
         
-        // List of common English words to ignore
-        const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 'or', 'for', 'should', 'i', 'my', 'about', 'what', 'how', 'when', 'price', 'value'];
+        // Define major cryptocurrencies with their exact IDs from CoinGecko
+        const majorCryptos = {
+            'bitcoin': 'bitcoin',
+            'btc': 'bitcoin',
+            'ethereum': 'ethereum',
+            'eth': 'ethereum',
+            'solana': 'solana',
+            'sol': 'solana',
+            'cardano': 'cardano',
+            'ada': 'cardano',
+            'dogecoin': 'dogecoin',
+            'doge': 'dogecoin',
+            'ripple': 'ripple',
+            'xrp': 'ripple',
+            'binance': 'binancecoin',
+            'bnb': 'binancecoin',
+            'tether': 'tether',
+            'usdt': 'tether',
+            'polkadot': 'polkadot',
+            'dot': 'polkadot',
+            'avalanche': 'avalanche-2',
+            'avax': 'avalanche-2',
+            'shiba': 'shiba-inu',
+            'shib': 'shiba-inu'
+        };
         
-        // List of popular cryptocurrencies to prioritize
-        const popularCryptos = [
-            'bitcoin', 'btc', 
-            'ethereum', 'eth', 
-            'solana', 'sol', 
-            'cardano', 'ada', 
-            'dogecoin', 'doge', 
-            'ripple', 'xrp', 
-            'binance', 'bnb',
-            'tether', 'usdt',
-            'polkadot', 'dot',
-            'avalanche', 'avax',
-            'shiba', 'shib'
-        ];
+        // Common words to ignore
+        const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 
+                            'or', 'for', 'should', 'i', 'my', 'about', 'what', 'how', 'when', 'price', 'value', 
+                            'which', 'better', 'worse', 'best', 'worst', 'crypto', 'cryptocurrency'];
         
-        // Step 1: First check if any popular crypto is mentioned directly
-        for (const word of queryWords) {
-            if (commonWords.includes(word)) continue; // Skip common words
+        // Check for comparison queries (e.g., "Which is better, Bitcoin or Ethereum?")
+        if (query.toLowerCase().includes('better') || 
+            query.toLowerCase().includes('versus') || 
+            query.toLowerCase().includes('vs') || 
+            query.toLowerCase().includes('compare') || 
+            query.toLowerCase().includes('comparison')) {
             
-            if (popularCryptos.includes(word)) {
-                // Find the matching asset for this popular crypto
-                const match = assets.find(asset => 
-                    asset.name.toLowerCase() === word || 
-                    asset.symbol.toLowerCase() === word
-                );
-                
-                if (match) {
-                    console.log(`Found popular crypto match: ${match.name} (${match.symbol})`);
-                    return match.id;
+            // Look for major cryptocurrencies in the query
+            for (const [cryptoName, cryptoId] of Object.entries(majorCryptos)) {
+                // Use word boundary to match whole words only
+                const regex = new RegExp(`\\b${cryptoName}\\b`, 'i');
+                if (regex.test(query.toLowerCase())) {
+                    console.log(`Found major cryptocurrency in comparison query: ${cryptoName} (ID: ${cryptoId})`);
+                    return cryptoId;
                 }
             }
         }
         
-        // Step 2: Check for exact matches of non-common words
+        // Split query into words and filter out common words
+        const queryWords = query.toLowerCase().split(/\s+/).filter(word => !commonWords.includes(word));
+        
+        // Step 1: First check for exact matches of major cryptocurrencies
         for (const word of queryWords) {
-            if (commonWords.includes(word) || word.length <= 2) continue; // Skip common words and very short words
+            if (majorCryptos[word]) {
+                console.log(`Found exact match for major cryptocurrency: ${word} (ID: ${majorCryptos[word]})`);
+                return majorCryptos[word];
+            }
+        }
+        
+        // Step 2: Check for partial matches in major cryptocurrencies
+        // This is useful for queries like "bit" or "eth"
+        for (const word of queryWords) {
+            if (word.length < 3) continue; // Skip very short words
             
-            const exactMatch = assets.find(asset => 
+            for (const [cryptoName, cryptoId] of Object.entries(majorCryptos)) {
+                if (cryptoName.startsWith(word) || word.startsWith(cryptoName)) {
+                    console.log(`Found partial match for major cryptocurrency: ${word} matches ${cryptoName} (ID: ${cryptoId})`);
+                    return cryptoId;
+                }
+            }
+        }
+        
+        // Step 3: Check for exact matches in the full CoinGecko list
+        // But only for top 100 coins by market cap to avoid scams
+        const top100Coins = assets.filter(asset => 
+            // This is a heuristic - legitimate coins usually have shorter IDs
+            asset.id.length < 15 && 
+            !asset.id.includes('test') && 
+            !asset.id.includes('scam') &&
+            !asset.id.includes('fake')
+        ).slice(0, 100);
+        
+        for (const word of queryWords) {
+            if (word.length < 3) continue; // Skip very short words
+            
+            const exactMatch = top100Coins.find(asset => 
                 word === asset.name.toLowerCase() || 
                 word === asset.symbol.toLowerCase()
             );
             
             if (exactMatch) {
-                console.log(`Found exact match: ${exactMatch.name} (${exactMatch.symbol})`);
+                console.log(`Found exact match in top coins: ${exactMatch.name} (${exactMatch.symbol})`);
                 return exactMatch.id;
             }
         }
         
-        // Step 3: Check if the entire query contains mentions of popular cryptos
-        for (const crypto of popularCryptos) {
-            if (query.toLowerCase().includes(crypto)) {
-                const match = assets.find(asset => 
-                    asset.name.toLowerCase() === crypto || 
-                    asset.symbol.toLowerCase() === crypto
-                );
-                
-                if (match) {
-                    console.log(`Found crypto in full query: ${match.name} (${match.symbol})`);
-                    return match.id;
-                }
+        // Step 4: Check if the entire query contains mentions of major cryptos
+        for (const [cryptoName, cryptoId] of Object.entries(majorCryptos)) {
+            if (query.toLowerCase().includes(cryptoName)) {
+                console.log(`Found major cryptocurrency in full query: ${cryptoName} (ID: ${cryptoId})`);
+                return cryptoId;
             }
         }
         
-        // Step 4: Default to bitcoin if no matches found
-        console.log("No asset matches found, defaulting to bitcoin");
+        // Step 5: Default to bitcoin if no matches found
+        console.log("No reliable asset matches found, defaulting to bitcoin");
         return "bitcoin";
     } catch (error) {
         console.error("Error detecting asset:", error);
