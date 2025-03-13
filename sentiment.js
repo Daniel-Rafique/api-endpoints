@@ -594,19 +594,22 @@ const getTokenInfoFromDexScreener = async (contractAddress) => {
 
 const detectAsset = async (query) => {
     try {
-        // First check if the query is a crypto contract address
-        const isContractAddress = /^0x[a-fA-F0-9]{40}$/.test(query) || 
-                                 /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(query);
+        // First check if the query contains a crypto contract address
+        const contractAddressRegex = /(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})/g;
+        const contractAddressMatches = [...query.matchAll(contractAddressRegex)];
         
-        if (isContractAddress) {
-            const tokenInfo = await getTokenInfoFromDexScreener(query);
+        if (contractAddressMatches.length > 0) {
+            // Use the first match (most likely the contract address)
+            const contractAddress = contractAddressMatches[0][0];
+            const tokenInfo = await getTokenInfoFromDexScreener(contractAddress);
+            
             if (tokenInfo) {
                 console.log(`Found token via contract address: ${tokenInfo.name} (${tokenInfo.symbol})`);
                 return tokenInfo;
             }
         }
         
-        // Load asset data from all sources
+        // Rest of your existing detectAsset logic...
         const cryptoAssets = loadCryptoData();
         const stockAssets = await loadStockData();
         const marketAssets = loadMarketData(); // FX, indices, commodities
