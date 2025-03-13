@@ -5,7 +5,7 @@ const { OpenAI } = require('openai');
 const vader = require('vader-sentiment');
 const https = require('https');
 const fs = require('fs');
-// const { zodTextFormat } = require('openai/src/helpers/zod.js');
+const path = require('path');
 const xml2js = require('xml2js');
 
 const app = express();
@@ -57,136 +57,504 @@ function stripHtmlAndDecodeEntities(html) {
     return matches ? [...new Set(matches)] : []; // Remove duplicates
   }
 
+const loadCryptoData = () => {
+  try {
+    const cryptoDataPath = path.join(__dirname, 'assetDetection', 'cryptoData', 'latest100.json');
+    const rawData = fs.readFileSync(cryptoDataPath, 'utf8');
+    const cryptoData = JSON.parse(rawData);
+    
+    // Transform the data into a more usable format for asset detection
+    const cryptoMap = {};
+    
+    cryptoData.data.constituents.forEach(crypto => {
+      // Add by name (lowercase for case-insensitive matching)
+      cryptoMap[crypto.name.toLowerCase()] = {
+        id: crypto.id.toString(),
+        name: crypto.name,
+        symbol: crypto.symbol,
+        type: 'crypto',
+        url: crypto.url,
+        weight: crypto.weight
+      };
+      
+      // Also add by symbol for easier matching
+      cryptoMap[crypto.symbol.toLowerCase()] = {
+        id: crypto.id.toString(),
+        name: crypto.name,
+        symbol: crypto.symbol,
+        type: 'crypto',
+        url: crypto.url,
+        weight: crypto.weight
+      };
+    });
+    
+    return cryptoMap;
+  } catch (error) {
+    console.error("Error loading crypto data:", error);
+    return {};
+  }
+};
+
+// Load FX, indices, and commodities data
+const loadMarketData = () => {
+  try {
+    const marketDataPath = path.join(__dirname, 'assetDetection', 'latest100.json');
+    const rawData = fs.readFileSync(marketDataPath, 'utf8');
+    const marketData = JSON.parse(rawData);
+    
+    // Create a unified map for easier lookup
+    const assetMap = {};
+    
+    // Process FX pairs
+    marketData.fx_pairs.forEach(pair => {
+      // Add by ID
+      assetMap[pair.id.toLowerCase()] = pair;
+      
+      // Add by symbol
+      assetMap[pair.symbol.toLowerCase()] = pair;
+      
+      // Add by name
+      assetMap[pair.name.toLowerCase()] = pair;
+      
+      // Add by individual currencies
+      assetMap[pair.base.toLowerCase()] = {
+        ...pair,
+        name: getCurrencyName(pair.base)
+      };
+      
+      assetMap[pair.quote.toLowerCase()] = {
+        ...pair,
+        name: getCurrencyName(pair.quote)
+      };
+    });
+    
+    // Process indices
+    marketData.indices.forEach(index => {
+      // Add by ID
+      assetMap[index.id.toLowerCase()] = index;
+      
+      // Add by symbol
+      assetMap[index.symbol.toLowerCase()] = index;
+      
+      // Add by name
+      assetMap[index.name.toLowerCase()] = index;
+      
+      // Add common variations
+      if (index.name.includes('&')) {
+        const simplifiedName = index.name.replace('&', 'and').toLowerCase();
+        assetMap[simplifiedName] = index;
+      }
+    });
+    
+    // Process commodities
+    marketData.commodities.forEach(commodity => {
+      // Add by ID
+      assetMap[commodity.id.toLowerCase()] = commodity;
+      
+      // Add by symbol
+      assetMap[commodity.symbol.toLowerCase()] = commodity;
+      
+      // Add by name
+      assetMap[commodity.name.toLowerCase()] = commodity;
+      
+      // Add common variations (e.g., "Crude Oil" for "Crude Oil WTI")
+      if (commodity.name.includes(' ')) {
+        const parts = commodity.name.split(' ');
+        if (parts.length > 1) {
+          const simplifiedName = parts.slice(0, 2).join(' ').toLowerCase();
+          if (simplifiedName.length > 3 && !assetMap[simplifiedName]) {
+            assetMap[simplifiedName] = commodity;
+          }
+        }
+      }
+    });
+    
+    return assetMap;
+  } catch (error) {
+    console.error("Error loading market data:", error);
+    return {};
+  }
+};
+
+// Helper function to get full currency names
+function getCurrencyName(code) {
+  const currencyNames = {
+    'USD': 'US Dollar',
+    'EUR': 'Euro',
+    'JPY': 'Japanese Yen',
+    'GBP': 'British Pound',
+    'AUD': 'Australian Dollar',
+    'CAD': 'Canadian Dollar',
+    'CHF': 'Swiss Franc',
+    'CNY': 'Chinese Yuan',
+    'HKD': 'Hong Kong Dollar',
+    'NZD': 'New Zealand Dollar',
+    'SEK': 'Swedish Krona',
+    'SGD': 'Singapore Dollar',
+    'NOK': 'Norwegian Krone',
+    'MXN': 'Mexican Peso',
+    'INR': 'Indian Rupee',
+    'BRL': 'Brazilian Real',
+    'ZAR': 'South African Rand',
+    'RUB': 'Russian Ruble',
+    'TRY': 'Turkish Lira'
+  };
+  
+  return currencyNames[code] || `${code} Currency`;
+}
+
+// Map of stock tickers to company names
+// This is needed because your CSV only contains tickers, not company names
+const stockTickerToName = {
+  'AAPL': 'Apple Inc.',
+  'MSFT': 'Microsoft Corporation',
+  'AMZN': 'Amazon.com Inc.',
+  'GOOGL': 'Alphabet Inc. (Google) Class A',
+  'GOOG': 'Alphabet Inc. (Google) Class C',
+  'META': 'Meta Platforms Inc.',
+  'TSLA': 'Tesla Inc.',
+  'NVDA': 'NVIDIA Corporation',
+  'BRK.B': 'Berkshire Hathaway Inc.',
+  'JPM': 'JPMorgan Chase & Co.',
+  'JNJ': 'Johnson & Johnson',
+  'V': 'Visa Inc.',
+  'UNH': 'UnitedHealth Group Inc.',
+  'HD': 'Home Depot Inc.',
+  'PG': 'Procter & Gamble Co.',
+  'BAC': 'Bank of America Corp.',
+  'MA': 'Mastercard Inc.',
+  'XOM': 'Exxon Mobil Corporation',
+  'AVGO': 'Broadcom Inc.',
+  'CVX': 'Chevron Corporation',
+  'ABBV': 'AbbVie Inc.',
+  'COST': 'Costco Wholesale Corporation',
+  'PFE': 'Pfizer Inc.',
+  'CSCO': 'Cisco Systems Inc.',
+  'TMO': 'Thermo Fisher Scientific Inc.',
+  'MRK': 'Merck & Co. Inc.',
+  'LLY': 'Eli Lilly and Company',
+  'ABT': 'Abbott Laboratories',
+  'CRM': 'Salesforce Inc.',
+  'ADBE': 'Adobe Inc.',
+  'WMT': 'Walmart Inc.',
+  'ACN': 'Accenture plc',
+  'DIS': 'The Walt Disney Company',
+  'KO': 'The Coca-Cola Company',
+  'PEP': 'PepsiCo Inc.',
+  'VZ': 'Verizon Communications Inc.',
+  'CMCSA': 'Comcast Corporation',
+  'NFLX': 'Netflix Inc.',
+  'NKE': 'Nike Inc.',
+  'INTC': 'Intel Corporation',
+  'T': 'AT&T Inc.',
+  'WFC': 'Wells Fargo & Company',
+  'TXN': 'Texas Instruments Inc.',
+  'AMD': 'Advanced Micro Devices Inc.',
+  'QCOM': 'Qualcomm Inc.',
+  'IBM': 'International Business Machines Corporation',
+  'PYPL': 'PayPal Holdings Inc.',
+  'TMUS': 'T-Mobile US Inc.',
+  'GS': 'Goldman Sachs Group Inc.',
+  'SBUX': 'Starbucks Corporation',
+  'MS': 'Morgan Stanley',
+  'C': 'Citigroup Inc.',
+  'AMGN': 'Amgen Inc.',
+  'RTX': 'Raytheon Technologies Corporation',
+  'ORCL': 'Oracle Corporation',
+  'CAT': 'Caterpillar Inc.',
+  'HON': 'Honeywell International Inc.',
+  'UPS': 'United Parcel Service Inc.',
+  'LOW': 'Lowe\'s Companies Inc.',
+  'AXP': 'American Express Company',
+  'BA': 'Boeing Company',
+  'BLK': 'BlackRock Inc.',
+  'GILD': 'Gilead Sciences Inc.',
+  'MMM': 'Minnesota Mining and Manufacturing Company',
+  'MDLZ': 'Mondelez International Inc.',
+  'PM': 'Philip Morris International Inc.',
+  'F': 'Ford Motor Company',
+  'GM': 'General Motors Company',
+  'USB': 'U.S. Bancorp',
+  'BKNG': 'Booking Holdings Inc.',
+  'CVS': 'CVS Health Corporation',
+  'MO': 'Altria Group Inc.',
+  'MDT': 'Medtronic plc',
+  'BMY': 'Bristol-Myers Squibb Company',
+  'COP': 'ConocoPhillips',
+  'CHTR': 'Charter Communications Inc.',
+  'TGT': 'Target Corporation',
+  'AMT': 'American Tower Corporation',
+  'SPGI': 'S&P Global Inc.',
+  'MCD': 'McDonald\'s Corporation',
+  'DHR': 'Danaher Corporation',
+  'UNP': 'Union Pacific Corporation',
+  'NEE': 'NextEra Energy Inc.',
+  'LIN': 'Linde plc',
+  'FDX': 'FedEx Corporation',
+  'GE': 'General Electric Company',
+  'AIG': 'American International Group Inc.',
+  'BIIB': 'Biogen Inc.',
+  'SO': 'Southern Company',
+  'DOW': 'Dow Inc.',
+  'DUK': 'Duke Energy Corporation',
+  'KHC': 'The Kraft Heinz Company',
+  'SPG': 'Simon Property Group Inc.',
+  'EMR': 'Emerson Electric Co.',
+  'EXC': 'Exelon Corporation',
+  'DD': 'DuPont de Nemours Inc.',
+  'MET': 'MetLife Inc.',
+  'BK': 'The Bank of New York Mellon Corporation'
+};
+
+// Load stock data from CSV
+const loadStockData = () => {
+  return new Promise((resolve, reject) => {
+    try {
+      const stockDataPath = path.join(__dirname, 'assetDetection', 'stocksData', 'latest100.csv');
+      const stockMap = {};
+      const tickers = [];
+      
+      // First pass: extract header row to get all ticker symbols
+      const firstLine = fs.readFileSync(stockDataPath, 'utf8').split('\n')[0];
+      const headers = firstLine.split(',');
+      
+      // Skip the first column (Date) and process all ticker symbols
+      for (let i = 1; i < headers.length; i++) {
+        const ticker = headers[i].trim();
+        tickers.push(ticker);
+        
+        // Create entries for both ticker and company name (if available)
+        const companyName = stockTickerToName[ticker] || `${ticker} Stock`;
+        
+        stockMap[ticker.toLowerCase()] = {
+          id: ticker,
+          name: companyName,
+          symbol: ticker,
+          type: 'stock'
+        };
+        
+        // Also add by company name for easier matching
+        if (companyName) {
+          stockMap[companyName.toLowerCase()] = {
+            id: ticker,
+            name: companyName,
+            symbol: ticker,
+            type: 'stock'
+          };
+          
+          // Add common variations (without "Inc.", "Corporation", etc.)
+          const simplifiedName = companyName
+            .replace(/ Inc\.?$| Corporation$| Corp\.?$| Co\.?$| Company$| plc$| Ltd\.?$/i, '')
+            .toLowerCase();
+          
+          if (simplifiedName !== companyName.toLowerCase()) {
+            stockMap[simplifiedName] = {
+              id: ticker,
+              name: companyName,
+              symbol: ticker,
+              type: 'stock'
+            };
+          }
+        }
+      }
+      
+      console.log(`Loaded ${tickers.length} stock tickers`);
+      resolve(stockMap);
+    } catch (error) {
+      console.error("Error loading stock data:", error);
+      resolve({});
+    }
+  });
+};
+
 const detectAsset = async (query) => {
     try {
-        const response = await axios.get("https://api.coingecko.com/api/v3/coins/list");
-        const assets = response.data;
+        // Load asset data from all sources
+        const cryptoAssets = loadCryptoData();
+        const stockAssets = await loadStockData();
+        const marketAssets = loadMarketData(); // FX, indices, commodities
         
         console.log(`Detecting assets in query: "${query}"`);
-        
-        // Define major cryptocurrencies with their exact IDs from CoinGecko
-        const majorCryptos = {
-            'bitcoin': 'bitcoin',
-            'btc': 'bitcoin',
-            'ethereum': 'ethereum',
-            'eth': 'ethereum',
-            'solana': 'solana',
-            'sol': 'solana',
-            'cardano': 'cardano',
-            'ada': 'cardano',
-            'dogecoin': 'dogecoin',
-            'doge': 'dogecoin',
-            'ripple': 'ripple',
-            'xrp': 'ripple',
-            'binance': 'binancecoin',
-            'bnb': 'binancecoin',
-            'tether': 'tether',
-            'usdt': 'tether',
-            'polkadot': 'polkadot',
-            'dot': 'polkadot',
-            'avalanche': 'avalanche-2',
-            'avax': 'avalanche-2',
-            'shiba': 'shiba-inu',
-            'shib': 'shiba-inu'
-        };
         
         // Common words to ignore
         const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 
                             'or', 'for', 'should', 'i', 'my', 'about', 'what', 'how', 'when', 'price', 'value', 
-                            'which', 'better', 'worse', 'best', 'worst', 'crypto', 'cryptocurrency'];
+                            'which', 'better', 'worse', 'best', 'worst', 'crypto', 'cryptocurrency', 'stock',
+                            'market', 'trading', 'shares', 'equity', 'securities', 'commodity', 'index', 'forex',
+                            'currency', 'exchange', 'rate', 'pair'];
         
-        // Check for comparison queries (e.g., "Which is better, Bitcoin or Ethereum?")
-        if (query.toLowerCase().includes('better') || 
-            query.toLowerCase().includes('versus') || 
-            query.toLowerCase().includes('vs') || 
-            query.toLowerCase().includes('compare') || 
-            query.toLowerCase().includes('comparison')) {
+        // Check for exact ticker/symbol matches first (prioritize these)
+        const queryUpperCase = query.toUpperCase();
+        
+        // Check for currency pairs in the format XXX/YYY
+        const currencyPairRegex = /([A-Z]{3})\/([A-Z]{3})/g;
+        const currencyPairMatches = [...queryUpperCase.matchAll(currencyPairRegex)];
+        
+        if (currencyPairMatches.length > 0) {
+            const pairSymbol = currencyPairMatches[0][0];
+            if (marketAssets[pairSymbol.toLowerCase()]) {
+                const asset = marketAssets[pairSymbol.toLowerCase()];
+                console.log(`Found currency pair: ${asset.symbol} (${asset.name})`);
+                return asset;
+            }
+        }
+        
+        // Check for stock tickers (typically 1-5 uppercase letters)
+        const stockTickerRegex = /\b[A-Z]{1,5}\b/g;
+        const stockTickerMatches = [...queryUpperCase.matchAll(stockTickerRegex)];
+        
+        for (const match of stockTickerMatches) {
+            const ticker = match[0];
+            if (stockAssets[ticker.toLowerCase()]) {
+                const asset = stockAssets[ticker.toLowerCase()];
+                console.log(`Found stock ticker: ${asset.symbol} (${asset.name})`);
+                return asset;
+            }
             
-            // Look for major cryptocurrencies in the query
-            for (const [cryptoName, cryptoId] of Object.entries(majorCryptos)) {
-                // Use word boundary to match whole words only
-                const regex = new RegExp(`\\b${cryptoName}\\b`, 'i');
-                if (regex.test(query.toLowerCase())) {
-                    console.log(`Found major cryptocurrency in comparison query: ${cryptoName} (ID: ${cryptoId})`);
-                    return cryptoId;
-                }
+            // Also check if it's an index or commodity symbol
+            if (marketAssets[ticker.toLowerCase()]) {
+                const asset = marketAssets[ticker.toLowerCase()];
+                console.log(`Found market asset symbol: ${asset.symbol} (${asset.name})`);
+                return asset;
             }
         }
         
         // Split query into words and filter out common words
         const queryWords = query.toLowerCase().split(/\s+/).filter(word => !commonWords.includes(word));
         
-        // Step 1: First check for exact matches of major cryptocurrencies
+        // Check for exact matches in all asset types
         for (const word of queryWords) {
-            if (majorCryptos[word]) {
-                console.log(`Found exact match for major cryptocurrency: ${word} (ID: ${majorCryptos[word]})`);
-                return majorCryptos[word];
-            }
-        }
-        
-        // Step 2: Check for partial matches in major cryptocurrencies
-        // This is useful for queries like "bit" or "eth"
-        for (const word of queryWords) {
-            if (word.length < 3) continue; // Skip very short words
+            if (word.length < 2) continue; // Skip very short words
             
-            for (const [cryptoName, cryptoId] of Object.entries(majorCryptos)) {
-                if (cryptoName.startsWith(word) || word.startsWith(cryptoName)) {
-                    console.log(`Found partial match for major cryptocurrency: ${word} matches ${cryptoName} (ID: ${cryptoId})`);
-                    return cryptoId;
-                }
+            // Check crypto assets
+            if (cryptoAssets[word]) {
+                console.log(`Found crypto asset match: ${cryptoAssets[word].name} (${cryptoAssets[word].symbol})`);
+                return cryptoAssets[word];
             }
-        }
-        
-        // Step 3: Check for exact matches in the full CoinGecko list
-        // But only for top 100 coins by market cap to avoid scams
-        const top100Coins = assets.filter(asset => 
-            // This is a heuristic - legitimate coins usually have shorter IDs
-            asset.id.length < 15 && 
-            !asset.id.includes('test') && 
-            !asset.id.includes('scam') &&
-            !asset.id.includes('fake')
-        ).slice(0, 100);
-        
-        for (const word of queryWords) {
-            if (word.length < 3) continue; // Skip very short words
             
-            const exactMatch = top100Coins.find(asset => 
-                word === asset.name.toLowerCase() || 
-                word === asset.symbol.toLowerCase()
-            );
+            // Check stock assets
+            if (stockAssets[word]) {
+                console.log(`Found stock match: ${stockAssets[word].name} (${stockAssets[word].symbol})`);
+                return stockAssets[word];
+            }
             
-            if (exactMatch) {
-                console.log(`Found exact match in top coins: ${exactMatch.name} (${exactMatch.symbol})`);
-                return exactMatch.id;
+            // Check market assets (FX, indices, commodities)
+            if (marketAssets[word]) {
+                console.log(`Found market asset match: ${marketAssets[word].name} (${marketAssets[word].type})`);
+                return marketAssets[word];
             }
         }
         
-        // Step 4: Check if the entire query contains mentions of major cryptos
-        for (const [cryptoName, cryptoId] of Object.entries(majorCryptos)) {
-            if (query.toLowerCase().includes(cryptoName)) {
-                console.log(`Found major cryptocurrency in full query: ${cryptoName} (ID: ${cryptoId})`);
-                return cryptoId;
+        // Check for multi-word asset names in the full query
+        const fullQuery = query.toLowerCase();
+        
+        // First check for specific asset types mentioned
+        if (fullQuery.includes('gold') || fullQuery.includes('xau')) {
+            return marketAssets['gold'];
+        }
+        
+        if (fullQuery.includes('oil') || fullQuery.includes('crude')) {
+            return marketAssets['crude_oil_wti'];
+        }
+        
+        if (fullQuery.includes('s&p') || fullQuery.includes('s and p') || fullQuery.includes('spx')) {
+            return marketAssets['spx'];
+        }
+        
+        if (fullQuery.includes('dow') || fullQuery.includes('djia')) {
+            return marketAssets['djia'];
+        }
+        
+        if (fullQuery.includes('nasdaq')) {
+            return marketAssets['comp'];
+        }
+        
+        // Check for longer asset names
+        for (const [key, asset] of Object.entries(marketAssets)) {
+            if (key.length > 5 && fullQuery.includes(key)) {
+                console.log(`Found market asset in query: ${asset.name}`);
+                return asset;
             }
         }
         
-        // Step 5: Default to bitcoin if no matches found
+        for (const [key, asset] of Object.entries(stockAssets)) {
+            if (key.length > 5 && fullQuery.includes(key)) {
+                console.log(`Found company name in query: ${asset.name}`);
+                return asset;
+            }
+        }
+        
+        for (const [key, asset] of Object.entries(cryptoAssets)) {
+            if (key.length > 5 && fullQuery.includes(key)) {
+                console.log(`Found crypto name in query: ${asset.name}`);
+                return asset;
+            }
+        }
+        
+        // Default to bitcoin if no matches found
         console.log("No reliable asset matches found, defaulting to bitcoin");
-        return "bitcoin";
+        return {
+            id: "1",
+            name: "Bitcoin",
+            symbol: "BTC",
+            type: "crypto"
+        };
     } catch (error) {
         console.error("Error detecting asset:", error);
-        return "bitcoin";
+        return {
+            id: "1",
+            name: "Bitcoin",
+            symbol: "BTC",
+            type: "crypto"
+        };
     }
 };
 
-const getFinancialNews = async (query) => {
+
+const getFinancialNews = async (asset) => {
     try {
+        // Define news sources based on asset type
+        let newsSources = [];
+        let searchTerms = [];
+        
+        switch(asset.type) {
+            case 'crypto':
+                newsSources = ['coindesk.com', 'cointelegraph.com', 'decrypt.co', 'theblock.co', 'bloomberg.com'];
+                searchTerms = [asset.name, asset.symbol, 'cryptocurrency'];
+                break;
+            case 'stock':
+                newsSources = ['cnbc.com', 'bloomberg.com', 'reuters.com', 'wsj.com', 'marketwatch.com', 'seekingalpha.com'];
+                searchTerms = [asset.name, asset.symbol, 'stock', 'earnings'];
+                break;
+            case 'commodity':
+                newsSources = ['reuters.com', 'bloomberg.com', 'spglobal.com', 'argusmedia.com', 'cnbc.com'];
+                searchTerms = [asset.name, 'commodity', 'futures', asset.category];
+                break;
+            case 'fx':
+                newsSources = ['fxstreet.com', 'dailyfx.com', 'forexlive.com', 'reuters.com', 'bloomberg.com'];
+                searchTerms = [asset.name, 'forex', 'currency', 'exchange rate'];
+                break;
+            case 'index':
+                newsSources = ['cnbc.com', 'bloomberg.com', 'reuters.com', 'wsj.com', 'marketwatch.com'];
+                searchTerms = [asset.name, 'index', 'market', asset.country];
+                break;
+            default:
+                newsSources = ['reuters.com', 'bloomberg.com', 'cnbc.com', 'wsj.com'];
+                searchTerms = [asset.name, asset.symbol];
+        }
+        
+        // Create search query
+        const query = searchTerms.join(' OR ');
+        
         // Fetch news related to the query
         const response = await axios.get(`https://newsapi.org/v2/everything`, {
             params: {
                 q: query,
+                domains: newsSources.join(','),
                 apiKey: process.env.NEWS_API_KEY,
                 language: "en",
-                sortBy: "publishedAt"
+                sortBy: "publishedAt",
+                pageSize: 10
             }
         });
 
@@ -203,132 +571,36 @@ const getFinancialNews = async (query) => {
         }));
     } catch (error) {
         console.error("Error fetching financial news:", error.message);
-
-        // Fallback: Use general finance-related terms
+        
+        // Implement fallback logic - try a more general search
         try {
-            const fallbackResponse = await axios.get(`https://newsapi.org/v2/everything`, {
+            const response = await axios.get(`https://newsapi.org/v2/everything`, {
                 params: {
-                    q: `${query} finance OR investing OR market`,
+                    q: asset.name,
                     apiKey: process.env.NEWS_API_KEY,
                     language: "en",
-                    sortBy: "relevancy"
+                    sortBy: "publishedAt",
+                    pageSize: 5
                 }
             });
-
-            if (!fallbackResponse.data.articles || fallbackResponse.data.articles.length === 0) {
-                throw new Error("No fallback articles found.");
+            
+            if (response.data.articles && response.data.articles.length > 0) {
+                return response.data.articles.map(article => ({
+                    title: article.title,
+                    url: article.url,
+                    source: article.source.name,
+                    description: article.description || "No description available.",
+                    publishedAt: article.publishedAt
+                }));
             }
-
-            return fallbackResponse.data.articles.slice(0, 5).map(article => ({
-                title: article.title,
-                url: article.url,
-                source: article.source.name,
-                description: article.description || "No description available.",
-                publishedAt: article.publishedAt
-            }));
         } catch (fallbackError) {
-            console.error("Error fetching fallback news:", fallbackError.message);
-
-            // If both fail, return mock data
-            return [
-                {
-                    title: `Latest ${query} Updates`,
-                    url: `https://www.barrons.com/search?q=${query}`,
-                    source: "Barron's",
-                    description: `Stay updated on the latest ${query} news and market analysis.`,
-                    publishedAt: new Date().toISOString()
-                },
-                {
-                    title: `${query} Market Trends`,
-                    url: `https://www.marketwatch.com/search?q=${query}`,
-                    source: "MarketWatch",
-                    description: `Analysis of current ${query} market trends and future outlook.`,
-                    publishedAt: new Date().toISOString()
-                },
-                {
-                    title: `${query} Investment Strategies`,
-                    url: `https://www.investors.com/search/?q=${query}`,
-                    source: "Investors.com",
-                    description: `Expert recommendations on ${query} investment strategies.`,
-                    publishedAt: new Date().toISOString()
-                }
-            ];
+            console.error("Fallback news search also failed:", fallbackError.message);
         }
+        
+        // Return empty array if all attempts fail
+        return [];
     }
 };
-
-
-// const getFinancialNews = async (query) => {
-//     try {
-//         // First, try with domains instead of sources
-//         const response = await axios.get(`https://newsapi.org/v2/everything`, {
-//             params: {
-//                 q: query,
-//                 apiKey: process.env.NEWS_API_KEY,
-//                 language: "en",
-//                 domains: "barrons.com,marketwatch.com,investors.com",
-//                 sortBy: "publishedAt"
-//             }
-//         });
-
-//         return response.data.articles.slice(0, 5).map(article => ({
-//             title: article.title,
-//             url: article.url,
-//             source: article.source.name,
-//             description: article.description,
-//             publishedAt: article.publishedAt
-//         }));
-//     } catch (error) {
-//         console.error("Error fetching financial news:", error);
-        
-//         // Fallback to a more general query without specific sources
-//         try {
-//             const fallbackResponse = await axios.get(`https://newsapi.org/v2/everything`, {
-//                 params: {
-//                     q: `${query} finance OR investing OR market`,
-//                     apiKey: process.env.NEWS_API_KEY,
-//                     language: "en",
-//                     sortBy: "relevancy"
-//                 }
-//             });
-            
-//             return fallbackResponse.data.articles.slice(0, 5).map(article => ({
-//                 title: article.title,
-//                 url: article.url,
-//                 source: article.source.name,
-//                 description: article.description,
-//                 publishedAt: article.publishedAt
-//             }));
-//         } catch (fallbackError) {
-//             console.error("Error fetching fallback news:", fallbackError);
-            
-//             // Return mock data if all else fails
-//             return [
-//                 {
-//                     title: `Latest ${query} Updates`,
-//                     url: `https://www.barrons.com/search?q=${query}`,
-//                     source: "Barron's",
-//                     description: `Stay updated on the latest ${query} news and market analysis.`,
-//                     publishedAt: new Date().toISOString()
-//                 },
-//                 {
-//                     title: `${query} Market Trends`,
-//                     url: `https://www.marketwatch.com/search?q=${query}`,
-//                     source: "MarketWatch",
-//                     description: `Analysis of current ${query} market trends and future outlook.`,
-//                     publishedAt: new Date().toISOString()
-//                 },
-//                 {
-//                     title: `${query} Investment Strategies`,
-//                     url: `https://www.investors.com/search/?q=${query}`,
-//                     source: "Investors.com",
-//                     description: `Expert recommendations on ${query} investment strategies.`,
-//                     publishedAt: new Date().toISOString()
-//                 }
-//             ];
-//         }
-//     }
-// };
 
 const getAssetData = async (asset) => {
     try {
