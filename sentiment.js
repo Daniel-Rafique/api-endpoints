@@ -1034,32 +1034,19 @@ const detectAsset = async (query) => {
                             'market', 'trading', 'shares', 'equity', 'securities', 'commodity', 'index', 'forex',
                             'currency', 'exchange', 'rate', 'pair'];
         
-        // Convert query to lowercase for case-insensitive matching
-        const lowerQuery = query.toLowerCase();
-        
         // First check for specific asset types mentioned
-        if (lowerQuery.includes('s&p') || lowerQuery.includes('s and p') || lowerQuery.includes('spx')) {
+        const fullQuery = query.toLowerCase();
+        
+        if (fullQuery.includes('s&p') || fullQuery.includes('s and p') || fullQuery.includes('spx')) {
             return marketAssets['spx'];
         }
         
-        if (lowerQuery.includes('dow') || lowerQuery.includes('djia')) {
+        if (fullQuery.includes('dow') || fullQuery.includes('djia')) {
             return marketAssets['djia'];
         }
         
-        if (lowerQuery.includes('nasdaq')) {
+        if (fullQuery.includes('nasdaq')) {
             return marketAssets['comp'];
-        }
-        
-        // Check for cryptocurrency names in the query (case-insensitive)
-        // This is a high priority check to catch names like "Dash", "Bitcoin", etc.
-        for (const cryptoId in cryptoAssets) {
-            const crypto = cryptoAssets[cryptoId];
-            // Check if the crypto name or symbol is in the query
-            if (lowerQuery.includes(crypto.name.toLowerCase()) || 
-                lowerQuery.includes(crypto.symbol.toLowerCase())) {
-                console.log(`Found crypto name/symbol in query: ${crypto.name} (${crypto.symbol})`);
-                return crypto;
-            }
         }
         
         // Check for stock tickers (typically 1-5 uppercase letters)
@@ -1084,7 +1071,7 @@ const detectAsset = async (query) => {
         }
         
         // Split query into words and filter out common words
-        const queryWords = lowerQuery.split(/\s+/).filter(word => !commonWords.includes(word));
+        const queryWords = query.toLowerCase().split(/\s+/).filter(word => !commonWords.includes(word));
         
         // Check for exact matches in all asset types
         for (const word of queryWords) {
@@ -1150,6 +1137,7 @@ const detectAsset = async (query) => {
         };
         
         // Check for commodity keywords in the query
+        const lowerQuery = query.toLowerCase();
         for (const [keyword, commodity] of Object.entries(commodityKeywords)) {
             if (lowerQuery.includes(keyword)) {
                 console.log(`Found commodity keyword match: ${commodity.name} (${commodity.symbol})`);
@@ -1192,7 +1180,6 @@ const detectAsset = async (query) => {
         
         // If we get here, no match was found
         // Default to Bitcoin as a fallback
-        console.log("No asset match found, defaulting to Bitcoin");
         return {
             id: "1",
             name: "Bitcoin",
@@ -2611,7 +2598,7 @@ app.use((req, res, next) => {
 app.post("/api/sentiment", async (req, res) => {
     console.log("Received request:", req.body);
     const userQuery = req.body.question || "Is now a good time to buy crypto?";
-    const asset = await detectAsset(userQuery);
+    const asset = await detectAsset(userQuery.toLowerCase());
     const assetData = await getAssetData(asset);
     const assetPrice = assetData.price;
     const financialInsights = assetData.financialInsights;
