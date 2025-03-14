@@ -1241,29 +1241,23 @@ const getPrimaryAssetPrice = async (asset) => {
 
 // Add new helper functions for mapping commodity symbols to different API formats
 const getCommodityTickerForFMP = (symbol) => {
-    const mapping = {
-        'XAU': 'GOLD',      // Gold
-        'XAG': 'SILVER',    // Silver
-        'XPT': 'PLATINUM',  // Platinum
-        'XPD': 'PALLADIUM', // Palladium
-        'CL': 'USOIL',      // Crude Oil WTI
-        'BZ': 'UKOIL',      // Brent Crude Oil
-        'NG': 'NATGAS',     // Natural Gas
-        'HG': 'COPPER',     // Copper
-        'ALU': 'ALUMINUM',  // Aluminum
-        'NI': 'NICKEL',     // Nickel
-        'ZNC': 'ZINC',      // Zinc
-        'LD': 'LEAD',       // Lead
-        'ZC': 'CORN',       // Corn
-        'ZW': 'WHEAT',      // Wheat
-        'ZS': 'SOYBEAN',    // Soybeans
-        'KC': 'COFFEE',     // Coffee
-        'SB': 'SUGAR',      // Sugar
-        'CT': 'COTTON',     // Cotton
-        'CC': 'COCOA'       // Cocoa
+    // Map commodity symbols to FMP API tickers
+    const commodityMap = {
+        'XAU': 'XAUUSD', // Use XAUUSD for Gold instead of GOLD (which is Barrick Gold stock)
+        'XAG': 'XAGUSD', // Use XAGUSD for Silver
+        'OIL': 'USOIL',
+        'BRENT': 'UKOIL',
+        'NG': 'NATURALGAS',
+        'COPPER': 'COPPER',
+        'WHEAT': 'WHEAT',
+        'CORN': 'CORN',
+        'SOYBEAN': 'SOYBEAN',
+        'COFFEE': 'COFFEE',
+        'SUGAR': 'SUGAR',
+        'COTTON': 'COTTON'
     };
     
-    return mapping[symbol] || symbol;
+    return commodityMap[symbol] || symbol;
 };
 
 const getCommodityTickerForAlphaVantage = (symbol) => {
