@@ -2568,7 +2568,7 @@ const getOpenAIAnalysis = async (asset, assetPrice, sentiment, userQuery) => {
             },
             { 
                 role: "user", 
-                content: `${userQuery}\n\n${asset.name || asset.symbol} is currently priced at $${assetPrice}. Social media sentiment is ${sentiment}. Should I invest?` +
+                content: `${userQuery}\n\n${asset.name || asset.symbol} is currently priced at $${assetPrice}. Social media sentiment is ${sentiment.sentiment || 'Neutral'} with ${(sentiment.confidence * 100).toFixed(1)}% confidence. Should I invest?` +
                          `${keyPointsText}${riskFactorsText}${marketTrendsText}${qaDataText}` +
                          "\n\nReference these news sources in your analysis where relevant: Barron's, Investor's Business Daily, MarketWatch, Bloomberg, CNBC, Wall Street Journal, Financial Times, Reuters, CoinDesk, and CoinTelegraph. Tag each source appropriately in your response."
             }
@@ -2681,7 +2681,8 @@ app.post("/api/sentiment", async (req, res) => {
                 },
                 asset_price: assetPrice,
                 chart: chartData, // Include Chart.js configuration
-                social_sentiment: sentiment,
+                social_sentiment: sentiment.sentiment || "Neutral",
+                sentiment_details: sentiment, // Include the full sentiment object for more detailed analysis if needed
                 analysis: formattedResponse
             }
         ],
