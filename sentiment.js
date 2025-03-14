@@ -1173,16 +1173,43 @@ const getPrimaryAssetPrice = async (asset) => {
         
         switch(asset.type) {
             case 'crypto':
-                // Use CoinGecko for crypto prices
-                const cryptoResponse = await axios.get("https://api.coingecko.com/api/v3/simple/price", {
-                    params: { 
-                        ids: asset.id.toLowerCase(), 
-                        vs_currencies: "usd" 
-                    }
-                });
-                if (cryptoResponse.data && cryptoResponse.data[asset.id.toLowerCase()]?.usd) {
-                    return cryptoResponse.data[asset.id.toLowerCase()].usd;
-                }
+            // Try CoinMarketCap API as fallback for crypto
+            if (process.env.COINMARKETCAP_API_KEY) {
+              try {
+                  const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest', {
+                      headers: {
+                          'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
+                      },
+                      params: {
+                          symbol: asset.symbol
+                      }
+                  });
+                  
+                  if (response.data && response.data.data && response.data.data[asset.symbol]) {
+                      return response.data.data[asset.symbol].quote.USD.price.toFixed(2);
+                  }
+              } catch (error) {
+                  console.error(`CoinMarketCap fallback failed: ${error.message}`);
+              }
+          }
+          
+          // Try FMP API as another fallback for crypto
+          if (process.env.FMP_API_KEY) {
+              try {
+                  const fmpResponse = await axios.get(`https://financialmodelingprep.com/api/v3/quote/${asset.symbol}USD`, {
+                      params: {
+                          apikey: process.env.FMP_API_KEY
+                      }
+                  });
+                  
+                  if (fmpResponse.data && fmpResponse.data.length > 0 && fmpResponse.data[0].price) {
+                      return fmpResponse.data[0].price.toFixed(2);
+                  }
+              } catch (error) {
+                  console.error(`FMP crypto fallback failed: ${error.message}`);
+              }
+          }
+
                 break;
                 
             case 'commodity':
