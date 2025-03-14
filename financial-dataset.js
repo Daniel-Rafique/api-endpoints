@@ -299,7 +299,7 @@ async function getFinancialInsights(asset) {
           marketTrends: [
             "Geopolitical tensions typically drive increased safe-haven demand for gold",
             "Gold ETFs have made the asset more accessible to retail investors",
-            "Production costs create a potential price floor around $1,200-1,500 per ounce"
+            "Production costs influence mining profitability and long-term supply dynamics"
           ]
         },
         'silver': {
