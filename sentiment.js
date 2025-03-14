@@ -2142,10 +2142,6 @@ const generateDummyPriceData = (basePrice) => {
     return dummyData;
 };
 
-const generateChartUrl = (priceData) => {
-    const dataPoints = priceData.map(point => point[1]);
-    return `https://quickchart.io/chart?c={type:'line',data:{labels:[1,2,3,4,5,6,7,8,9,10],datasets:[{label:'Price',data:[${dataPoints}]}]}}`;
-};
 
 const getTwitterSentiment = async (asset) => {
     try {
@@ -2650,6 +2646,7 @@ app.post("/api/sentiment", async (req, res) => {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation,
             scales: {
                 y: {
                     beginAtZero: false,
@@ -2659,10 +2656,11 @@ app.post("/api/sentiment", async (req, res) => {
                     }
                 },
                 x: {
-                    title: {
-                        display: true,
-                        text: 'Time'
-                    }
+                  type: 'linear',
+                  title: {
+                      display: true,
+                      text: 'Time'
+                  }
                 }
             }
         }
