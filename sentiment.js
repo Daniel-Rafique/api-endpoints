@@ -2640,13 +2640,88 @@ app.post("/api/sentiment", async (req, res) => {
                 data: priceData.map(point => point[1]), // Y-axis values
                 backgroundColor: 'rgba(75, 192, 192, 0.2)',
                 borderColor: 'rgba(75, 192, 192, 1)',
-                borderWidth: 1
+                borderWidth: 1,
+                radius: 0, // Hide the points, show only the line
+                pointHoverRadius: 5, // Show points on hover
+                pointHoverBackgroundColor: 'rgba(75, 192, 192, 1)',
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2,
+                tension: 0.3 // Add slight curve to the line for better aesthetics
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation,
+            animation: {
+                x: {
+                    type: 'number',
+                    easing: 'linear',
+                    duration: 2000,
+                    from: NaN, // start invisible
+                    delay(ctx) {
+                        if (ctx.type !== 'data' || ctx.xStarted) {
+                            return 0;
+                        }
+                        ctx.xStarted = true;
+                        return ctx.index * 10;
+                    }
+                },
+                y: {
+                    type: 'number',
+                    easing: 'linear',
+                    duration: 2000,
+                    from: (ctx) => ctx.index === 0 ? ctx.chart.scales.y.getPixelForValue(priceData[0][1]) : ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.index - 1].getProps(['y'], true).y,
+                    delay(ctx) {
+                        if (ctx.type !== 'data' || ctx.yStarted) {
+                            return 0;
+                        }
+                        ctx.yStarted = true;
+                        return ctx.index * 10;
+                    }
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    titleFont: {
+                        size: 14
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('en-US', { 
+                                    style: 'currency', 
+                                    currency: 'USD',
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 6
+                                }).format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 12
+                        }
+                    }
+                }
+            },
             scales: {
                 y: {
                     beginAtZero: false,
@@ -2656,11 +2731,11 @@ app.post("/api/sentiment", async (req, res) => {
                     }
                 },
                 x: {
-                  type: 'linear',
-                  title: {
-                      display: true,
-                      text: 'Time'
-                  }
+                    type: 'linear',
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
                 }
             }
         }
