@@ -7,9 +7,20 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const xml2js = require('xml2js');
+const financialDataset = require('./financial-dataset');
 
 const app = express();
 const PORT = 3003;
+
+// Initialize the financial dataset when the server starts
+(async () => {
+  try {
+    await financialDataset.initializeFinancialDataset();
+    console.log('Financial dataset initialized on server startup');
+  } catch (error) {
+    console.error('Failed to initialize financial dataset on startup:', error);
+  }
+})();
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
@@ -954,33 +965,52 @@ const getFinancialNews = async (asset) => {
 
 const getAssetData = async (asset) => {
     try {
+        let price;
+        
         // If asset has priceUsd from DexScreener, use that
         if (asset.priceUsd) {
-            return asset.priceUsd;
+            price = asset.priceUsd;
+        } else {
+            // Try primary data source first
+            try {
+                price = await getPrimaryAssetPrice(asset);
+                console.log(`Successfully fetched price for ${asset.name} from primary source: $${price}`);
+            } catch (primaryError) {
+                // If primary source fails, try fallback
+                console.log(`Primary data source failed for ${asset.name}, trying fallback sources...`);
+                const fallbackPrice = await getFallbackAssetPrice(asset);
+                
+                if (fallbackPrice !== "N/A") {
+                    console.log(`Successfully fetched price for ${asset.name} from fallback source: $${fallbackPrice}`);
+                    price = fallbackPrice;
+                } else {
+                    // If we get here, all API sources have failed
+                    console.error(`All API sources failed for ${asset.name}`);
+                    price = "N/A";
+                }
+            }
         }
         
-        // Try primary data source first
+        // Get financial insights from the dataset
+        let financialInsights = null;
         try {
-            const price = await getPrimaryAssetPrice(asset);
-            console.log(`Successfully fetched price for ${asset.name} from primary source: $${price}`);
-            return price;
-        } catch (primaryError) {
-            // If primary source fails, try fallback
-            console.log(`Primary data source failed for ${asset.name}, trying fallback sources...`);
-            const fallbackPrice = await getFallbackAssetPrice(asset);
-            
-            if (fallbackPrice !== "N/A") {
-                console.log(`Successfully fetched price for ${asset.name} from fallback source: $${fallbackPrice}`);
-                return fallbackPrice;
-            }
-            
-            // If we get here, all API sources have failed
-            console.error(`All API sources failed for ${asset.name}`);
-            return "N/A";
+            financialInsights = await financialDataset.getFinancialInsights(asset);
+            console.log(`Retrieved financial insights for ${asset.name || asset.symbol}`);
+        } catch (error) {
+            console.error(`Error retrieving financial insights for ${asset.name || asset.symbol}:`, error);
         }
+        
+        // Return both price and financial insights
+        return {
+            price,
+            financialInsights
+        };
     } catch (error) {
-        console.error(`All attempts to fetch price for ${asset.name} failed:`, error);
-        return "N/A";
+        console.error(`Error in getAssetData for ${asset.name}:`, error);
+        return {
+            price: "N/A",
+            financialInsights: null
+        };
     }
 };
 
@@ -1670,7 +1700,9 @@ const getHistoricalData = async (asset) => {
         
         // If all else fails, generate some dummy data based on the current price
         // This ensures the chart always shows something
-        const assetPrice = await getAssetData(asset);
+        const assetData = await getAssetData(asset);
+        const assetPrice = assetData.price;
+        
         if (assetPrice !== "N/A") {
             const basePrice = parseFloat(assetPrice);
             const dummyData = [];
@@ -1825,14 +1857,49 @@ const analyzeSentiment = (tweets) => {
 
 const getOpenAIAnalysis = async (asset, assetPrice, sentiment, userQuery) => {
     try {
+        // Get financial insights from the dataset
+        let financialInsights = { keyPoints: [], riskFactors: [], marketTrends: [], qaData: [] };
+        try {
+            financialInsights = await financialDataset.getFinancialInsights(asset);
+            console.log(`Retrieved ${financialInsights.keyPoints.length} key points, ${financialInsights.riskFactors.length} risk factors, and ${financialInsights.marketTrends.length} market trends for ${asset.name || asset.symbol}`);
+        } catch (error) {
+            console.error('Error retrieving financial insights:', error);
+        }
+
+        // Format financial insights for the prompt
+        const keyPointsText = financialInsights.keyPoints.length > 0 
+            ? `\nKey financial points:\n${financialInsights.keyPoints.map(point => `- ${point}`).join('\n')}`
+            : '';
+            
+        const riskFactorsText = financialInsights.riskFactors.length > 0
+            ? `\nRisk factors:\n${financialInsights.riskFactors.map(risk => `- ${risk}`).join('\n')}`
+            : '';
+            
+        const marketTrendsText = financialInsights.marketTrends.length > 0
+            ? `\nMarket trends:\n${financialInsights.marketTrends.map(trend => `- ${trend}`).join('\n')}`
+            : '';
+            
+        const qaDataText = financialInsights.qaData.length > 0
+            ? `\nRelevant financial Q&A:\n${financialInsights.qaData.map(qa => `Q: ${qa.question}\nA: ${qa.answer}`).join('\n\n')}`
+            : '';
+
+        // Enhanced system prompt with financial dataset knowledge
+        const systemPrompt = "You are a financial analyst with access to a comprehensive financial dataset. " +
+            "Provide insights based on asset price, social sentiment, and financial data from reliable sources. " +
+            "Format your response in clear paragraphs with proper spacing between them. " +
+            "Tag news sources inline using <span class=\"news-source\" data-source=\"SOURCE_NAME\">[SOURCE_NAME]</span> format. " +
+            "At the end of your analysis, include a 'Sources:' section with numbered links to each source you referenced. " +
+            "When financial data is provided, incorporate it into your analysis to provide more accurate and reliable insights.";
+
         const messages = [
             { 
                 role: "system", 
-                content: "You are a financial analyst. Provide insights based on asset price and social sentiment. Format your response in clear paragraphs with proper spacing between them. Tag news sources inline using <span class=\"news-source\" data-source=\"SOURCE_NAME\">[SOURCE_NAME]</span> format. At the end of your analysis, include a 'Sources:' section with numbered links to each source you referenced."
+                content: systemPrompt
             },
             { 
                 role: "user", 
-                content: `${userQuery}\n\n${asset} is currently priced at $${assetPrice}. Social media sentiment is ${sentiment}. Should I invest?` +
+                content: `${userQuery}\n\n${asset.name || asset.symbol} is currently priced at $${assetPrice}. Social media sentiment is ${sentiment}. Should I invest?` +
+                         `${keyPointsText}${riskFactorsText}${marketTrendsText}${qaDataText}` +
                          "\n\nReference these news sources in your analysis where relevant: Barron's, Investor's Business Daily, MarketWatch, Bloomberg, CNBC, Wall Street Journal, Financial Times, Reuters, CoinDesk, and CoinTelegraph. Tag each source appropriately in your response."
             }
         ];
@@ -1866,11 +1933,20 @@ app.post("/api/sentiment", async (req, res) => {
     console.log("Received request:", req.body);
     const userQuery = req.body.question || "Is now a good time to buy crypto?";
     const asset = await detectAsset(userQuery);
-    const assetPrice = await getAssetData(asset);
+    const assetData = await getAssetData(asset);
+    const assetPrice = assetData.price;
+    const financialInsights = assetData.financialInsights;
     const priceData = await getHistoricalData(asset);
     const tweets = await getTwitterSentiment(asset);
     const sentiment = analyzeSentiment(tweets);
-    const openAIResponse = await getOpenAIAnalysis(asset, assetPrice, sentiment, userQuery);
+    
+    // Enhance asset object with financial insights if available
+    const enhancedAsset = {
+        ...asset,
+        financialInsights: financialInsights
+    };
+    
+    const openAIResponse = await getOpenAIAnalysis(enhancedAsset, assetPrice, sentiment, userQuery);
 
     // Get latest news headlines
     const financialNews = await getFinancialNews(asset);
@@ -2134,6 +2210,90 @@ app.post('/api/profiles', async (req, res) => {
       });
     }
   });
+
+// Financial dataset endpoints
+app.get('/api/financial-qa', async (req, res) => {
+  try {
+    const { query, limit } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({
+        status: {
+          code: 400,
+          message: 'Missing required parameter: query',
+          timestamp: new Date().toISOString()
+        },
+        data: null
+      });
+    }
+    
+    const results = await financialDataset.getFinancialQA(query, parseInt(limit) || 5);
+    
+    res.json({
+      status: {
+        code: 200,
+        message: 'Financial QA data retrieved successfully',
+        timestamp: new Date().toISOString(),
+        query
+      },
+      data: results
+    });
+  } catch (error) {
+    console.error('Error retrieving financial QA data:', error);
+    res.status(500).json({
+      status: {
+        code: 500,
+        message: 'Failed to retrieve financial QA data',
+        error: error.message,
+        timestamp: new Date().toISOString(),
+        query: req.query.query
+      },
+      data: null
+    });
+  }
+});
+
+app.get('/api/financial-insights', async (req, res) => {
+  try {
+    const { asset } = req.query;
+    
+    if (!asset) {
+      return res.status(400).json({
+        status: {
+          code: 400,
+          message: 'Missing required parameter: asset',
+          timestamp: new Date().toISOString()
+        },
+        data: null
+      });
+    }
+    
+    const assetObj = { name: asset, symbol: asset };
+    const insights = await financialDataset.getFinancialInsights(assetObj);
+    
+    res.json({
+      status: {
+        code: 200,
+        message: 'Financial insights retrieved successfully',
+        timestamp: new Date().toISOString(),
+        asset
+      },
+      data: insights
+    });
+  } catch (error) {
+    console.error('Error retrieving financial insights:', error);
+    res.status(500).json({
+      status: {
+        code: 500,
+        message: 'Failed to retrieve financial insights',
+        error: error.message,
+        timestamp: new Date().toISOString(),
+        asset: req.query.asset
+      },
+      data: null
+    });
+  }
+});
 
 const options = {
   key: fs.readFileSync(SSL_KEY_PATH),
