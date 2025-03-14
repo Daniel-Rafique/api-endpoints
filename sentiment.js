@@ -135,72 +135,8 @@ function stripHtmlAndDecodeEntities(html) {
     return matches ? [...new Set(matches)] : []; // Remove duplicates
   }
 
-const loadCryptoData = async () => {
+const loadCryptoData = () => {
   try {
-    // Try to fetch from CoinMarketCap first if API key is available
-    if (process.env.COINMARKETCAP_API_KEY) {
-      try {
-        console.log("Fetching crypto list from CoinMarketCap...");
-        const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest', {
-          headers: {
-            'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
-          },
-          params: {
-            limit: 100, // Get top 100 cryptocurrencies
-            sort: 'market_cap',
-            sort_dir: 'desc'
-          }
-        });
-        
-        if (response.data && response.data.data && response.data.data.length > 0) {
-          console.log(`Loaded ${response.data.data.length} cryptocurrencies from CoinMarketCap`);
-          
-          // Transform the data into a more usable format for asset detection
-          const cryptoMap = {};
-          
-          response.data.data.forEach(crypto => {
-            // Add by name (lowercase for case-insensitive matching)
-            cryptoMap[crypto.name.toLowerCase()] = {
-              id: crypto.id.toString(),
-              name: crypto.name,
-              symbol: crypto.symbol,
-              type: 'crypto',
-              url: `https://coinmarketcap.com/currencies/${crypto.slug}`,
-              weight: crypto.quote.USD.market_cap || 0,
-              coinGeckoId: crypto.id.toString() // Use CMC ID as fallback
-            };
-            
-            // Also add by symbol for easier matching
-            cryptoMap[crypto.symbol.toLowerCase()] = {
-              id: crypto.id.toString(),
-              name: crypto.name,
-              symbol: crypto.symbol,
-              type: 'crypto',
-              url: `https://coinmarketcap.com/currencies/${crypto.slug}`,
-              weight: crypto.quote.USD.market_cap || 0,
-              coinGeckoId: crypto.id.toString() // Use CMC ID as fallback
-            };
-            
-            // Add common aliases for major cryptocurrencies
-            if (crypto.symbol.toLowerCase() === 'btc') {
-              cryptoMap['bitcoin'] = cryptoMap[crypto.symbol.toLowerCase()];
-              cryptoMap['xbt'] = cryptoMap[crypto.symbol.toLowerCase()];
-            } else if (crypto.symbol.toLowerCase() === 'eth') {
-              cryptoMap['ethereum'] = cryptoMap[crypto.symbol.toLowerCase()];
-              cryptoMap['ether'] = cryptoMap[crypto.symbol.toLowerCase()];
-            } else if (crypto.symbol.toLowerCase() === 'xrp') {
-              cryptoMap['ripple'] = cryptoMap[crypto.symbol.toLowerCase()];
-            }
-          });
-          
-          return cryptoMap;
-        }
-      } catch (apiError) {
-        console.error("Error fetching from CoinMarketCap API:", apiError.message);
-        console.log("Falling back to local crypto data...");
-      }
-    }
-    
     // Fallback to local data if API fetch fails or no API key
     const cryptoDataPath = path.join(__dirname, 'assetDetection', 'cryptoData', 'latest100.json');
     const rawData = fs.readFileSync(cryptoDataPath, 'utf8');
@@ -912,7 +848,7 @@ const detectAsset = async (query) => {
         }
         
         // Load all asset data
-        const cryptoAssets = await loadCryptoData();
+        const cryptoAssets = loadCryptoData();
         const stockAssets = await loadStockData();
         const marketAssets = loadMarketData(); // FX, indices, commodities
         
@@ -1881,198 +1817,67 @@ const getHistoricalData = async (asset) => {
             return dummyData;
         }
         
-        let priceData = [];
-        
-        // Try primary source first
-        switch(asset.type) {
-            case 'crypto':
-                try {
-                    const cryptoResponse = await axios.get(`https://api.coingecko.com/api/v3/coins/${asset.id}/market_chart`, {
-                        params: { 
-                            vs_currency: "usd", 
-                            days: "1" 
-                        }
-                    });
-                    
-                    if (cryptoResponse.data && cryptoResponse.data.prices && 
-                        cryptoResponse.data.prices.length > 0) {
-                        return cryptoResponse.data.prices;
-                    }
-                } catch (error) {
-                    console.error(`Error fetching crypto historical data:`, error);
-                    
-                    // Try CoinMarketCap as fallback for crypto historical data
-                    if (process.env.COINMARKETCAP_API_KEY) {
-                        try {
-                            console.log(`Trying CoinMarketCap for historical data of ${asset.name} (${asset.symbol})`);
-                            
-                            // Use the listings/latest endpoint to get current price data
-                            const cmcResponse = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest', {
-                                headers: {
-                                    'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
-                                },
-                                params: {
-                                    symbol: asset.symbol,
-                                    limit: 5000 // Get all available listings to ensure we find our coin
-                                }
-                            });
-                            
-                            // Find the matching cryptocurrency by symbol
-                            let cryptoData = null;
-                            if (cmcResponse.data && cmcResponse.data.data) {
-                                cryptoData = cmcResponse.data.data.find(crypto => 
-                                    crypto.symbol.toUpperCase() === asset.symbol.toUpperCase());
-                            }
-                            
-                            if (cryptoData && cryptoData.quote && cryptoData.quote.USD) {
-                                console.log(`Found current price data from CoinMarketCap for ${asset.name}: $${cryptoData.quote.USD.price}`);
-                                
-                                // Generate simulated historical data based on the current price
-                                // and percent changes provided by CoinMarketCap
-                                const currentPrice = cryptoData.quote.USD.price;
-                                const percentChange1h = cryptoData.quote.USD.percent_change_1h || 0;
-                                const percentChange24h = cryptoData.quote.USD.percent_change_24h || 0;
-                                
-                                // Generate 24 hourly data points
-                                const simulatedData = [];
-                                const now = Date.now();
-                                
-                                // Calculate price 24 hours ago based on 24h percent change
-                                const price24hAgo = currentPrice / (1 + (percentChange24h / 100));
-                                
-                                // Calculate price 1 hour ago based on 1h percent change
-                                const price1hAgo = currentPrice / (1 + (percentChange1h / 100));
-                                
-                                // Calculate a simple curve between 24h ago and now
-                                for (let i = 0; i < 24; i++) {
-                                    const timePoint = now - (23 - i) * 3600000; // hourly points going back from now
-                                    
-                                    let price;
-                                    if (i === 23) {
-                                        // Current price
-                                        price = currentPrice;
-                                    } else if (i === 22) {
-                                        // 1 hour ago
-                                        price = price1hAgo;
-                                    } else {
-                                        // Interpolate between 24h ago and 1h ago
-                                        const ratio = i / 22; // 0 to 1
-                                        price = price24hAgo + (price1hAgo - price24hAgo) * ratio;
-                                        
-                                        // Add a small random variation to make the chart look more realistic
-                                        const randomVariation = (Math.random() - 0.5) * 0.005 * price; // ±0.25% variation
-                                        price += randomVariation;
-                                    }
-                                    
-                                    simulatedData.push([timePoint, price]);
-                                }
-                                
-                                console.log(`Successfully generated simulated historical data from CoinMarketCap for ${asset.name}`);
-                                return simulatedData;
-                            } else {
-                                console.log(`Could not find ${asset.symbol} in CoinMarketCap listings`);
-                            }
-                        } catch (cmcError) {
-                            console.error(`CoinMarketCap data fallback failed:`, cmcError);
-                        }
-                    }
-                }
-                break;
-                
-            case 'stock':
-            case 'index':
-            case 'commodity':
-            case 'fx':
-                if (process.env.ALPHA_VANTAGE_API_KEY) {
-                    try {
-                        const symbol = asset.type === 'index' ? `^${asset.symbol}` : 
-                                      (asset.type === 'fx' ? `${asset.base}${asset.quote}` : asset.symbol);
-                        
-                        const response = await axios.get("https://www.alphavantage.co/query", {
-                            params: {
-                                function: "TIME_SERIES_INTRADAY",
-                                symbol: symbol,
-                                interval: "5min",
-                                apikey: process.env.ALPHA_VANTAGE_API_KEY
-                            }
-                        });
-                        
-                        const timeSeries = response.data["Time Series (5min)"];
-                        if (timeSeries) {
-                            priceData = Object.entries(timeSeries).map(([timestamp, data]) => {
-                                return [new Date(timestamp).getTime(), parseFloat(data["4. close"])];
-                            }).reverse();
-                            
-                            if (priceData.length > 0) {
-                                return priceData;
-                            }
-                        }
-                    } catch (error) {
-                        console.error(`Error fetching historical data from Alpha Vantage:`, error);
-                    }
-                }
-                break;
+        // Get the current price from the asset or fetch it if not available
+        let currentPrice;
+        if (asset.price) {
+            currentPrice = parseFloat(asset.price);
+        } else {
+            const assetData = await getAssetData(asset);
+            currentPrice = parseFloat(assetData.price);
         }
         
-        // If primary source fails, try Yahoo Finance as fallback
-        try {
-            const symbol = asset.type === 'crypto' ? `${asset.symbol}-USD` :
-                          (asset.type === 'index' ? `^${asset.symbol}` : 
-                          (asset.type === 'fx' ? `${asset.base}${asset.quote}=X` : asset.symbol));
-            
-            const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
-                params: {
-                    interval: '5m',
-                    range: '1d'
-                }
-            });
-            
-            if (yahooResponse.data && yahooResponse.data.chart && 
-                yahooResponse.data.chart.result && 
-                yahooResponse.data.chart.result[0].timestamp && 
-                yahooResponse.data.chart.result[0].indicators && 
-                yahooResponse.data.chart.result[0].indicators.quote && 
-                yahooResponse.data.chart.result[0].indicators.quote[0].close) {
-                
-                const timestamps = yahooResponse.data.chart.result[0].timestamp;
-                const closePrices = yahooResponse.data.chart.result[0].indicators.quote[0].close;
-                
-                priceData = timestamps.map((timestamp, index) => {
-                    return [timestamp * 1000, closePrices[index] || null];
-                }).filter(point => point[1] !== null);
-                
-                if (priceData.length > 0) {
-                    return priceData;
-                }
-            }
-        } catch (yahooError) {
-            console.error(`Yahoo Finance fallback failed for historical data:`, yahooError);
+        if (isNaN(currentPrice) || currentPrice === 0) {
+            console.log(`Invalid price for ${asset.name}, generating dummy data`);
+            return generateDummyPriceData(1000); // Use a default price of 1000 if we can't get the real price
         }
         
-        // If all else fails, generate some dummy data based on the current price
-        const assetData = await getAssetData(asset);
-        const assetPrice = assetData.price;
+        console.log(`Generating simulated historical data for ${asset.name} based on current price: $${currentPrice}`);
         
-        if (assetPrice !== "N/A") {
-            const basePrice = parseFloat(assetPrice);
-            const dummyData = [];
-            const now = Date.now();
+        // Generate 120 data points (about 1 day of 5-minute intervals)
+        const dataPoints = 120;
+        const simulatedData = [];
+        const now = Date.now();
+        const timeStep = 5 * 60 * 1000; // 5 minutes in milliseconds
+        
+        // Create a realistic price curve with small random variations
+        // Start with a price that's within 2% of the current price
+        let startingPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.04);
+        
+        for (let i = 0; i < dataPoints; i++) {
+            const timePoint = now - (dataPoints - 1 - i) * timeStep;
             
-            // Generate 10 data points with small random variations
-            for (let i = 0; i < 10; i++) {
-                const timePoint = now - (9 - i) * 3600000; // hourly points going back from now
-                const randomVariation = (Math.random() - 0.5) * 0.02 * basePrice; // ±1% variation
-                dummyData.push([timePoint, basePrice + randomVariation]);
-            }
+            // Create a smooth trend toward the current price
+            const progressTowardsCurrent = i / (dataPoints - 1);
+            const basePrice = startingPrice + (currentPrice - startingPrice) * progressTowardsCurrent;
             
-            return dummyData;
+            // Add some random noise to make it look realistic
+            const volatility = 0.001; // 0.1% volatility per step
+            const randomWalk = (Math.random() - 0.5) * 2 * volatility * currentPrice;
+            
+            const price = basePrice + randomWalk;
+            simulatedData.push([timePoint, price]);
         }
         
-        return [];
+        return simulatedData;
     } catch (error) {
-        console.error(`Error fetching historical data for ${asset.name}:`, error);
-        return [];
+        console.error(`Error generating historical data for ${asset.name}:`, error);
+        return generateDummyPriceData(1000); // Fallback to dummy data in case of any error
     }
+};
+
+// Helper function to generate dummy price data
+const generateDummyPriceData = (basePrice) => {
+    const dummyData = [];
+    const now = Date.now();
+    
+    // Generate 120 data points (about 1 day of 5-minute intervals)
+    for (let i = 0; i < 120; i++) {
+        const timePoint = now - (119 - i) * 5 * 60 * 1000; // 5-minute intervals
+        const randomVariation = (Math.random() - 0.5) * 0.02 * basePrice; // ±1% variation
+        dummyData.push([timePoint, basePrice + randomVariation]);
+    }
+    
+    return dummyData;
 };
 
 const generateChartUrl = (priceData) => {
