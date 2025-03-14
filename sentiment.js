@@ -1914,8 +1914,12 @@ const getSentimentClassifier = async () => {
     if (!sentimentClassifier) {
         console.log("Initializing Hugging Face sentiment analysis model...");
         try {
-            // Use a more reliable and smaller model
-            sentimentClassifier = await pipeline('sentiment-analysis', 'distilbert-base-uncased-finetuned-sst-2-english');
+            // Use a simpler model that's more likely to be available
+            sentimentClassifier = await pipeline('sentiment-analysis', 'distilbert-base-uncased-finetuned-sst-2-english', {
+                local: true,  // Try to use local files if available
+                revision: 'main',
+                quantized: false  // Avoid quantization issues
+            });
             console.log("Sentiment model loaded successfully");
             return sentimentClassifier;
         } catch (error) {
@@ -1961,10 +1965,13 @@ const analyzeTextWithTransformers = async (text) => {
     }
 };
 
-// Fallback to VADER when Transformers.js fails
+// Replace your current VADER implementation with this:
 const analyzeWithVADER = (text) => {
     try {
+        // VADER requires proper instantiation
         const analyzer = new SentimentIntensityAnalyzer();
+        
+        // The correct way to call polarity_scores
         const result = analyzer.polarity_scores(text);
         
         // Map VADER results to your format
@@ -1988,6 +1995,7 @@ const analyzeWithVADER = (text) => {
         };
     } catch (error) {
         console.error("Error in VADER analysis:", error);
+        // Return neutral sentiment as fallback
         return {
             sentiment: "Neutral",
             confidence: 0.5,
@@ -2021,15 +2029,25 @@ const analyzeSentiment = async (tweets) => {
         
         // Try Transformers.js first
         try {
+            console.log("Attempting sentiment analysis with Transformers.js...");
             return await analyzeTextWithTransformers(combinedText);
-        } catch (error) {
-            console.log("Transformers.js failed, falling back to VADER:", error.message);
-            // Fall back to VADER if Transformers.js fails
-            return analyzeWithVADER(combinedText);
+        } catch (transformersError) {
+            console.log("Transformers.js failed, falling back to VADER:", transformersError.message);
+            
+            // Try VADER as first fallback
+            try {
+                console.log("Attempting sentiment analysis with VADER...");
+                return analyzeWithVADER(combinedText);
+            } catch (vaderError) {
+                console.log("VADER failed, using simple rule-based analysis:", vaderError.message);
+                
+                // Use simple rule-based as final fallback
+                return simpleRuleBasedSentiment(combinedText);
+            }
         }
     } catch (error) {
-        console.error("Error in sentiment analysis:", error);
-        // Return neutral sentiment as fallback
+        console.error("All sentiment analysis methods failed:", error);
+        // Return neutral sentiment as ultimate fallback
         return {
             sentiment: "Neutral",
             confidence: 0.5,
@@ -2513,3 +2531,54 @@ const options = {
 };
 const server = https.createServer(options, app);
 server.listen(PORT, () => console.log(`HTTPS server running on port ${PORT}`));
+
+// Add this function as a final fallback
+const simpleRuleBasedSentiment = (text) => {
+    // Simple word lists for positive and negative sentiment
+    const positiveWords = ['good', 'great', 'excellent', 'positive', 'bull', 'bullish', 'up', 'rise', 'rising', 'growth', 'profit', 'gain'];
+    const negativeWords = ['bad', 'poor', 'negative', 'bear', 'bearish', 'down', 'fall', 'falling', 'decline', 'loss', 'lose'];
+    
+    text = text.toLowerCase();
+    
+    // Count occurrences
+    let positiveCount = 0;
+    let negativeCount = 0;
+    
+    positiveWords.forEach(word => {
+        const regex = new RegExp('\\b' + word + '\\b', 'g');
+        const matches = text.match(regex);
+        if (matches) positiveCount += matches.length;
+    });
+    
+    negativeWords.forEach(word => {
+        const regex = new RegExp('\\b' + word + '\\b', 'g');
+        const matches = text.match(regex);
+        if (matches) negativeCount += matches.length;
+    });
+    
+    // Determine sentiment
+    let sentiment;
+    if (positiveCount > negativeCount) {
+        sentiment = "Positive";
+    } else if (negativeCount > positiveCount) {
+        sentiment = "Negative";
+    } else {
+        sentiment = "Neutral";
+    }
+    
+    // Calculate confidence (0.5-1.0 range)
+    const total = positiveCount + negativeCount;
+    const confidence = total > 0 
+        ? 0.5 + (0.5 * Math.abs(positiveCount - negativeCount) / total)
+        : 0.5;
+    
+    return {
+        sentiment: sentiment,
+        confidence: confidence,
+        analysis: {
+            positive: positiveCount / (total || 1),
+            neutral: 1 - (positiveCount + negativeCount) / (text.split(' ').length || 1),
+            negative: negativeCount / (total || 1)
+        }
+    };
+};
