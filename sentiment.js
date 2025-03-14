@@ -135,9 +135,73 @@ function stripHtmlAndDecodeEntities(html) {
     return matches ? [...new Set(matches)] : []; // Remove duplicates
   }
 
+// Function to fetch and save the top 100 cryptocurrencies from CoinMarketCap
+const fetchAndSaveCryptoData = async () => {
+  try {
+    if (!process.env.COINMARKETCAP_API_KEY) {
+      console.log("No CoinMarketCap API key found, skipping crypto data update");
+      return false;
+    }
+    
+    console.log("Fetching top 100 cryptocurrencies from CoinMarketCap...");
+    
+    const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest', {
+      headers: {
+        'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
+      },
+      params: {
+        limit: 1000, // Get top 100 cryptocurrencies
+        sort: 'market_cap',
+        sort_dir: 'desc'
+      }
+    });
+    
+    if (!response.data || !response.data.data || !Array.isArray(response.data.data)) {
+      console.error("Invalid response from CoinMarketCap API");
+      return false;
+    }
+    
+    // Transform the data to match the expected format
+    const transformedData = {
+      data: {
+        constituents: response.data.data.map(crypto => ({
+          id: crypto.id,
+          name: crypto.name,
+          symbol: crypto.symbol,
+          url: `https://coinmarketcap.com/currencies/${crypto.slug}`,
+          weight: crypto.quote.USD.market_cap || 0
+        }))
+      },
+      status: response.data.status
+    };
+    
+    // Save the data to a file
+    const cryptoDataPath = path.join(__dirname, 'assetDetection', 'cryptoData', 'latest100.json');
+    
+    // Ensure the directory exists
+    const dir = path.dirname(cryptoDataPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    fs.writeFileSync(cryptoDataPath, JSON.stringify(transformedData, null, 2));
+    console.log(`Saved ${transformedData.data.constituents.length} cryptocurrencies to ${cryptoDataPath}`);
+    
+    return true;
+  } catch (error) {
+    console.error("Error fetching crypto data from CoinMarketCap:", error.message);
+    return false;
+  }
+};
+
 const loadCryptoData = () => {
   try {
-    // Fallback to local data if API fetch fails or no API key
+    // Try to fetch fresh data first (async, but we don't wait for it)
+    fetchAndSaveCryptoData().catch(err => {
+      console.error("Background crypto data update failed:", err.message);
+    });
+    
+    // Load from the local file
     const cryptoDataPath = path.join(__dirname, 'assetDetection', 'cryptoData', 'latest100.json');
     const rawData = fs.readFileSync(cryptoDataPath, 'utf8');
     const cryptoData = JSON.parse(rawData);
@@ -1173,43 +1237,31 @@ const getPrimaryAssetPrice = async (asset) => {
         
         switch(asset.type) {
             case 'crypto':
-            // Try CoinMarketCap API as fallback for crypto
-            if (process.env.COINMARKETCAP_API_KEY) {
-              try {
-                  const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest', {
-                      headers: {
-                          'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
-                      },
-                      params: {
-                          symbol: asset.symbol
-                      }
-                  });
-                  
-                  if (response.data && response.data.data && response.data.data[asset.symbol]) {
-                      return response.data.data[asset.symbol].quote.USD.price.toFixed(2);
-                  }
-              } catch (error) {
-                  console.error(`CoinMarketCap fallback failed: ${error.message}`);
-              }
-          }
-          
-          // Try FMP API as another fallback for crypto
-          if (process.env.FMP_API_KEY) {
-              try {
-                  const fmpResponse = await axios.get(`https://financialmodelingprep.com/api/v3/quote/${asset.symbol}USD`, {
-                      params: {
-                          apikey: process.env.FMP_API_KEY
-                      }
-                  });
-                  
-                  if (fmpResponse.data && fmpResponse.data.length > 0 && fmpResponse.data[0].price) {
-                      return fmpResponse.data[0].price.toFixed(2);
-                  }
-              } catch (error) {
-                  console.error(`FMP crypto fallback failed: ${error.message}`);
-              }
-          }
-
+                // Use CoinMarketCap API as primary source for crypto
+                if (process.env.COINMARKETCAP_API_KEY) {
+                    try {
+                        const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest', {
+                            headers: {
+                                'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
+                            },
+                            params: {
+                                symbol: asset.symbol
+                            }
+                        });
+                        
+                        if (response.data && response.data.data && response.data.data[asset.symbol]) {
+                            return response.data.data[asset.symbol].quote.USD.price.toFixed(2);
+                        }
+                    } catch (error) {
+                        console.error(`CoinMarketCap API failed: ${error.message}`);
+                        throw new Error(`Primary data source failed for ${asset.name}`);
+                    }
+                } else {
+                    console.error("No CoinMarketCap API key found");
+                    throw new Error(`Primary data source failed for ${asset.name}`);
+                }
+                
+                // If we get here, CoinMarketCap failed
                 break;
                 
             case 'commodity':
@@ -1638,27 +1690,7 @@ const getFallbackAssetPrice = async (asset) => {
                 break;
                 
             case 'crypto':
-                // Try CoinMarketCap API as fallback for crypto
-                if (process.env.COINMARKETCAP_API_KEY) {
-                    try {
-                        const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest', {
-                            headers: {
-                                'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
-                            },
-                            params: {
-                                symbol: asset.symbol
-                            }
-                        });
-                        
-                        if (response.data && response.data.data && response.data.data[asset.symbol]) {
-                            return response.data.data[asset.symbol].quote.USD.price.toFixed(2);
-                        }
-                    } catch (error) {
-                        console.error(`CoinMarketCap fallback failed: ${error.message}`);
-                    }
-                }
-                
-                // Try FMP API as another fallback for crypto
+                // Try FMP API as fallback for crypto
                 if (process.env.FMP_API_KEY) {
                     try {
                         const fmpResponse = await axios.get(`https://financialmodelingprep.com/api/v3/quote/${asset.symbol}USD`, {
@@ -1674,6 +1706,33 @@ const getFallbackAssetPrice = async (asset) => {
                         console.error(`FMP crypto fallback failed: ${error.message}`);
                     }
                 }
+                
+                // Try Yahoo Finance as another fallback for crypto
+                try {
+                    const yahooSymbol = `${asset.symbol}-USD`;
+                    console.log(`Trying Yahoo Finance for ${asset.name} with symbol: ${yahooSymbol}`);
+                    
+                    const yahooResponse = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`, {
+                        params: {
+                            interval: '1d',
+                            range: '1d'
+                        }
+                    });
+                    
+                    if (yahooResponse.data && 
+                        yahooResponse.data.chart && 
+                        yahooResponse.data.chart.result && 
+                        yahooResponse.data.chart.result[0].meta && 
+                        yahooResponse.data.chart.result[0].meta.regularMarketPrice) {
+                        
+                        const price = yahooResponse.data.chart.result[0].meta.regularMarketPrice;
+                        console.log(`Yahoo Finance returned price for ${asset.name}: $${price}`);
+                        return price.toFixed(2);
+                    }
+                } catch (error) {
+                    console.error(`Yahoo Finance fallback failed for ${asset.name}:`, error.message);
+                }
+                
                 break;
                 
             case 'stock':
@@ -1842,6 +1901,73 @@ const getHistoricalData = async (asset) => {
             }
             
             return dummyData;
+        }
+        
+        // For crypto assets, try to get data from CoinMarketCap first
+        if (asset.type === 'crypto' && process.env.COINMARKETCAP_API_KEY) {
+            try {
+                console.log(`Fetching CoinMarketCap data for ${asset.name} (${asset.symbol})`);
+                
+                // Get current price and percent changes from CoinMarketCap
+                const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest', {
+                    headers: {
+                        'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
+                    },
+                    params: {
+                        symbol: asset.symbol
+                    }
+                });
+                
+                if (response.data && 
+                    response.data.data && 
+                    response.data.data[asset.symbol]) {
+                    
+                    const cryptoData = response.data.data[asset.symbol];
+                    const currentPrice = cryptoData.quote.USD.price;
+                    const percentChange1h = cryptoData.quote.USD.percent_change_1h || 0;
+                    const percentChange24h = cryptoData.quote.USD.percent_change_24h || 0;
+                    
+                    console.log(`Got CoinMarketCap data for ${asset.name}: $${currentPrice}, 1h: ${percentChange1h}%, 24h: ${percentChange24h}%`);
+                    
+                    // Generate 120 data points (about 1 day of 5-minute intervals)
+                    const dataPoints = 120;
+                    const simulatedData = [];
+                    const now = Date.now();
+                    const timeStep = 5 * 60 * 1000; // 5 minutes in milliseconds
+                    
+                    // Calculate price 24 hours ago based on 24h percent change
+                    const price24hAgo = currentPrice / (1 + (percentChange24h / 100));
+                    
+                    // Calculate price 1 hour ago based on 1h percent change
+                    const price1hAgo = currentPrice / (1 + (percentChange1h / 100));
+                    
+                    // Create a realistic price curve
+                    for (let i = 0; i < dataPoints; i++) {
+                        const timePoint = now - (dataPoints - 1 - i) * timeStep;
+                        
+                        let price;
+                        if (i >= dataPoints - 12) { // Last hour (12 points at 5-min intervals)
+                            // Interpolate between 1h ago and current price
+                            const ratio = (i - (dataPoints - 12)) / 11;
+                            price = price1hAgo + (currentPrice - price1hAgo) * ratio;
+                        } else {
+                            // Interpolate between 24h ago and 1h ago
+                            const ratio = i / (dataPoints - 12);
+                            price = price24hAgo + (price1hAgo - price24hAgo) * ratio;
+                        }
+                        
+                        // Add some random noise to make it look realistic
+                        const volatility = 0.001; // 0.1% volatility per step
+                        const randomWalk = (Math.random() - 0.5) * 2 * volatility * currentPrice;
+                        
+                        simulatedData.push([timePoint, price + randomWalk]);
+                    }
+                    
+                    return simulatedData;
+                }
+            } catch (error) {
+                console.error(`Error fetching CoinMarketCap data for ${asset.name}:`, error.message);
+            }
         }
         
         // Get the current price from the asset or fetch it if not available
