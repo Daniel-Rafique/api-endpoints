@@ -492,10 +492,86 @@ const stockTickerToName = {
 
 // Load stock data from CSV
 const loadStockData = () => {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     try {
-      const stockDataPath = path.join(__dirname, 'assetDetection', 'stocksData', 'latest100.csv');
+      // Create a stock map to store all stock data
       const stockMap = {};
+      
+      // First try to load from the extended-trading-stocks GitHub repository
+      try {
+        console.log("Fetching extended stock list from GitHub...");
+        const response = await axios.get('https://raw.githubusercontent.com/chuyin0321/extended-trading-stocks/main/stocks.json');
+        
+        if (response.data && Array.isArray(response.data)) {
+          const extendedStocks = response.data;
+          console.log(`Loaded ${extendedStocks.length} stocks from extended-trading-stocks list`);
+          
+          // Process each stock in the extended list
+          extendedStocks.forEach(stock => {
+            if (stock.symbol && stock.name) {
+              const ticker = stock.symbol.trim();
+              const companyName = stock.name.trim();
+              
+              // Add by ticker (lowercase for case-insensitive matching)
+              stockMap[ticker.toLowerCase()] = {
+                id: ticker,
+                name: companyName,
+                symbol: ticker,
+                type: 'stock'
+              };
+              
+              // Also add by company name for easier matching
+              stockMap[companyName.toLowerCase()] = {
+                id: ticker,
+                name: companyName,
+                symbol: ticker,
+                type: 'stock'
+              };
+              
+              // Add common variations (without "Inc.", "Corporation", etc.)
+              const simplifiedName = companyName
+                .replace(/ Inc\.?$| Corporation$| Corp\.?$| Co\.?$| Company$| plc$| Ltd\.?$/i, '')
+                .toLowerCase();
+              
+              if (simplifiedName !== companyName.toLowerCase()) {
+                stockMap[simplifiedName] = {
+                  id: ticker,
+                  name: companyName,
+                  symbol: ticker,
+                  type: 'stock'
+                };
+              }
+            }
+          });
+          
+          // Add specific entries for major companies to ensure they're always available
+          const majorCompanies = {
+            'apple': { id: "AAPL", name: "Apple Inc.", symbol: "AAPL", type: "stock" },
+            'amazon': { id: "AMZN", name: "Amazon.com Inc.", symbol: "AMZN", type: "stock" },
+            'google': { id: "GOOGL", name: "Alphabet Inc. (Google)", symbol: "GOOGL", type: "stock" },
+            'microsoft': { id: "MSFT", name: "Microsoft Corporation", symbol: "MSFT", type: "stock" },
+            'tesla': { id: "TSLA", name: "Tesla, Inc.", symbol: "TSLA", type: "stock" },
+            'facebook': { id: "META", name: "Meta Platforms, Inc.", symbol: "META", type: "stock" },
+            'meta': { id: "META", name: "Meta Platforms, Inc.", symbol: "META", type: "stock" },
+            'netflix': { id: "NFLX", name: "Netflix, Inc.", symbol: "NFLX", type: "stock" },
+            'nvidia': { id: "NVDA", name: "NVIDIA Corporation", symbol: "NVDA", type: "stock" }
+          };
+          
+          // Add major companies to the stock map
+          Object.entries(majorCompanies).forEach(([key, value]) => {
+            stockMap[key] = value;
+          });
+          
+          resolve(stockMap);
+          return;
+        }
+      } catch (githubError) {
+        console.error("Error fetching extended stock list:", githubError.message);
+        console.log("Falling back to local stock data...");
+      }
+      
+      // Fallback to local stock data if GitHub fetch fails
+      const stockDataPath = path.join(__dirname, 'assetDetection', 'stocksData', 'latest100.csv');
       const tickers = [];
       
       // First pass: extract header row to get all ticker symbols
@@ -542,7 +618,7 @@ const loadStockData = () => {
         }
       }
       
-      console.log(`Loaded ${tickers.length} stock tickers`);
+      console.log(`Loaded ${tickers.length} stock tickers from local data`);
       resolve(stockMap);
     } catch (error) {
       console.error("Error loading stock data:", error);
@@ -621,10 +697,9 @@ const detectAsset = async (query) => {
                             'market', 'trading', 'shares', 'equity', 'securities', 'commodity', 'index', 'forex',
                             'currency', 'exchange', 'rate', 'pair'];
         
-        // Check for specific company names first (highest priority)
+        // First check for specific asset types mentioned
         const fullQuery = query.toLowerCase();
         
-        // First check for specific asset types mentioned
         if (fullQuery.includes('s&p') || fullQuery.includes('s and p') || fullQuery.includes('spx')) {
             return marketAssets['spx'];
         }
@@ -637,41 +712,64 @@ const detectAsset = async (query) => {
             return marketAssets['comp'];
         }
         
-        // Add specific checks for common companies that might not be in the data
-        if (fullQuery.includes('amazon')) {
-            return {
-                id: "AMZN",
-                name: "Amazon.com Inc.",
-                symbol: "AMZN",
-                type: "stock"
-            };
+        // Check for stock tickers (typically 1-5 uppercase letters)
+        const queryUpperCase = query.toUpperCase();
+        const stockTickerRegex = /\b[A-Z]{1,5}\b/g;
+        const stockTickerMatches = [...queryUpperCase.matchAll(stockTickerRegex)];
+        
+        for (const match of stockTickerMatches) {
+            const ticker = match[0];
+            if (stockAssets[ticker.toLowerCase()]) {
+                const asset = stockAssets[ticker.toLowerCase()];
+                console.log(`Found stock ticker: ${asset.symbol} (${asset.name})`);
+                return asset;
+            }
+            
+            // Also check if it's an index or commodity symbol
+            if (marketAssets[ticker.toLowerCase()]) {
+                const asset = marketAssets[ticker.toLowerCase()];
+                console.log(`Found market asset symbol: ${asset.symbol} (${asset.name})`);
+                return asset;
+            }
         }
         
-        if (fullQuery.includes('apple')) {
-            return {
-                id: "AAPL",
-                name: "Apple Inc.",
-                symbol: "AAPL",
-                type: "stock"
-            };
+        // Split query into words and filter out common words
+        const queryWords = query.toLowerCase().split(/\s+/).filter(word => !commonWords.includes(word));
+        
+        // Check for exact matches in all asset types
+        for (const word of queryWords) {
+            if (word.length < 2) continue; // Skip very short words
+            
+            // Check stock assets first (prioritize stocks over other assets)
+            if (stockAssets[word]) {
+                console.log(`Found stock match: ${stockAssets[word].name} (${stockAssets[word].symbol})`);
+                return stockAssets[word];
+            }
+            
+            // Check crypto assets
+            if (cryptoAssets[word]) {
+                console.log(`Found crypto asset match: ${cryptoAssets[word].name} (${cryptoAssets[word].symbol})`);
+                return cryptoAssets[word];
+            }
+            
+            // Check market assets (FX, indices, commodities)
+            if (marketAssets[word]) {
+                console.log(`Found market asset match: ${marketAssets[word].name} (${marketAssets[word].type})`);
+                return marketAssets[word];
+            }
         }
         
-        if (fullQuery.includes('google') || fullQuery.includes('alphabet')) {
-            return {
-                id: "GOOGL",
-                name: "Alphabet Inc. (Google)",
-                symbol: "GOOGL",
-                type: "stock"
-            };
-        }
+        // Check for currency pairs in the format XXX/YYY
+        const currencyPairRegex = /([A-Z]{3})\/([A-Z]{3})/g;
+        const currencyPairMatches = [...queryUpperCase.matchAll(currencyPairRegex)];
         
-        if (fullQuery.includes('microsoft')) {
-            return {
-                id: "MSFT",
-                name: "Microsoft Corporation",
-                symbol: "MSFT",
-                type: "stock"
-            };
+        if (currencyPairMatches.length > 0) {
+            const pairSymbol = currencyPairMatches[0][0];
+            if (marketAssets[pairSymbol.toLowerCase()]) {
+                const asset = marketAssets[pairSymbol.toLowerCase()];
+                console.log(`Found currency pair: ${asset.symbol} (${asset.name})`);
+                return asset;
+            }
         }
         
         // Improved commodity detection - check for commodity names
@@ -710,66 +808,6 @@ const detectAsset = async (query) => {
             }
         }
         
-        // Check for currency pairs in the format XXX/YYY
-        const currencyPairRegex = /([A-Z]{3})\/([A-Z]{3})/g;
-        const currencyPairMatches = [...queryUpperCase.matchAll(currencyPairRegex)];
-        
-        if (currencyPairMatches.length > 0) {
-            const pairSymbol = currencyPairMatches[0][0];
-            if (marketAssets[pairSymbol.toLowerCase()]) {
-                const asset = marketAssets[pairSymbol.toLowerCase()];
-                console.log(`Found currency pair: ${asset.symbol} (${asset.name})`);
-                return asset;
-            }
-        }
-        
-        // Check for stock tickers (typically 1-5 uppercase letters)
-        const queryUpperCase = query.toUpperCase();
-        const stockTickerRegex = /\b[A-Z]{1,5}\b/g;
-        const stockTickerMatches = [...queryUpperCase.matchAll(stockTickerRegex)];
-        
-        for (const match of stockTickerMatches) {
-            const ticker = match[0];
-            if (stockAssets[ticker.toLowerCase()]) {
-                const asset = stockAssets[ticker.toLowerCase()];
-                console.log(`Found stock ticker: ${asset.symbol} (${asset.name})`);
-                return asset;
-            }
-            
-            // Also check if it's an index or commodity symbol
-            if (marketAssets[ticker.toLowerCase()]) {
-                const asset = marketAssets[ticker.toLowerCase()];
-                console.log(`Found market asset symbol: ${asset.symbol} (${asset.name})`);
-                return asset;
-            }
-        }
-        
-        // Split query into words and filter out common words
-        const queryWords = query.toLowerCase().split(/\s+/).filter(word => !commonWords.includes(word));
-        
-        // Check for exact matches in all asset types
-        for (const word of queryWords) {
-            if (word.length < 2) continue; // Skip very short words
-            
-            // Check crypto assets
-            if (cryptoAssets[word]) {
-                console.log(`Found crypto asset match: ${cryptoAssets[word].name} (${cryptoAssets[word].symbol})`);
-                return cryptoAssets[word];
-            }
-            
-            // Check stock assets
-            if (stockAssets[word]) {
-                console.log(`Found stock match: ${stockAssets[word].name} (${stockAssets[word].symbol})`);
-                return stockAssets[word];
-            }
-            
-            // Check market assets (FX, indices, commodities)
-            if (marketAssets[word]) {
-                console.log(`Found market asset match: ${marketAssets[word].name} (${marketAssets[word].type})`);
-                return marketAssets[word];
-            }
-        }
-        
         // Check for commodity symbols - moved to lower priority to avoid false matches
         const commoditySymbols = {
             'XAU': commodityKeywords['gold'],
@@ -804,58 +842,13 @@ const detectAsset = async (query) => {
         }
         
         // If we get here, no match was found
-        // Let's check for partial matches in company names as a last resort
-        const companyPartialMatches = {
-            'apple': {
-                id: "AAPL",
-                name: "Apple Inc.",
-                symbol: "AAPL",
-                type: "stock"
-            },
-            'amazon': {
-                id: "AMZN",
-                name: "Amazon.com Inc.",
-                symbol: "AMZN",
-                type: "stock"
-            },
-            'google': {
-                id: "GOOGL",
-                name: "Alphabet Inc. (Google)",
-                symbol: "GOOGL",
-                type: "stock"
-            },
-            'microsoft': {
-                id: "MSFT",
-                name: "Microsoft Corporation",
-                symbol: "MSFT",
-                type: "stock"
-            },
-            'tesla': {
-                id: "TSLA",
-                name: "Tesla, Inc.",
-                symbol: "TSLA",
-                type: "stock"
-            },
-            'facebook': {
-                id: "META",
-                name: "Meta Platforms, Inc.",
-                symbol: "META",
-                type: "stock"
-            },
-            'meta': {
-                id: "META",
-                name: "Meta Platforms, Inc.",
-                symbol: "META",
-                type: "stock"
-            }
+        // Default to Bitcoin as a fallback
+        return {
+            id: "1",
+            name: "Bitcoin",
+            symbol: "BTC",
+            type: "crypto"
         };
-        
-        for (const [companyName, asset] of Object.entries(companyPartialMatches)) {
-            if (lowerQuery.includes(companyName)) {
-                console.log(`Found company name match: ${asset.name} (${asset.symbol})`);
-                return asset;
-            }
-        }
     } catch (error) {
         console.error("Error detecting asset:", error);
         return {
