@@ -2598,7 +2598,12 @@ app.use((req, res, next) => {
 app.post("/api/sentiment", async (req, res) => {
     console.log("Received request:", req.body);
     const userQuery = req.body.question || "Is now a good time to buy crypto?";
-    const asset = await detectAsset(userQuery.toLowerCase());
+    
+    // Clean the query by removing punctuation and special characters
+    const cleanedQuery = userQuery.replace(/[^\w\s]/g, '').toLowerCase();
+    console.log(`Cleaned query for asset detection: "${cleanedQuery}"`);
+    
+    const asset = await detectAsset(cleanedQuery);
     const assetData = await getAssetData(asset);
     const assetPrice = assetData.price;
     const financialInsights = assetData.financialInsights;
