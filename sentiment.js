@@ -2682,7 +2682,6 @@ app.post("/api/sentiment", async (req, res) => {
                 asset_price: assetPrice,
                 chart: chartData, // Include Chart.js configuration
                 social_sentiment: sentiment.sentiment || "Neutral",
-                sentiment_details: sentiment, // Include the full sentiment object for more detailed analysis if needed
                 analysis: formattedResponse
             }
         ],
