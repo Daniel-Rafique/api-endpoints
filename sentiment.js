@@ -564,18 +564,50 @@ const loadStockData = () => {
       // Create a stock map to store all stock data
       const stockMap = {};
       
-      // First try to load from the extended-trading-stocks GitHub repository
+      // First try to load from the Hugging Face dataset
       try {
-        console.log("Fetching extended stock list from GitHub...");
-        const response = await axios.get('https://raw.githubusercontent.com/chuyin0321/extended-trading-stocks/main/stocks.json');
+        console.log("Fetching stock list from Hugging Face...");
         
-        if (response.data && Array.isArray(response.data)) {
-          const extendedStocks = response.data;
-          console.log(`Loaded ${extendedStocks.length} stocks from extended-trading-stocks list`);
+        // Define major companies for consistent availability
+        const majorCompanies = {
+          'apple': { id: "AAPL", name: "Apple Inc.", symbol: "AAPL", type: "stock" },
+          'amazon': { id: "AMZN", name: "Amazon.com Inc.", symbol: "AMZN", type: "stock" },
+          'google': { id: "GOOGL", name: "Alphabet Inc. (Google)", symbol: "GOOGL", type: "stock" },
+          'microsoft': { id: "MSFT", name: "Microsoft Corporation", symbol: "MSFT", type: "stock" },
+          'tesla': { id: "TSLA", name: "Tesla, Inc.", symbol: "TSLA", type: "stock" },
+          'facebook': { id: "META", name: "Meta Platforms, Inc.", symbol: "META", type: "stock" },
+          'meta': { id: "META", name: "Meta Platforms, Inc.", symbol: "META", type: "stock" },
+          'netflix': { id: "NFLX", name: "Netflix, Inc.", symbol: "NFLX", type: "stock" },
+          'nvidia': { id: "NVDA", name: "NVIDIA Corporation", symbol: "NVDA", type: "stock" }
+        };
+        
+        // Update the URL to fetch from Hugging Face API
+        const response = await axios.get('https://huggingface.co/api/datasets/chuyin0321/timeseries-daily-stocks/parquet/default/train', {
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (response.data && response.data.rows) {
+          // Extract unique stock symbols and names from the dataset
+          const stocksSet = new Set();
+          const stocksData = [];
           
-          // Process each stock in the extended list
-          extendedStocks.forEach(stock => {
-            if (stock.symbol && stock.name) {
+          response.data.rows.forEach(row => {
+            if (row.symbol && !stocksSet.has(row.symbol)) {
+              stocksSet.add(row.symbol);
+              stocksData.push({
+                symbol: row.symbol,
+                name: row.symbol + " Stock" // Default name if not provided
+              });
+            }
+          });
+          
+          console.log(`Loaded ${stocksData.length} stocks from Hugging Face dataset`);
+          
+          // Process each stock in the list
+          stocksData.forEach(stock => {
+            if (stock.symbol) {
               const ticker = stock.symbol.trim();
               const companyName = stock.name.trim();
               
@@ -594,24 +626,26 @@ const loadStockData = () => {
                 symbol: ticker,
                 type: 'stock'
               };
-              
-              // Add common variations (without "Inc.", "Corporation", etc.)
-              const simplifiedName = companyName
-                .replace(/ Inc\.?$| Corporation$| Corp\.?$| Co\.?$| Company$| plc$| Ltd\.?$/i, '')
-                .toLowerCase();
-              
-              if (simplifiedName !== companyName.toLowerCase()) {
-                stockMap[simplifiedName] = {
-                  id: ticker,
-                  name: companyName,
-                  symbol: ticker,
-                  type: 'stock'
-                };
-              }
             }
           });
           
-          // Add specific entries for major companies to ensure they're always available
+          // Add major companies to the stock map
+          Object.entries(majorCompanies).forEach(([key, value]) => {
+            stockMap[key] = value;
+          });
+          
+          resolve(stockMap);
+          return;
+        }
+      } catch (huggingFaceError) {
+        console.error("Error fetching stock list from Hugging Face:", huggingFaceError.message);
+        console.log("Trying local stock data file...");
+        
+        // Try the local JSON file we created
+        try {
+          console.log("Trying local stocks.json file...");
+          
+          // Define major companies for consistent availability (repeated for scope)
           const majorCompanies = {
             'apple': { id: "AAPL", name: "Apple Inc.", symbol: "AAPL", type: "stock" },
             'amazon': { id: "AMZN", name: "Amazon.com Inc.", symbol: "AMZN", type: "stock" },
@@ -624,20 +658,69 @@ const loadStockData = () => {
             'nvidia': { id: "NVDA", name: "NVIDIA Corporation", symbol: "NVDA", type: "stock" }
           };
           
-          // Add major companies to the stock map
-          Object.entries(majorCompanies).forEach(([key, value]) => {
-            stockMap[key] = value;
-          });
+          const localStocksPath = path.join(__dirname, 'data', 'stocks.json');
           
-          resolve(stockMap);
-          return;
+          if (fs.existsSync(localStocksPath)) {
+            const stocksData = JSON.parse(fs.readFileSync(localStocksPath, 'utf8'));
+            
+            if (Array.isArray(stocksData)) {
+              console.log(`Loaded ${stocksData.length} stocks from local JSON file`);
+              
+              // Process each stock in the list
+              stocksData.forEach(stock => {
+                if (stock.symbol && stock.name) {
+                  const ticker = stock.symbol.trim();
+                  const companyName = stock.name.trim();
+                  
+                  // Add by ticker (lowercase for case-insensitive matching)
+                  stockMap[ticker.toLowerCase()] = {
+                    id: ticker,
+                    name: companyName,
+                    symbol: ticker,
+                    type: 'stock'
+                  };
+                  
+                  // Also add by company name for easier matching
+                  stockMap[companyName.toLowerCase()] = {
+                    id: ticker,
+                    name: companyName,
+                    symbol: ticker,
+                    type: 'stock'
+                  };
+                  
+                  // Add common variations (without "Inc.", "Corporation", etc.)
+                  const simplifiedName = companyName
+                    .replace(/ Inc\.?$| Corporation$| Corp\.?$| Co\.?$| Company$| plc$| Ltd\.?$/i, '')
+                    .toLowerCase();
+                  
+                  if (simplifiedName !== companyName.toLowerCase()) {
+                    stockMap[simplifiedName] = {
+                      id: ticker,
+                      name: companyName,
+                      symbol: ticker,
+                      type: 'stock'
+                    };
+                  }
+                }
+              });
+              
+              // Add major companies to the stock map
+              Object.entries(majorCompanies).forEach(([key, value]) => {
+                stockMap[key] = value;
+              });
+              
+              resolve(stockMap);
+              return;
+            }
+          } else {
+            console.log("Local stocks.json file not found");
+          }
+        } catch (localFileError) {
+          console.error("Error reading local stocks.json file:", localFileError.message);
         }
-      } catch (githubError) {
-        console.error("Error fetching extended stock list:", githubError.message);
-        console.log("Falling back to local stock data...");
       }
       
-      // Fallback to local stock data if GitHub fetch fails
+      // Fallback to local stock data if all remote fetches fail
       const stockDataPath = path.join(__dirname, 'assetDetection', 'stocksData', 'latest100.csv');
       const tickers = [];
       
