@@ -614,73 +614,6 @@ const detectAsset = async (query) => {
         
         console.log(`Detecting assets in query: "${query}"`);
         
-        // Improved commodity detection - check for commodity names first
-        const commodityKeywords = {
-            'gold': { id: "GOLD", name: "Gold", symbol: "XAU", category: "Precious Metals", type: "commodity" },
-            'silver': { id: "SILVER", name: "Silver", symbol: "XAG", category: "Precious Metals", type: "commodity" },
-            'platinum': { id: "PLATINUM", name: "Platinum", symbol: "XPT", category: "Precious Metals", type: "commodity" },
-            'palladium': { id: "PALLADIUM", name: "Palladium", symbol: "XPD", category: "Precious Metals", type: "commodity" },
-            'crude oil': { id: "CRUDE_OIL_WTI", name: "Crude Oil WTI", symbol: "CL", category: "Energy", type: "commodity" },
-            'crude': { id: "CRUDE_OIL_WTI", name: "Crude Oil WTI", symbol: "CL", category: "Energy", type: "commodity" },
-            'oil': { id: "CRUDE_OIL_WTI", name: "Crude Oil WTI", symbol: "CL", category: "Energy", type: "commodity" },
-            'brent': { id: "BRENT_CRUDE", name: "Brent Crude Oil", symbol: "BZ", category: "Energy", type: "commodity" },
-            'brent crude': { id: "BRENT_CRUDE", name: "Brent Crude Oil", symbol: "BZ", category: "Energy", type: "commodity" },
-            'natural gas': { id: "NATURAL_GAS", name: "Natural Gas", symbol: "NG", category: "Energy", type: "commodity" },
-            'copper': { id: "COPPER", name: "Copper", symbol: "HG", category: "Base Metals", type: "commodity" },
-            'aluminum': { id: "ALUMINUM", name: "Aluminum", symbol: "ALU", category: "Base Metals", type: "commodity" },
-            'aluminium': { id: "ALUMINUM", name: "Aluminum", symbol: "ALU", category: "Base Metals", type: "commodity" },
-            'nickel': { id: "NICKEL", name: "Nickel", symbol: "NI", category: "Base Metals", type: "commodity" },
-            'zinc': { id: "ZINC", name: "Zinc", symbol: "ZNC", category: "Base Metals", type: "commodity" },
-            'lead': { id: "LEAD", name: "Lead", symbol: "LD", category: "Base Metals", type: "commodity" },
-            'corn': { id: "CORN", name: "Corn", symbol: "ZC", category: "Agriculture", type: "commodity" },
-            'wheat': { id: "WHEAT", name: "Wheat", symbol: "ZW", category: "Agriculture", type: "commodity" },
-            'soybeans': { id: "SOYBEANS", name: "Soybeans", symbol: "ZS", category: "Agriculture", type: "commodity" },
-            'coffee': { id: "COFFEE", name: "Coffee", symbol: "KC", category: "Agriculture", type: "commodity" },
-            'sugar': { id: "SUGAR", name: "Sugar", symbol: "SB", category: "Agriculture", type: "commodity" },
-            'cotton': { id: "COTTON", name: "Cotton", symbol: "CT", category: "Agriculture", type: "commodity" },
-            'cocoa': { id: "COCOA", name: "Cocoa", symbol: "CC", category: "Agriculture", type: "commodity" }
-        };
-        
-        // Check for commodity keywords in the query
-        const lowerQuery = query.toLowerCase();
-        for (const [keyword, commodity] of Object.entries(commodityKeywords)) {
-            if (lowerQuery.includes(keyword)) {
-                console.log(`Found commodity keyword match: ${commodity.name} (${commodity.symbol})`);
-                return commodity;
-            }
-        }
-        
-        // Check for commodity symbols
-        const commoditySymbols = {
-            'XAU': commodityKeywords['gold'],
-            'XAG': commodityKeywords['silver'],
-            'XPT': commodityKeywords['platinum'],
-            'XPD': commodityKeywords['palladium'],
-            'CL': commodityKeywords['crude oil'],
-            'BZ': commodityKeywords['brent crude'],
-            'NG': commodityKeywords['natural gas'],
-            'HG': commodityKeywords['copper'],
-            'ALU': commodityKeywords['aluminum'],
-            'NI': commodityKeywords['nickel'],
-            'ZNC': commodityKeywords['zinc'],
-            'LD': commodityKeywords['lead'],
-            'ZC': commodityKeywords['corn'],
-            'ZW': commodityKeywords['wheat'],
-            'ZS': commodityKeywords['soybeans'],
-            'KC': commodityKeywords['coffee'],
-            'SB': commodityKeywords['sugar'],
-            'CT': commodityKeywords['cotton'],
-            'CC': commodityKeywords['cocoa']
-        };
-        
-        const queryUpperCase = query.toUpperCase();
-        for (const [symbol, commodity] of Object.entries(commoditySymbols)) {
-            if (queryUpperCase.includes(symbol)) {
-                console.log(`Found commodity symbol match: ${commodity.name} (${commodity.symbol})`);
-                return commodity;
-            }
-        }
-        
         // Common words to ignore
         const commonWords = ['is', 'now', 'a', 'good', 'time', 'to', 'buy', 'sell', 'invest', 'in', 'the', 'and', 
                             'or', 'for', 'should', 'i', 'my', 'about', 'what', 'how', 'when', 'price', 'value', 
@@ -688,66 +621,7 @@ const detectAsset = async (query) => {
                             'market', 'trading', 'shares', 'equity', 'securities', 'commodity', 'index', 'forex',
                             'currency', 'exchange', 'rate', 'pair'];
         
-        // Check for currency pairs in the format XXX/YYY
-        const currencyPairRegex = /([A-Z]{3})\/([A-Z]{3})/g;
-        const currencyPairMatches = [...queryUpperCase.matchAll(currencyPairRegex)];
-        
-        if (currencyPairMatches.length > 0) {
-            const pairSymbol = currencyPairMatches[0][0];
-            if (marketAssets[pairSymbol.toLowerCase()]) {
-                const asset = marketAssets[pairSymbol.toLowerCase()];
-                console.log(`Found currency pair: ${asset.symbol} (${asset.name})`);
-                return asset;
-            }
-        }
-        
-        // Check for stock tickers (typically 1-5 uppercase letters)
-        const stockTickerRegex = /\b[A-Z]{1,5}\b/g;
-        const stockTickerMatches = [...queryUpperCase.matchAll(stockTickerRegex)];
-        
-        for (const match of stockTickerMatches) {
-            const ticker = match[0];
-            if (stockAssets[ticker.toLowerCase()]) {
-                const asset = stockAssets[ticker.toLowerCase()];
-                console.log(`Found stock ticker: ${asset.symbol} (${asset.name})`);
-                return asset;
-            }
-            
-            // Also check if it's an index or commodity symbol
-            if (marketAssets[ticker.toLowerCase()]) {
-                const asset = marketAssets[ticker.toLowerCase()];
-                console.log(`Found market asset symbol: ${asset.symbol} (${asset.name})`);
-                return asset;
-            }
-        }
-        
-        // Split query into words and filter out common words
-        const queryWords = query.toLowerCase().split(/\s+/).filter(word => !commonWords.includes(word));
-        
-        // Check for exact matches in all asset types
-        for (const word of queryWords) {
-            if (word.length < 2) continue; // Skip very short words
-            
-            // Check crypto assets
-            if (cryptoAssets[word]) {
-                console.log(`Found crypto asset match: ${cryptoAssets[word].name} (${cryptoAssets[word].symbol})`);
-                return cryptoAssets[word];
-            }
-            
-            // Check stock assets
-            if (stockAssets[word]) {
-                console.log(`Found stock match: ${stockAssets[word].name} (${stockAssets[word].symbol})`);
-                return stockAssets[word];
-            }
-            
-            // Check market assets (FX, indices, commodities)
-            if (marketAssets[word]) {
-                console.log(`Found market asset match: ${marketAssets[word].name} (${marketAssets[word].type})`);
-                return marketAssets[word];
-            }
-        }
-        
-        // Check for multi-word asset names in the full query
+        // Check for specific company names first (highest priority)
         const fullQuery = query.toLowerCase();
         
         // First check for specific asset types mentioned
@@ -800,54 +674,188 @@ const detectAsset = async (query) => {
             };
         }
         
-        if (fullQuery.includes('tesla')) {
-            return {
+        // Improved commodity detection - check for commodity names
+        const commodityKeywords = {
+            'gold': { id: "GOLD", name: "Gold", symbol: "XAU", category: "Precious Metals", type: "commodity" },
+            'silver': { id: "SILVER", name: "Silver", symbol: "XAG", category: "Precious Metals", type: "commodity" },
+            'platinum': { id: "PLATINUM", name: "Platinum", symbol: "XPT", category: "Precious Metals", type: "commodity" },
+            'palladium': { id: "PALLADIUM", name: "Palladium", symbol: "XPD", category: "Precious Metals", type: "commodity" },
+            'crude oil': { id: "CRUDE_OIL_WTI", name: "Crude Oil WTI", symbol: "CL", category: "Energy", type: "commodity" },
+            'crude': { id: "CRUDE_OIL_WTI", name: "Crude Oil WTI", symbol: "CL", category: "Energy", type: "commodity" },
+            'oil': { id: "CRUDE_OIL_WTI", name: "Crude Oil WTI", symbol: "CL", category: "Energy", type: "commodity" },
+            'brent': { id: "BRENT_CRUDE", name: "Brent Crude Oil", symbol: "BZ", category: "Energy", type: "commodity" },
+            'brent crude': { id: "BRENT_CRUDE", name: "Brent Crude Oil", symbol: "BZ", category: "Energy", type: "commodity" },
+            'natural gas': { id: "NATURAL_GAS", name: "Natural Gas", symbol: "NG", category: "Energy", type: "commodity" },
+            'copper': { id: "COPPER", name: "Copper", symbol: "HG", category: "Base Metals", type: "commodity" },
+            'aluminum': { id: "ALUMINUM", name: "Aluminum", symbol: "ALU", category: "Base Metals", type: "commodity" },
+            'aluminium': { id: "ALUMINUM", name: "Aluminum", symbol: "ALU", category: "Base Metals", type: "commodity" },
+            'nickel': { id: "NICKEL", name: "Nickel", symbol: "NI", category: "Base Metals", type: "commodity" },
+            'zinc': { id: "ZINC", name: "Zinc", symbol: "ZNC", category: "Base Metals", type: "commodity" },
+            'lead': { id: "LEAD", name: "Lead", symbol: "LD", category: "Base Metals", type: "commodity" },
+            'corn': { id: "CORN", name: "Corn", symbol: "ZC", category: "Agriculture", type: "commodity" },
+            'wheat': { id: "WHEAT", name: "Wheat", symbol: "ZW", category: "Agriculture", type: "commodity" },
+            'soybeans': { id: "SOYBEANS", name: "Soybeans", symbol: "ZS", category: "Agriculture", type: "commodity" },
+            'coffee': { id: "COFFEE", name: "Coffee", symbol: "KC", category: "Agriculture", type: "commodity" },
+            'sugar': { id: "SUGAR", name: "Sugar", symbol: "SB", category: "Agriculture", type: "commodity" },
+            'cotton': { id: "COTTON", name: "Cotton", symbol: "CT", category: "Agriculture", type: "commodity" },
+            'cocoa': { id: "COCOA", name: "Cocoa", symbol: "CC", category: "Agriculture", type: "commodity" }
+        };
+        
+        // Check for commodity keywords in the query
+        const lowerQuery = query.toLowerCase();
+        for (const [keyword, commodity] of Object.entries(commodityKeywords)) {
+            if (lowerQuery.includes(keyword)) {
+                console.log(`Found commodity keyword match: ${commodity.name} (${commodity.symbol})`);
+                return commodity;
+            }
+        }
+        
+        // Check for currency pairs in the format XXX/YYY
+        const currencyPairRegex = /([A-Z]{3})\/([A-Z]{3})/g;
+        const currencyPairMatches = [...queryUpperCase.matchAll(currencyPairRegex)];
+        
+        if (currencyPairMatches.length > 0) {
+            const pairSymbol = currencyPairMatches[0][0];
+            if (marketAssets[pairSymbol.toLowerCase()]) {
+                const asset = marketAssets[pairSymbol.toLowerCase()];
+                console.log(`Found currency pair: ${asset.symbol} (${asset.name})`);
+                return asset;
+            }
+        }
+        
+        // Check for stock tickers (typically 1-5 uppercase letters)
+        const queryUpperCase = query.toUpperCase();
+        const stockTickerRegex = /\b[A-Z]{1,5}\b/g;
+        const stockTickerMatches = [...queryUpperCase.matchAll(stockTickerRegex)];
+        
+        for (const match of stockTickerMatches) {
+            const ticker = match[0];
+            if (stockAssets[ticker.toLowerCase()]) {
+                const asset = stockAssets[ticker.toLowerCase()];
+                console.log(`Found stock ticker: ${asset.symbol} (${asset.name})`);
+                return asset;
+            }
+            
+            // Also check if it's an index or commodity symbol
+            if (marketAssets[ticker.toLowerCase()]) {
+                const asset = marketAssets[ticker.toLowerCase()];
+                console.log(`Found market asset symbol: ${asset.symbol} (${asset.name})`);
+                return asset;
+            }
+        }
+        
+        // Split query into words and filter out common words
+        const queryWords = query.toLowerCase().split(/\s+/).filter(word => !commonWords.includes(word));
+        
+        // Check for exact matches in all asset types
+        for (const word of queryWords) {
+            if (word.length < 2) continue; // Skip very short words
+            
+            // Check crypto assets
+            if (cryptoAssets[word]) {
+                console.log(`Found crypto asset match: ${cryptoAssets[word].name} (${cryptoAssets[word].symbol})`);
+                return cryptoAssets[word];
+            }
+            
+            // Check stock assets
+            if (stockAssets[word]) {
+                console.log(`Found stock match: ${stockAssets[word].name} (${stockAssets[word].symbol})`);
+                return stockAssets[word];
+            }
+            
+            // Check market assets (FX, indices, commodities)
+            if (marketAssets[word]) {
+                console.log(`Found market asset match: ${marketAssets[word].name} (${marketAssets[word].type})`);
+                return marketAssets[word];
+            }
+        }
+        
+        // Check for commodity symbols - moved to lower priority to avoid false matches
+        const commoditySymbols = {
+            'XAU': commodityKeywords['gold'],
+            'XAG': commodityKeywords['silver'],
+            'XPT': commodityKeywords['platinum'],
+            'XPD': commodityKeywords['palladium'],
+            'CL': commodityKeywords['crude oil'],
+            'BZ': commodityKeywords['brent crude'],
+            'NG': commodityKeywords['natural gas'],
+            'HG': commodityKeywords['copper'],
+            'ALU': commodityKeywords['aluminum'],
+            'NI': commodityKeywords['nickel'],
+            'ZNC': commodityKeywords['zinc'],
+            'LD': commodityKeywords['lead'],
+            'ZC': commodityKeywords['corn'],
+            'ZW': commodityKeywords['wheat'],
+            'ZS': commodityKeywords['soybeans'],
+            'KC': commodityKeywords['coffee'],
+            'SB': commodityKeywords['sugar'],
+            'CT': commodityKeywords['cotton'],
+            'CC': commodityKeywords['cocoa']
+        };
+        
+        // Only check for commodity symbols if they appear as standalone words
+        // to avoid false matches like "LD" in "apple"
+        for (const [symbol, commodity] of Object.entries(commoditySymbols)) {
+            const symbolRegex = new RegExp(`\\b${symbol}\\b`, 'i');
+            if (symbolRegex.test(queryUpperCase)) {
+                console.log(`Found commodity symbol match: ${commodity.name} (${commodity.symbol})`);
+                return commodity;
+            }
+        }
+        
+        // If we get here, no match was found
+        // Let's check for partial matches in company names as a last resort
+        const companyPartialMatches = {
+            'apple': {
+                id: "AAPL",
+                name: "Apple Inc.",
+                symbol: "AAPL",
+                type: "stock"
+            },
+            'amazon': {
+                id: "AMZN",
+                name: "Amazon.com Inc.",
+                symbol: "AMZN",
+                type: "stock"
+            },
+            'google': {
+                id: "GOOGL",
+                name: "Alphabet Inc. (Google)",
+                symbol: "GOOGL",
+                type: "stock"
+            },
+            'microsoft': {
+                id: "MSFT",
+                name: "Microsoft Corporation",
+                symbol: "MSFT",
+                type: "stock"
+            },
+            'tesla': {
                 id: "TSLA",
-                name: "Tesla Inc.",
+                name: "Tesla, Inc.",
                 symbol: "TSLA",
                 type: "stock"
-            };
-        }
-        
-        if (fullQuery.includes('meta') || fullQuery.includes('facebook')) {
-            return {
+            },
+            'facebook': {
                 id: "META",
-                name: "Meta Platforms Inc.",
+                name: "Meta Platforms, Inc.",
                 symbol: "META",
                 type: "stock"
-            };
-        }
-        
-        // Check for longer asset names
-        for (const [key, asset] of Object.entries(marketAssets)) {
-            if (key.length > 5 && fullQuery.includes(key)) {
-                console.log(`Found market asset in query: ${asset.name}`);
-                return asset;
+            },
+            'meta': {
+                id: "META",
+                name: "Meta Platforms, Inc.",
+                symbol: "META",
+                type: "stock"
             }
-        }
-        
-        for (const [key, asset] of Object.entries(stockAssets)) {
-            if (key.length > 5 && fullQuery.includes(key)) {
-                console.log(`Found company name in query: ${asset.name}`);
-                return asset;
-            }
-        }
-        
-        for (const [key, asset] of Object.entries(cryptoAssets)) {
-            if (key.length > 5 && fullQuery.includes(key)) {
-                console.log(`Found crypto name in query: ${asset.name}`);
-                return asset;
-            }
-        }
-        
-        // Default to bitcoin if no matches found
-        console.log("No reliable asset matches found, defaulting to bitcoin");
-        return {
-            id: "1",
-            name: "Bitcoin",
-            symbol: "BTC",
-            type: "crypto"
         };
+        
+        for (const [companyName, asset] of Object.entries(companyPartialMatches)) {
+            if (lowerQuery.includes(companyName)) {
+                console.log(`Found company name match: ${asset.name} (${asset.symbol})`);
+                return asset;
+            }
+        }
     } catch (error) {
         console.error("Error detecting asset:", error);
         return {
