@@ -2,12 +2,12 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { OpenAI } = require('openai');
-const vader = require('vader-sentiment');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const xml2js = require('xml2js');
 const financialDataset = require('./financial-dataset');
+const { pipeline } = require('@huggingface/transformers');
 
 const app = express();
 const PORT = 3003;
@@ -1895,11 +1895,106 @@ const generateGenericSentimentData = (asset) => {
     return statements;
 };
 
-const analyzeSentiment = (tweets) => {
-    if (tweets.length === 0) return "Neutral";
-    const sentiments = tweets.map(tweet => vader.SentimentIntensityAnalyzer.polarity_scores(tweet).compound);
-    const avgSentiment = sentiments.reduce((a, b) => a + b, 0) / sentiments.length;
-    return avgSentiment > 0.1 ? "Positive" : avgSentiment < -0.1 ? "Negative" : "Neutral";
+// Initialize the sentiment analysis pipeline (this will be cached after first use)
+let sentimentClassifier = null;
+
+// Function to get or initialize the sentiment classifier
+const getSentimentClassifier = async () => {
+    if (!sentimentClassifier) {
+        console.log("Initializing Hugging Face sentiment analysis model...");
+        // We'll use a financial sentiment model specifically trained for financial text
+        sentimentClassifier = await pipeline('sentiment-analysis', 'ProsusAI/finbert');
+    }
+    return sentimentClassifier;
+};
+
+// New sentiment analysis function using Transformers.js
+const analyzeTextWithTransformers = async (text) => {
+    try {
+        const classifier = await getSentimentClassifier();
+        const result = await classifier(text);
+        
+        // Map the result to a format similar to your current implementation
+        const sentiment = result[0].label.toUpperCase();
+        const score = result[0].score;
+        
+        // Map to your existing format
+        let mappedSentiment;
+        if (sentiment === "POSITIVE") {
+            mappedSentiment = "Positive";
+        } else if (sentiment === "NEGATIVE") {
+            mappedSentiment = "Negative";
+        } else {
+            mappedSentiment = "Neutral";
+        }
+        
+        return {
+            sentiment: mappedSentiment,
+            confidence: score,
+            analysis: {
+                positive: sentiment === "POSITIVE" ? score : 0,
+                neutral: sentiment === "NEUTRAL" ? score : 0,
+                negative: sentiment === "NEGATIVE" ? score : 0
+            }
+        };
+    } catch (error) {
+        console.error("Error analyzing sentiment with Transformers.js:", error);
+        // Fallback to a neutral sentiment if there's an error
+        return {
+            sentiment: "Neutral",
+            confidence: 0.5,
+            analysis: {
+                positive: 0.33,
+                neutral: 0.34,
+                negative: 0.33
+            }
+        };
+    }
+};
+
+// Updated analyzeSentiment function
+const analyzeSentiment = async (tweets) => {
+    try {
+        // If no tweets are provided, return neutral sentiment
+        if (!tweets || tweets.length === 0) {
+            return {
+                sentiment: "Neutral",
+                confidence: 0.5,
+                analysis: {
+                    positive: 0.33,
+                    neutral: 0.34,
+                    negative: 0.33
+                }
+            };
+        }
+        
+        // Combine all tweets into a single text for analysis
+        const combinedText = tweets.join(" ");
+        
+        // Use the new Transformers.js implementation
+        return await analyzeTextWithTransformers(combinedText);
+    } catch (error) {
+        console.error("Error in sentiment analysis:", error);
+        // Return neutral sentiment as fallback
+        return {
+            sentiment: "Neutral",
+            confidence: 0.5,
+            analysis: {
+                positive: 0.33,
+                neutral: 0.34,
+                negative: 0.33
+            }
+        };
+    }
+};
+
+// Function to dispose of the model and free up memory
+const disposeSentimentModel = async () => {
+    if (sentimentClassifier) {
+        await sentimentClassifier.dispose();
+        sentimentClassifier = null;
+        console.log("Sentiment analysis model disposed");
+    }
 };
 
 const getOpenAIAnalysis = async (asset, assetPrice, sentiment, userQuery) => {
