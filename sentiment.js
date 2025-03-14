@@ -7,10 +7,21 @@ const fs = require('fs');
 const path = require('path');
 const xml2js = require('xml2js');
 const financialDataset = require('./financial-dataset');
-const { pipeline } = require('@huggingface/transformers');
+const { pipeline, env } = require('@huggingface/transformers');
+const { SentimentIntensityAnalyzer } = require('vader-sentiment');
 
 const app = express();
 const PORT = 3003;
+
+// Create models cache directory
+const modelsCacheDir = path.join(__dirname, 'models-cache');
+if (!fs.existsSync(modelsCacheDir)) {
+    fs.mkdirSync(modelsCacheDir, { recursive: true });
+}
+
+// Configure Transformers.js
+env.cacheDir = modelsCacheDir;
+env.allowRemoteModels = true;
 
 // Initialize the financial dataset when the server starts
 (async () => {
@@ -1902,13 +1913,20 @@ let sentimentClassifier = null;
 const getSentimentClassifier = async () => {
     if (!sentimentClassifier) {
         console.log("Initializing Hugging Face sentiment analysis model...");
-        // We'll use a financial sentiment model specifically trained for financial text
-        sentimentClassifier = await pipeline('sentiment-analysis', 'ProsusAI/finbert');
+        try {
+            // Use a more reliable and smaller model
+            sentimentClassifier = await pipeline('sentiment-analysis', 'distilbert-base-uncased-finetuned-sst-2-english');
+            console.log("Sentiment model loaded successfully");
+            return sentimentClassifier;
+        } catch (error) {
+            console.error("Error loading sentiment model:", error);
+            throw error;
+        }
     }
     return sentimentClassifier;
 };
 
-// New sentiment analysis function using Transformers.js
+// Sentiment analysis with Transformers.js
 const analyzeTextWithTransformers = async (text) => {
     try {
         const classifier = await getSentimentClassifier();
@@ -1939,7 +1957,37 @@ const analyzeTextWithTransformers = async (text) => {
         };
     } catch (error) {
         console.error("Error analyzing sentiment with Transformers.js:", error);
-        // Fallback to a neutral sentiment if there's an error
+        throw error; // Let the caller handle the fallback
+    }
+};
+
+// Fallback to VADER when Transformers.js fails
+const analyzeWithVADER = (text) => {
+    try {
+        const analyzer = new SentimentIntensityAnalyzer();
+        const result = analyzer.polarity_scores(text);
+        
+        // Map VADER results to your format
+        let sentiment;
+        if (result.compound >= 0.05) {
+            sentiment = "Positive";
+        } else if (result.compound <= -0.05) {
+            sentiment = "Negative";
+        } else {
+            sentiment = "Neutral";
+        }
+        
+        return {
+            sentiment: sentiment,
+            confidence: Math.abs(result.compound),
+            analysis: {
+                positive: result.pos,
+                neutral: result.neu,
+                negative: result.neg
+            }
+        };
+    } catch (error) {
+        console.error("Error in VADER analysis:", error);
         return {
             sentiment: "Neutral",
             confidence: 0.5,
@@ -1952,7 +2000,7 @@ const analyzeTextWithTransformers = async (text) => {
     }
 };
 
-// Updated analyzeSentiment function
+// Main sentiment analysis function with fallback
 const analyzeSentiment = async (tweets) => {
     try {
         // If no tweets are provided, return neutral sentiment
@@ -1971,8 +2019,14 @@ const analyzeSentiment = async (tweets) => {
         // Combine all tweets into a single text for analysis
         const combinedText = tweets.join(" ");
         
-        // Use the new Transformers.js implementation
-        return await analyzeTextWithTransformers(combinedText);
+        // Try Transformers.js first
+        try {
+            return await analyzeTextWithTransformers(combinedText);
+        } catch (error) {
+            console.log("Transformers.js failed, falling back to VADER:", error.message);
+            // Fall back to VADER if Transformers.js fails
+            return analyzeWithVADER(combinedText);
+        }
     } catch (error) {
         console.error("Error in sentiment analysis:", error);
         // Return neutral sentiment as fallback
@@ -1991,9 +2045,25 @@ const analyzeSentiment = async (tweets) => {
 // Function to dispose of the model and free up memory
 const disposeSentimentModel = async () => {
     if (sentimentClassifier) {
-        await sentimentClassifier.dispose();
-        sentimentClassifier = null;
-        console.log("Sentiment analysis model disposed");
+        try {
+            await sentimentClassifier.dispose();
+            sentimentClassifier = null;
+            console.log("Sentiment analysis model disposed");
+        } catch (error) {
+            console.error("Error disposing sentiment model:", error);
+        }
+    }
+};
+
+// Pre-download the model during server initialization
+const preloadSentimentModel = async () => {
+    try {
+        console.log("Pre-downloading sentiment model...");
+        await getSentimentClassifier();
+        console.log("Sentiment model pre-downloaded successfully");
+    } catch (error) {
+        console.error("Failed to pre-download sentiment model:", error);
+        console.log("Will fall back to VADER when needed");
     }
 };
 
