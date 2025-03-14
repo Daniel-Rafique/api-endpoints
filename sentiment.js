@@ -143,6 +143,22 @@ const fetchAndSaveCryptoData = async () => {
       return false;
     }
     
+    const cryptoDataPath = path.join(__dirname, 'assetDetection', 'cryptoData', 'latest100.json');
+    
+    // Check if the file exists and when it was last modified
+    if (fs.existsSync(cryptoDataPath)) {
+      const stats = fs.statSync(cryptoDataPath);
+      const lastModified = new Date(stats.mtime);
+      const now = new Date();
+      const hoursSinceLastUpdate = (now - lastModified) / (1000 * 60 * 60);
+      
+      // If the file was updated less than 24 hours ago, skip the update
+      if (hoursSinceLastUpdate < 24) {
+        console.log(`Crypto data was updated ${hoursSinceLastUpdate.toFixed(1)} hours ago, skipping update`);
+        return true;
+      }
+    }
+    
     console.log("Fetching top 100 cryptocurrencies from CoinMarketCap...");
     
     const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest', {
@@ -150,7 +166,7 @@ const fetchAndSaveCryptoData = async () => {
         'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
       },
       params: {
-        limit: 1000, // Get top 100 cryptocurrencies
+        limit: 100, // Get top 100 cryptocurrencies
         sort: 'market_cap',
         sort_dir: 'desc'
       }
@@ -172,11 +188,9 @@ const fetchAndSaveCryptoData = async () => {
           weight: crypto.quote.USD.market_cap || 0
         }))
       },
-      status: response.data.status
+      status: response.data.status,
+      lastUpdated: new Date().toISOString() // Add a timestamp for when the data was last updated
     };
-    
-    // Save the data to a file
-    const cryptoDataPath = path.join(__dirname, 'assetDetection', 'cryptoData', 'latest100.json');
     
     // Ensure the directory exists
     const dir = path.dirname(cryptoDataPath);
@@ -194,15 +208,68 @@ const fetchAndSaveCryptoData = async () => {
   }
 };
 
-const loadCryptoData = () => {
+const loadCryptoData = async () => {
   try {
-    // Try to fetch fresh data first (async, but we don't wait for it)
-    fetchAndSaveCryptoData().catch(err => {
-      console.error("Background crypto data update failed:", err.message);
-    });
-    
     // Load from the local file
     const cryptoDataPath = path.join(__dirname, 'assetDetection', 'cryptoData', 'latest100.json');
+    
+    // Check if the file exists
+    if (!fs.existsSync(cryptoDataPath)) {
+      console.log("Crypto data file doesn't exist yet, creating initial data");
+      
+      // Create initial data
+      if (process.env.COINMARKETCAP_API_KEY) {
+        try {
+          const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest', {
+            headers: {
+              'X-CMC_PRO_API_KEY': process.env.COINMARKETCAP_API_KEY
+            },
+            params: {
+              limit: 100,
+              sort: 'market_cap',
+              sort_dir: 'desc'
+            }
+          });
+          
+          if (response.data && response.data.data) {
+            // Transform the data to match the expected format
+            const transformedData = {
+              data: {
+                constituents: response.data.data.map(crypto => ({
+                  id: crypto.id,
+                  name: crypto.name,
+                  symbol: crypto.symbol,
+                  url: `https://coinmarketcap.com/currencies/${crypto.slug}`,
+                  weight: crypto.quote.USD.market_cap || 0
+                }))
+              },
+              status: response.data.status,
+              lastUpdated: new Date().toISOString()
+            };
+            
+            // Ensure the directory exists
+            const dir = path.dirname(cryptoDataPath);
+            if (!fs.existsSync(dir)) {
+              fs.mkdirSync(dir, { recursive: true });
+            }
+            
+            fs.writeFileSync(cryptoDataPath, JSON.stringify(transformedData, null, 2));
+            console.log(`Created initial crypto data file with ${transformedData.data.constituents.length} cryptocurrencies`);
+          }
+        } catch (apiError) {
+          console.error("Error creating initial crypto data:", apiError.message);
+          createDefaultCryptoData(cryptoDataPath);
+        }
+      } else {
+        createDefaultCryptoData(cryptoDataPath);
+      }
+    } else {
+      // Check if we need to update the data
+      await fetchAndSaveCryptoData().catch(err => {
+        console.error("Background crypto data update failed:", err.message);
+      });
+    }
+    
     const rawData = fs.readFileSync(cryptoDataPath, 'utf8');
     const cryptoData = JSON.parse(rawData);
     
@@ -249,6 +316,48 @@ const loadCryptoData = () => {
     console.error("Error loading crypto data:", error);
     return {};
   }
+};
+
+// Helper function to create default crypto data
+const createDefaultCryptoData = (cryptoDataPath) => {
+  // Create a minimal default data structure
+  const defaultData = {
+    data: {
+      constituents: [
+        {
+          id: 1,
+          name: "Bitcoin",
+          symbol: "BTC",
+          url: "https://coinmarketcap.com/currencies/bitcoin",
+          weight: 1000000000000
+        },
+        {
+          id: 1027,
+          name: "Ethereum",
+          symbol: "ETH",
+          url: "https://coinmarketcap.com/currencies/ethereum",
+          weight: 500000000000
+        }
+      ]
+    },
+    status: {
+      timestamp: new Date().toISOString(),
+      error_code: 0,
+      error_message: "",
+      elapsed: 0,
+      credit_count: 0
+    },
+    lastUpdated: new Date().toISOString()
+  };
+  
+  // Ensure the directory exists
+  const dir = path.dirname(cryptoDataPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  
+  fs.writeFileSync(cryptoDataPath, JSON.stringify(defaultData, null, 2));
+  console.log("Created default crypto data file with Bitcoin and Ethereum");
 };
 
 // Load FX, indices, and commodities data
@@ -912,7 +1021,7 @@ const detectAsset = async (query) => {
         }
         
         // Load all asset data
-        const cryptoAssets = loadCryptoData();
+        const cryptoAssets = await loadCryptoData();
         const stockAssets = await loadStockData();
         const marketAssets = loadMarketData(); // FX, indices, commodities
         
