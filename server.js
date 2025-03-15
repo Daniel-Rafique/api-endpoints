@@ -16,8 +16,6 @@ const dataManager = require('./database'); // This now imports the singleton ins
 const BalanceChecker = require('./BalanceChecker');
 const InstanceStart = require('./InstanceManager/start')
 const InstanceStop = require('./InstanceManager/stop')
-const axios = require('axios');
-const xml2js = require('xml2js');
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
