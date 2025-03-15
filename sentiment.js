@@ -2879,7 +2879,7 @@ app.post('/api/profiles', async (req, res) => {
   
       // Fetch RSS feed with search query for each page
       while (currentPage <= pagesToFetch) {
-        const response = await axios.get(`https://koynlabs.com/search/rss`, {
+        const response = await axios.get(`https://koyn.ai/search/rss`, {
           params: {
             f: 'tweets',
             q: query,
@@ -2927,7 +2927,7 @@ app.post('/api/profiles', async (req, res) => {
         data: {
           metadata: {
             title: `Search results for "${query}"`,
-            link: `https://koynlabs.com/search?q=${encodeURIComponent(query)}`,
+            link: `https://koyn.ai/search?q=${encodeURIComponent(query)}`,
             description: `Search results for "${query}"`,
             language: "en-us"
           },
