@@ -2153,7 +2153,7 @@ const getTwitterSentiment = async (asset) => {
         console.log(`Fetching sentiment data for: ${queryText}`);
         
         // Use the correct endpoint with proper parameter formatting
-        const response = await axios.post("https://api.koynlabs.com:3003/api/search", {
+        const response = await axios.post("https://koyn.ai:3001/api/search", {
             query: queryText,
             limit: 50
         });
@@ -2493,19 +2493,6 @@ const analyzeSentiment = async (tweets) => {
     return simpleRuleBasedSentiment(combinedText);
 };
 
-// Function to dispose of the model and free up memory
-const disposeSentimentModel = async () => {
-    if (sentimentClassifier) {
-        try {
-            await sentimentClassifier.dispose();
-            sentimentClassifier = null;
-            console.log("Sentiment analysis model disposed");
-        } catch (error) {
-            console.error("Error disposing sentiment model:", error);
-        }
-    }
-};
-
 // Pre-download the model during server startup
 (async () => {
   try {
@@ -2807,7 +2794,7 @@ app.post('/api/profiles', async (req, res) => {
   
     try {
       // Fetch RSS feed with profileId
-      const response = await axios.get(`https://koynlabs.com/${profileId}/rss`);
+      const response = await axios.get(`https://koyn.ai:3001/${profileId}/rss`);
       const parser = new xml2js.Parser({
         explicitArray: false,
         mergeAttrs: true
