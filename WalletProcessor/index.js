@@ -151,119 +151,158 @@ class WalletProcessor {
   }
 
   async calculateOptimalWallets(marketCap, liquidity, solAmount, tokenSupply = 1000000000) {
-    // Prepare input for neural network with additional factors
-    const input = {
-      marketCap: this.normalizeValue(marketCap, 2000000),
-      liquidity: this.normalizeValue(liquidity, 1000000),
-      solAmount: this.normalizeValue(solAmount, 15),
-      mcapToLiq: this.normalizeValue(marketCap / liquidity, 10),
-      supplyFactor: this.normalizeValue(tokenSupply, Math.pow(10, 12))
-    };
-
-    // Get network prediction
-    const result = this.network.run(input);
+    // Starting with a maximum of 1000 wallets for low cap tokens
+    let walletCount;
     
-    // Denormalize the result and calculate wallet count
-    const multiplier = this.denormalizeValue(result.walletMultiplier, 15);
-    let walletCount = Math.round(this.MIN_WALLETS * multiplier * solAmount);
-    
-    // Apply constraints
-    const maxWalletsFromSol = Math.floor(solAmount / this.MIN_SOL_PER_WALLET);
-    walletCount = Math.min(walletCount, maxWalletsFromSol);
-    walletCount = Math.max(walletCount, this.MIN_WALLETS);
-
-    // Calculate optimal SOL per wallet based on market conditions
-    const solPerWallet = this.calculateOptimalSolPerWallet(solAmount, walletCount, marketCap, liquidity);
-    
-    // Recalculate wallet count if SOL per wallet is below minimum threshold
-    if (solPerWallet < this.MIN_SOL_PER_WALLET) {
-      walletCount = Math.floor(solAmount / this.MIN_SOL_PER_WALLET);
+    if (marketCap < 1000) {
+      // Micro cap tokens - maximum 1000 wallets
+      walletCount = 1000;
+    } else if (marketCap < 10000) {
+      // Small cap tokens - half of micro caps
+      walletCount = 500;
+    } else if (marketCap < 50000) {
+      // Medium-small cap - half again
+      walletCount = 250;
+    } else if (marketCap < 200000) {
+      // Medium cap - half again
+      walletCount = 125;
+    } else if (marketCap < 500000) {
+      // Medium-large cap
+      walletCount = 60;
+    } else {
+      // Large cap
+      walletCount = 30;
     }
     
-    // Calculate trading parameters for the wallets
+    // Scale by SOL amount (more SOL = proportionally more wallets)
+    walletCount = Math.round(walletCount * Math.sqrt(solAmount));
+    
+    // Ensure we have at least the minimum number of wallets
+    walletCount = Math.max(walletCount, this.MIN_WALLETS);
+    
+    // Calculate SOL per wallet based on our target wallet count
+    const solPerWallet = this.calculateOptimalSolPerWallet(solAmount, walletCount, marketCap, liquidity);
+    
+    // Recalculate wallet count based on the SOL per wallet to ensure we don't exceed our SOL amount
+    const maxWalletsFromSol = Math.floor(solAmount / solPerWallet);
+    walletCount = Math.min(walletCount, maxWalletsFromSol);
+    
+    // Calculate trading parameters for these wallets
     const tradingParams = this.calculateTradingParameters(marketCap, liquidity, solPerWallet, tokenSupply);
-
+    
+    // Calculate total expected transactions
+    const txPerSol = Math.floor(1 / solPerWallet);
+    const totalTransactions = txPerSol * solAmount;
+    
     console.log(`
-Neural Network Wallet Analysis:
+Market Making Strategy Analysis:
   Market Metrics:
     Market Cap: $${marketCap.toFixed(2)}
     Liquidity: $${liquidity.toFixed(2)}
     MCap/Liq Ratio: ${(marketCap/liquidity).toFixed(2)}
     Token Supply: ${tokenSupply.toLocaleString()}
     
-  Wallet Distribution:
+  Wallet Strategy:
     Total SOL: ${solAmount}
-    Optimal Wallet Count: ${walletCount}
-    SOL per Wallet: ${solPerWallet.toFixed(6)}
+    Wallet Count: ${walletCount.toLocaleString()}
+    SOL per Wallet: ${solPerWallet.toFixed(8)}
+    Expected Transactions: ~${Math.floor(totalTransactions).toLocaleString()} (${txPerSol.toLocaleString()} per SOL)
     
   Trading Parameters:
     Take Profit: ${tradingParams.takeProfit.toFixed(2)}%
     Stop Loss: ${tradingParams.stopLoss.toFixed(2)}%
+    Spread: ${tradingParams.spreadPercentage.toFixed(2)}%
     Avg Order Size: ${tradingParams.orderSize.toFixed(2)} tokens
     Expected Slippage: ${tradingParams.expectedSlippage.toFixed(4)}%
     
-  Impact Analysis:
-    Network Multiplier: ${multiplier.toFixed(2)}x
-    Expected Market Impact: ${this.calculateExpectedImpact(marketCap, liquidity, solAmount, walletCount).toFixed(2)}%
-    Avg Trade Size: $${(solPerWallet * 20).toFixed(2)}
-    
-  Constraints:
-    Max Possible Wallets: ${maxWalletsFromSol}
-    Min Required Wallets: ${this.MIN_WALLETS}
-    Min SOL per Wallet: ${this.MIN_SOL_PER_WALLET}
+  Market Making Impact:
+    Avg Trade Size: $${(solPerWallet * 20).toFixed(4)}
+    Liquidity Impact per Trade: ${((solPerWallet * 20 / liquidity) * 100).toFixed(4)}%
     `);
 
     return {
       walletCount,
       solPerWallet,
-      tradingParams
+      tradingParams,
+      expectedTransactions: Math.floor(totalTransactions)
     };
   }
 
   calculateOptimalSolPerWallet(totalSol, walletCount, marketCap, liquidity) {
-    // Base calculation
+    // Base calculation - evenly distribute SOL among wallets
     let solPerWallet = totalSol / walletCount;
     
-    // Adjust based on market conditions
-    const mcapFactor = Math.log10(Math.max(marketCap, 100)) / Math.log10(1000000);
-    const liqFactor = Math.log10(Math.max(liquidity, 50)) / Math.log10(200000);
+    // The minimum SOL needed per transaction (covers fees)
+    const MIN_TX_SOL = 0.000005; // Minimum SOL needed for a transaction
     
-    // For micro-cap tokens, reduce SOL per wallet to avoid large market impact
-    if (marketCap < 5000) {
-      solPerWallet *= 0.7;
-    }
-    
-    // For low liquidity, reduce SOL per wallet further
-    if (liquidity < 1000) {
+    // Adjust based on liquidity
+    const mcapToLiqRatio = marketCap / Math.max(liquidity, 1);
+    if (mcapToLiqRatio > 5) {
+      // Very illiquid tokens need smaller trade sizes
+      solPerWallet *= 0.6;
+    } else if (mcapToLiqRatio > 2) {
+      // Moderately illiquid tokens
       solPerWallet *= 0.8;
     }
     
-    // Ensure we don't go below minimum
-    return Math.max(solPerWallet, this.MIN_SOL_PER_WALLET);
+    // Ensure we have enough SOL for tx fees plus a small buffer
+    return Math.max(solPerWallet, MIN_TX_SOL);
   }
 
   calculateTradingParameters(marketCap, liquidity, solPerWallet, tokenSupply) {
-    // Calculate optimal take profit percentage
-    // Lower mcap tokens can aim for higher take profit
-    const baseTakeProfit = 40 * Math.pow(marketCap / 1000000, -0.3);
+    // Take profit should be higher for lower market cap tokens
+    // as they tend to be more volatile and have larger price swings
+    let takeProfit;
+    if (marketCap < 1000) {
+      takeProfit = 30; // 30% for micro caps
+    } else if (marketCap < 10000) {
+      takeProfit = 20; // 20% for small caps
+    } else if (marketCap < 50000) {
+      takeProfit = 15; // 15% for medium-small caps
+    } else if (marketCap < 200000) {
+      takeProfit = 10; // 10% for medium caps
+    } else {
+      takeProfit = 5; // 5% for larger caps
+    }
     
-    // Calculate stop loss - typically tighter for higher liquidity tokens
-    const baseStopLoss = 15 * Math.pow(liquidity / 100000, -0.2);
+    // Stop loss should be tighter for more liquid tokens
+    // and wider for less liquid ones
+    let stopLoss;
+    if (liquidity < 500) {
+      stopLoss = 15; // 15% for very low liquidity
+    } else if (liquidity < 2000) {
+      stopLoss = 12; // 12% for low liquidity
+    } else if (liquidity < 10000) {
+      stopLoss = 10; // 10% for medium liquidity
+    } else {
+      stopLoss = 8; // 8% for high liquidity
+    }
     
-    // Calculate average order size in tokens
+    // Adjust for market cap to liquidity ratio
+    const mcapToLiqRatio = marketCap / Math.max(liquidity, 1);
+    if (mcapToLiqRatio > 5) {
+      stopLoss *= 1.5; // Wider stop loss for very illiquid tokens
+    } else if (mcapToLiqRatio > 2) {
+      stopLoss *= 1.2; // Slightly wider stop loss for moderately illiquid tokens
+    }
+    
+    // Calculate the estimated token price and average order size
     const estimatedTokenPrice = marketCap / tokenSupply;
-    const solValueInUsd = solPerWallet * 20; // Approximate SOL value
-    const averageOrderSize = (solValueInUsd * 0.5) / estimatedTokenPrice; // 50% of wallet per order
+    const solValueInUsd = solPerWallet * 20; // Approximate SOL value in USD
+    const averageOrderSize = solValueInUsd / estimatedTokenPrice; // Tokens per order
     
-    // Calculate expected slippage based on liquidity and order size
-    const orderSizeUsd = solValueInUsd * 0.5;
-    const expectedSlippage = (orderSizeUsd / Math.sqrt(liquidity)) * 100;
+    // Calculate expected slippage based on order size and liquidity
+    const expectedSlippage = (solValueInUsd / Math.sqrt(liquidity)) * 100;
+    
+    // For market making, calculate spread based on liquidity
+    const spreadPercentage = Math.min(Math.max(0.5, 5000 / Math.sqrt(liquidity)), 10);
     
     return {
-      takeProfit: Math.min(Math.max(baseTakeProfit, 3), 50), // Cap between 3-50%
-      stopLoss: Math.min(Math.max(baseStopLoss, 5), 20),     // Cap between 5-20%
+      takeProfit: Math.min(takeProfit, 50), // Cap at 50%
+      stopLoss: Math.min(stopLoss, 25),     // Cap at 25%
       orderSize: averageOrderSize,
-      expectedSlippage
+      expectedSlippage,
+      spreadPercentage
     };
   }
 

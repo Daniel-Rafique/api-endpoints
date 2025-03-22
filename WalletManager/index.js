@@ -49,10 +49,10 @@ class WalletManager {
             const chatIdStr = chatId.toString();
 
             // Step 2: Check wallet count limit
-            if (newWallets.length > 1000) {
-                console.error(`Cannot add wallets: wallet count exceeds 100 for chatId: ${chatIdStr}`);
-                throw new Error('Cannot add more than 100 wallets');
-            }
+            // if (newWallets.length > 1000) {
+            //     console.error(`Cannot add wallets: wallet count exceeds 100 for chatId: ${chatIdStr}`);
+            //     throw new Error('Cannot add more than 100 wallets');
+            // }
 
             // Step 3: Save wallets to file
             await this.saveWalletsToFile(chatIdStr, newWallets);
