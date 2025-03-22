@@ -447,14 +447,14 @@ Market Making Strategy Analysis:
     }
     
     // Set default solAmount if undefined
-    if (data.userData.solAmount === undefined) {
+    if (data.userData.boostCost === undefined) {
       console.warn(`solAmount is undefined for chatId: ${data.chatId}, setting default value of 1`);
-      data.userData.solAmount = 1;
+      data.userData.boostCost = 1;
     }
     
     console.log('Adding create wallet job to queue:', {
       chatId: data.chatId,
-      solAmount: data.userData.solAmount,
+      solAmount: data.userData.boostCost,
       marketCap: data.userData.tokenDetails?.marketCap,
       liquidity: data.userData.tokenDetails?.liquidity?.usd
     });
