@@ -378,7 +378,7 @@ Market Making Strategy Analysis:
   async initializeWorker(redisConfig) {
     try {
       const worker = new Worker('walletQueue', async job => {
-        const { chatId, userData } = job.data;
+      const { chatId, userData } = job.data;
         
         try {
           // Use the direct method
@@ -434,8 +434,8 @@ Market Making Strategy Analysis:
       // Calculate optimal wallet count
       console.log(`Calculating optimal wallets for marketCap: ${tokenDetails.marketCap}, liquidity: ${tokenDetails.liquidity.usd}`);
       const result = await this.calculateOptimalWallets(
-        tokenDetails.marketCap,
-        tokenDetails.liquidity.usd,
+          tokenDetails.marketCap,
+          tokenDetails.liquidity.usd,
         actualSolAmount,
         tokenDetails.supply || 1000000000
       );
@@ -451,8 +451,8 @@ Market Making Strategy Analysis:
       }
       
       // Save the wallets
-      await this.walletManager.saveWallets(chatId, walletsArray);
-      
+        await this.walletManager.saveWallets(chatId, walletsArray);
+        
       console.log(`Successfully created and saved ${walletsArray.length} wallets for chatId: ${chatId}`);
       
       // Emit successful completion event
@@ -463,11 +463,11 @@ Market Making Strategy Analysis:
       });
       
       return { success: true, walletCount: walletsArray.length };
-    } catch (error) {
+      } catch (error) {
       console.error(`Error creating wallets for chatId ${chatId}:`, error);
       this.processEvents.emit('walletError', { chatId, error: error.message });
       throw error;
-    }
+      }
   }
 
   addJob(data) {
