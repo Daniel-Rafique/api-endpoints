@@ -185,7 +185,7 @@ class Distribute {
         // Add initial transfer instruction
         transaction.add(
           SystemProgram.transfer({
-            fromPubkey: fromWallet,
+            fromPubkey: fromWallet.publicKey,
             toPubkey: new PublicKey(drop.walletAddress),
             lamports: drop.numLamports
           })
@@ -208,7 +208,7 @@ class Distribute {
 
         transaction.add(
           SystemProgram.transfer({
-            fromPubkey: fromWallet,
+            fromPubkey: fromWallet.publicKey,
             toPubkey: new PublicKey(drop.walletAddress),
             lamports: adjustedAmount
           })
@@ -224,7 +224,7 @@ class Distribute {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chatId: this.chatId,
-            publicKey: fromWallet.publicKey.toString(),
+            publicKey: fromWallet.publicKey,
             signedTransaction: encodedTx,
             type: 'send'
           })
