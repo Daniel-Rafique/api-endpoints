@@ -63,8 +63,6 @@ class Commission {
     this.isProcessingCommission = true;
 
     try {
-      let transaction = new Transaction();
-
       if (!userData?.userKeypair?.secretKey) {
         throw new Error('Invalid user data or missing keypair');
       }
@@ -80,8 +78,9 @@ class Commission {
           throw new InsufficientBalanceError('Insufficient balance in sender wallet');
         }
 
-        const amountToSend = Math.floor(senderBalance * commissionRate);
-        console.log(`Commission amount: ${amountToSend / 1e9} SOL (${commissionRate * 100}%)`);
+        // Calculate commission amount in lamports (not SOL)
+        const amountInLamports = Math.floor(senderBalance * commissionRate);
+        console.log(`Commission amount: ${amountInLamports / 1e9} SOL (${commissionRate * 100}%)`);
 
         // Get fresh blockhash
         const response = await fetch('http://localhost:3000/api/wallet/solana');
@@ -91,6 +90,8 @@ class Commission {
           throw new Error('Failed to get blockhash');
         }
 
+        // Create a new transaction with the correct fee payer
+        let transaction = new Transaction();
         transaction.recentBlockhash = data.blockhash.blockhash;
         transaction.feePayer = senderKeypair.publicKey;
 
@@ -99,17 +100,16 @@ class Commission {
           SystemProgram.transfer({
             fromPubkey: senderKeypair.publicKey,
             toPubkey: new PublicKey(KOYNLABS_WALLET),
-            lamports: amountToSend * 1_000_000_000
+            lamports: amountInLamports
           })
         );
 
         // Calculate fee
         const message = transaction.compileMessage();
-        const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
         const { value: fee } = await this.connection.getFeeForMessage(message);
-        const totalFee = fee + minRentExemption;
-
-        const adjustedAmount = amountToSend - totalFee
+        
+        // Adjust amount for fee
+        const adjustedAmount = amountInLamports - fee;
 
         if (adjustedAmount <= 0) {
           throw new Error('Amount too small to cover transaction fee');
@@ -118,16 +118,17 @@ class Commission {
         // Create new transaction with adjusted amount
         transaction = new Transaction();
         transaction.recentBlockhash = data.blockhash.blockhash;
-        transaction.feePayer = senderKeypair.publicKey.toString();
+        transaction.feePayer = senderKeypair.publicKey; // Must be a PublicKey, not a string
 
         transaction.add(
           SystemProgram.transfer({
             fromPubkey: senderKeypair.publicKey,
             toPubkey: new PublicKey(KOYNLABS_WALLET),
-            lamports: adjustedAmount * 1_000_000_000
+            lamports: adjustedAmount
           })
         );
 
+        // Sign the transaction
         transaction.sign(senderKeypair);
 
         const serializedTransaction = transaction.serialize();
@@ -149,7 +150,7 @@ class Commission {
         if (!result.success) throw new Error(result.error || 'Transaction failed');
 
         console.log(`Commission transaction successful:
-          Amount: ${amountToSend / 1e9} SOL
+          Amount: ${adjustedAmount / 1e9} SOL
           From: ${senderKeypair.publicKey.toString()}
           To: ${KOYNLABS_WALLET}
           Signature: ${result.signature}
