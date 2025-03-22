@@ -117,7 +117,7 @@ class InstanceManager {
             case "CHECK_SOLANA_DISTRIBUTION":
               if (userData.commissionPaid && !userData.distributeSolana) {
                 console.log('Distributing Solana...');
-                // await this.distributeSolana.distributeSolana(chatId, userData, interaction);
+                await this.distributeSolana.distributeSolana(chatId, userData, interaction);
                 await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
                 console.log('Solana distributed successfully.');
               } else {

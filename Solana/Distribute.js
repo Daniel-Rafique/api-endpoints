@@ -117,7 +117,7 @@ class Distribute {
 
             const chunk = newWallets.slice(i, i + batchSize);
             const dropList = chunk.map(wallet => ({
-              walletAddress: wallet.publicKey.toString(),
+              walletAddress: wallet.publicKey,
               numLamports: amountPerWallet,
             }));
 
