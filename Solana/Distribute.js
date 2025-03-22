@@ -52,18 +52,49 @@ class Distribute {
 
   async sendNotification(userData, message, interaction) {
     try {
-      if (userData.platform === 'discord') {
-        await this.discordNotifier.sendDiscordMessage(interaction, {
-          content: message,
-          flags: 64
-        });      
-      } else {
-        await this.telegramNotifier.sendTelegramMessage(this.chatId,  message, {
-          parse_mode: 'HTML'
-        });      
+      // First check if the message is empty or invalid
+      if (!message || typeof message !== 'string') {
+        console.log('Skipping empty or invalid notification message');
+        return;
+      }
+      
+      // Check if we're sending to Discord
+      if (userData && userData.platform === 'discord') {
+        // Only attempt to send if interaction exists
+        if (interaction) {
+          await this.discordNotifier.sendDiscordMessage(interaction, {
+            content: message,
+            flags: 64
+          });
+          console.log('Discord notification sent successfully');
+        } else {
+          console.log('Skipping Discord message - no interaction provided');
+        }
+      } 
+      // Otherwise send to Telegram
+      else {
+        // Ensure chatId is valid
+        const chatId = this.chatId || (userData && userData.chatId);
+        if (!chatId) {
+          console.log('Skipping Telegram message - no valid chatId');
+          return;
+        }
+        
+        // Try to send the Telegram message
+        const result = await this.telegramNotifier.sendTelegramMessage(chatId, message, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true
+        });
+        
+        if (result && result.ok) {
+          console.log('Telegram notification sent successfully');
+        } else {
+          console.warn('Telegram message may not have been delivered:', result);
+        }
       }
     } catch (error) {
-      console.error(`Failed to send notification: ${error.message}`);
+      // Don't let notification failures affect the main process
+      console.error(`Failed to send notification (non-critical error): ${error.message}`);
     }
   }
 
@@ -153,11 +184,17 @@ class Distribute {
             await this.logTransactionResults(results, currentBatch);
           }
 
-          await this.sendNotification(
-            userData,
-            `✅ Labs ${userData.boostName || 'Basic'} tier will begin shortly for ${userData.tokenDetails?.name || 'your token'}\n`,
-            interaction
-          );
+          try {
+            const tokenName = userData.tokenDetails?.name || 'your token';
+            const boostName = userData.boostName || 'Basic';
+            await this.sendNotification(
+              userData,
+              `✅ SOL distribution successful. ${boostName} tier for ${tokenName} will begin shortly.`,
+              interaction
+            );
+          } catch (notifyError) {
+            console.log('Failed to send final notification, but distribution was successful:', notifyError.message);
+          }
 
           return true;
 

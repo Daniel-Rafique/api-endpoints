@@ -1,4 +1,3 @@
-const axios = require('axios');
 const balanceText = require('../constants');
 class Telegram {
   constructor(telegramToken) {
