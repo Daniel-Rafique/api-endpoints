@@ -287,9 +287,6 @@ class InstanceManager {
       processEvents.on('walletCreated', walletCreatedHandler);
       processEvents.on('walletError', walletErrorHandler);
       
-      // Start file watcher
-      const fileWatcherInterval = startFileWatcher();
-      
       // Start the wallet creation process
       console.log(`Initiating wallet creation for chatId: ${chatId}`);
       this.walletProcessor.createWallets(chatId, userData)
@@ -302,280 +299,52 @@ class InstanceManager {
 
   async createLightweightSolSplInstance(userDir, chatId, userData) {
     try {
-      // Check if source template exists
-      if (!fs.existsSync(this.templatePath)) {
-        throw new Error(`Template directory not found: ${this.templatePath}`);
-      }
-
-      console.log(`Creating lightweight instance from template: ${this.templatePath}`);
+      console.log(`Creating lightweight sol_spl instance in ${userDir}`);
       
-      // Copy essential files and create symlinks for others
-      await this.copyEssentialFilesAndSymlinkOthers(this.templatePath, userDir);
-      
-      // Create or update .env file with user-specific configuration
-      await this.createCustomEnvFile(chatId, userData, userDir);
-      
-      console.log(`Lightweight SOL/SPL instance created successfully at ${userDir}`);
-      return true;
-    } catch (error) {
-      console.error('Error creating lightweight SOL/SPL instance:', error);
-      throw error;
-    }
-  }
-
-  async copyEssentialFilesAndSymlinkOthers(srcDir, destDir) {
-    const entries = fs.readdirSync(srcDir, { withFileTypes: true });
-    
-    // Files we want to copy (not symlink)
-    const filesToCopy = ['.env.template', 'package.json', 'tsconfig.json'];
-    
-    // Create dist directory if it doesn't exist
-    const distDir = path.join(destDir, 'dist');
+      // 1. Create the basic directory structure
+      const distDir = path.join(userDir, 'dist');
     if (!fs.existsSync(distDir)) {
         fs.mkdirSync(distDir, { recursive: true });
     }
     
-    // Create the services directory structure
-    const servicesDir = path.join(distDir, 'core', 'services');
-    const discordDir = path.join(servicesDir, 'discord');
-    const telegramDir = path.join(servicesDir, 'telegram');
-    
-    fs.mkdirSync(discordDir, { recursive: true });
-    fs.mkdirSync(telegramDir, { recursive: true });
-    
-    // Create patched Discord service file
-    const patchedDiscordService = `
-"use strict";
-class DiscordService {
-    constructor() {
-        console.log('Market Maker mode: Discord notifications disabled');
-        this.enabled = false;
-    }
-    
-    async sendMessage(data) {
-        // No-op in market maker mode
-        console.log('Discord notification suppressed in market maker mode');
-        return true;
-    }
-    
-    setupChannels() {
-        // No-op
-    }
-}
-
-module.exports = DiscordService;
-`;
-    
-    // Create patched Telegram service file
-    const patchedTelegramService = `
-"use strict";
-class TelegramService {
-    constructor() {
-        console.log('Market Maker mode: Telegram notifications disabled');
-        this.enabled = false;
-    }
-    
-    async sendMessage(data) {
-        // No-op in market maker mode
-        console.log('Telegram notification suppressed in market maker mode');
-        return true;
-    }
-}
-
-module.exports = TelegramService;
-`;
-    
-    // Write the patched files
-    fs.writeFileSync(path.join(discordDir, 'index.js'), patchedDiscordService);
-    fs.writeFileSync(path.join(telegramDir, 'index.js'), patchedTelegramService);
-    
-    // Create a patched Redis client that safely handles disconnection
-    const redisDir = path.join(servicesDir, 'redis');
-    fs.mkdirSync(redisDir, { recursive: true });
-    
-    const patchedRedisService = `
-"use strict";
-const redis = require('redis');
-
-// Create a dummy client that doesn't throw errors
-class SafeRedisClient {
-    constructor() {
-        this.connected = false;
-        try {
-            this.client = redis.createClient({
-                socket: {
-                    host: 'localhost',
-                    port: 6379,
-                    connectTimeout: 3000,
-                    reconnectStrategy: () => new Error('Redis connection disabled in market maker mode')
-                }
-            });
-            console.log('Market Maker mode: Redis client initialized in safe mode');
-        } catch (err) {
-            console.log('Market Maker mode: Redis client initialization skipped');
-        }
-    }
-    
-    async connect() {
-        // No-op
-        console.log('Market Maker mode: Redis connection simulated');
-        return Promise.resolve(true);
-    }
-    
-    async get() {
-        return Promise.resolve(null);
-    }
-    
-    async set() {
-        return Promise.resolve(true);
-    }
-    
-    async setEx() {
-        return Promise.resolve(true);
-    }
-    
-    // Add other methods as needed
-}
-
-module.exports = SafeRedisClient;
-`;
-    
-    fs.writeFileSync(path.join(redisDir, 'index.js'), patchedRedisService);
-    
-    // Copy or symlink files from template
-    for (const entry of entries) {
-      const srcPath = path.join(srcDir, entry.name);
-      const destPath = path.join(destDir, entry.name);
-
-        if (entry.isDirectory()) {
-            // For dist directory, we'll copy essential files later
-            if (entry.name === 'dist') {
-                continue;
-            }
-            
-            // Other directories we can symlink
-      if (!fs.existsSync(destPath)) {
-                console.log(`Creating symlink for directory: ${entry.name}`);
-                fs.symlinkSync(srcPath, destPath, 'junction');
-            }
-        } else {
-            // For files, either copy or symlink based on our list
-            if (filesToCopy.includes(entry.name)) {
-                console.log(`Copying file: ${entry.name}`);
-                fs.copyFileSync(srcPath, destPath);
-            } else if (!fs.existsSync(destPath)) {
-                console.log(`Creating symlink for file: ${entry.name}`);
-                fs.symlinkSync(srcPath, destPath, 'file');
-            }
-        }
-    }
-    
-    // Copy essential files from dist directory
-    const srcDistDir = path.join(srcDir, 'dist');
-    if (fs.existsSync(srcDistDir)) {
-        const distEntries = fs.readdirSync(srcDistDir, { withFileTypes: true });
-        
-        for (const entry of distEntries) {
-            // Skip the 'core/services/discord' and 'core/services/telegram' directories
-            if ((entry.isDirectory() && entry.name === 'core') ||
-                entry.name.includes('discord') || 
-                entry.name.includes('telegram')) {
-                continue;
-            }
-            
-            const srcDistPath = path.join(srcDistDir, entry.name);
-            const destDistPath = path.join(distDir, entry.name);
-            
-            // Only copy index.js and essential modules
-            if (entry.name === 'index.js' || entry.name.startsWith('solana-') || entry.name.startsWith('spl-')) {
-                console.log(`Copying dist file: ${entry.name}`);
-                if (entry.isDirectory()) {
-                    fs.mkdirSync(destDistPath, { recursive: true });
-                    this.copyDirSync(srcDistPath, destDistPath);
-                } else {
-                    if (entry.name === 'index.js') {
-                        // Create a patched index.js that handles missing services
-                        const indexContent = fs.readFileSync(srcDistPath, 'utf8');
-                        
-                        // Modify the index.js to handle missing services
-                        const patchedIndexContent = this.patchIndexFile(indexContent);
-                        fs.writeFileSync(destDistPath, patchedIndexContent);
-                    } else {
-                        fs.copyFileSync(srcDistPath, destDistPath);
-                    }
-                }
-            } else if (!fs.existsSync(destDistPath)) {
-                // Symlink other files/directories
-                console.log(`Creating symlink for dist file/dir: ${entry.name}`);
-                fs.symlinkSync(srcDistPath, destDistPath, entry.isDirectory() ? 'junction' : 'file');
-            }
-        }
-    }
-  }
-  
-  // Helper method to recursively copy directories
-  copyDirSync(src, dest) {
-    const entries = fs.readdirSync(src, { withFileTypes: true });
-    
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name);
-      const destPath = path.join(dest, entry.name);
+      // 2. Create symlinks for shared code (like in copyInstance.sh)
+      const mainDir = path.resolve(os.homedir(), ENV_PATH);
       
-      if (entry.isDirectory()) {
-        fs.mkdirSync(destPath, { recursive: true });
-        this.copyDirSync(srcPath, destPath);
+      // Create symlinks to node_modules and dist
+      const nodeModulesLink = path.join(userDir, 'node_modules');
+      const distLink = path.join(userDir, 'dist');
+      
+      // Remove existing symlinks if they exist
+      if (fs.existsSync(nodeModulesLink)) {
+        fs.unlinkSync(nodeModulesLink);
+      }
+      
+      // Create new symlinks
+      fs.symlinkSync(path.join(mainDir, 'node_modules'), nodeModulesLink, 'junction');
+      fs.symlinkSync(path.join(mainDir, 'dist'), distLink, 'junction');
+      
+      console.log('Created symlinks for node_modules and dist');
+      
+      // 3. Copy the .env.template file (like in copyInstance.sh)
+      const envTemplatePath = path.join(mainDir, '.env.template');
+      const destEnvPath = path.join(userDir, '.env');
+      
+      if (fs.existsSync(envTemplatePath)) {
+        fs.copyFileSync(envTemplatePath, destEnvPath);
+        console.log(`Copied .env.template to ${destEnvPath}`);
       } else {
-        fs.copyFileSync(srcPath, destPath);
-      }
-    }
-  }
-
-  async createCustomEnvFile(chatId, userData, instancePath) {
-    try {
-      // Define the source template path
-      const templatePath = path.resolve(os.homedir(), ENV_PATH, '.env.template');
-      
-      // Define the destination .env file path (not just the directory)
-      const destEnvPath = path.join(instancePath, '.env');
-      
-      console.log(`Copying template from ${templatePath} to ${destEnvPath}`);
-      
-      // Copy the template .env file
-      if (fs.existsSync(templatePath)) {
-        fs.copyFileSync(templatePath, destEnvPath);
-        console.log('Successfully copied .env.template to .env');
-      } else {
-        console.error(`Template .env file not found at ${templatePath}`);
-        // Create an empty .env file as fallback
-        fs.writeFileSync(destEnvPath, '');
+        console.error('Could not find .env.template');
+        return false;
       }
       
-      // Calculate trading parameters using TradeStrategy
-      console.log('Calculating trading parameters using TradeStrategy...');
-      let buyAmount, sellAmount, takeProfit, stopLoss, dcaAmount;
+      // 4. Update the .env file with user-specific values
+      let envContent = fs.readFileSync(destEnvPath, 'utf8');
       
-      try {
-        // Calculate dynamic values from TradeStrategy
-        buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
-        sellAmount = this.tradeStrategy.calculateSellAmount(userData);
-        takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
-        stopLoss = this.tradeStrategy.calculateStopLoss(userData);
-        dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
-        
-        console.log(`Calculated parameters: buyAmount=${buyAmount}, sellAmount=${sellAmount}, takeProfit=${takeProfit}, stopLoss=${stopLoss}, dcaAmount=${dcaAmount}`);
-      } catch (calcError) {
-        console.error('Error calculating trading parameters:', calcError);
-        // Fall back to default values
-        buyAmount = userData.buyAmount || 0.05;
-        sellAmount = userData.sellAmount || 100;
-        takeProfit = userData.profitMargin || 50;
-        stopLoss = userData.stopLoss || 50;
-        dcaAmount = userData.dcaAmount || 0.025;
-        console.log(`Using fallback parameters: buyAmount=${buyAmount}, sellAmount=${sellAmount}, takeProfit=${takeProfit}, stopLoss=${stopLoss}, dcaAmount=${dcaAmount}`);
-      }
+      // Replace TRADE_TYPE in the .env file
+      envContent = envContent.replace(/^TRADE_TYPE=.*$/m, 'TRADE_TYPE=sol_spl');
       
-      // Now append our custom values to the copied .env file
-      const customConfig = `
+      // Add market maker specific settings
+      const additionalConfig = `
 # Market maker specific settings
 CHAT_ID=${chatId}
 TRADE_TYPE=sol_spl
@@ -604,13 +373,13 @@ DISCORD_CHANNEL_ID=dummy_channel
 MM_MODE=true
 `;
       
-      // Append to the file
-      fs.appendFileSync(destEnvPath, customConfig);
-      console.log('Successfully added custom configuration to .env file');
+      // Write the updated content back to the file
+      fs.writeFileSync(destEnvPath, envContent + additionalConfig);
+      console.log('Updated .env file with market maker configuration');
       
       return true;
     } catch (error) {
-      console.error('Error creating .env file:', error);
+      console.error('Error creating lightweight sol_spl instance:', error);
       return false;
     }
   }
