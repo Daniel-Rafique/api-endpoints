@@ -3,6 +3,7 @@ const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
 const pm2 = require('pm2');
+const EventEmitter = require('events');
 const dataManager = require('../database');
 const { Firestore } = require('@google-cloud/firestore');
 const WalletProcessor = require('../WalletProcessor');
@@ -12,6 +13,10 @@ const TopUp = require('../Solana/TopUp');
 const TradeStrategy = require('../TradeStrategy');
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const ENV_PATH = process.env.ENV_PATH;
+
+// Create a dedicated event emitter for processing steps
+class ProcessStepEmitter extends EventEmitter {}
+const processEvents = new ProcessStepEmitter();
 
 class InstanceManager {
   constructor(chatId) {
@@ -27,7 +32,7 @@ class InstanceManager {
       keyFilename: path.join(os.homedir(), FIRESTORE_KEYSTORE, '.config/firebaseServiceAccountKey.json'),
     });
 
-    this.walletProcessor = new WalletProcessor(chatId);
+    this.walletProcessor = new WalletProcessor(chatId, processEvents);
     this.distributeSolana = new Distribute(chatId);
     this.commissionPaid = new Commission(chatId);
     this.topUp = new TopUp(chatId);
@@ -90,10 +95,9 @@ class InstanceManager {
             case "CHECK_WALLETS_CREATED":
               if (!userData.walletsCreated) {
                 console.log('Wallets not created. Creating wallets...');
-                await this.walletProcessor.addJob({ chatId, userData });
-                await this.waitForJobCompletion(chatId);
+                await this.processCreateWallets(chatId, userData, userDir);
                 await this.dataManager.updateCollection(chatIdStr, { walletsCreated: true });
-                console.log('Wallets created.');
+                console.log('Wallets created and database updated.');
               } else {
                 console.log('Wallets already created.');
               }
@@ -166,6 +170,125 @@ class InstanceManager {
       console.error('Error initializing market maker instance:', error);
       throw error;
     }
+  }
+
+  // New method to handle wallet creation with event emitter
+  async processCreateWallets(chatId, userData, userDir) {
+    return new Promise((resolve, reject) => {
+      const walletFilePath = path.join(userDir, '.config', 'wallets.json');
+      
+      // First check if wallets already exist
+      if (fs.existsSync(walletFilePath)) {
+        try {
+          const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
+          if (Array.isArray(walletsData) && walletsData.length > 0) {
+            console.log(`Found existing wallet file with ${walletsData.length} wallets`);
+            return resolve();
+          }
+        } catch (err) {
+          console.log('Error reading existing wallet file, will create new wallets');
+        }
+      }
+      
+      // Set up event listeners for wallet creation process
+      const walletCreatedHandler = (data) => {
+        if (data && data.chatId === chatId) {
+          console.log(`Received walletCreated event for chatId: ${chatId}`);
+          processEvents.removeListener('walletCreated', walletCreatedHandler);
+          processEvents.removeListener('walletError', walletErrorHandler);
+          clearTimeout(timeout);
+          resolve();
+        }
+      };
+
+      const walletErrorHandler = (data) => {
+        if (data && data.chatId === chatId) {
+          console.error(`Received walletError event for chatId: ${chatId}:`, data.error);
+          processEvents.removeListener('walletCreated', walletCreatedHandler);
+          processEvents.removeListener('walletError', walletErrorHandler);
+          clearTimeout(timeout);
+          
+          // Check if wallets were created despite the error
+          if (fs.existsSync(walletFilePath)) {
+            try {
+              const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
+              if (Array.isArray(walletsData) && walletsData.length > 0) {
+                console.log(`Despite error, wallet file exists with ${walletsData.length} wallets`);
+                resolve();
+                return;
+              }
+            } catch (err) {
+              // File exists but is invalid, proceed with reject
+            }
+          }
+          
+          reject(new Error(`Wallet creation failed: ${data.error}`));
+        }
+      };
+      
+      // Set up a file watcher as fallback
+      const startFileWatcher = () => {
+        console.log(`Starting file watcher for ${walletFilePath}`);
+        const checkWalletFile = () => {
+          if (fs.existsSync(walletFilePath)) {
+            try {
+              const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
+              if (Array.isArray(walletsData) && walletsData.length > 0) {
+                console.log(`File watcher detected wallet file with ${walletsData.length} wallets`);
+                clearInterval(fileWatcherInterval);
+                processEvents.removeListener('walletCreated', walletCreatedHandler);
+                processEvents.removeListener('walletError', walletErrorHandler);
+                clearTimeout(timeout);
+                resolve();
+              }
+            } catch (err) {
+              console.log('File exists but invalid, continuing to watch');
+            }
+          }
+        };
+        
+        const fileWatcherInterval = setInterval(checkWalletFile, 5000);
+        return fileWatcherInterval;
+      };
+      
+      // Set a timeout
+      const timeout = setTimeout(() => {
+        console.log(`Timeout reached for wallet creation for chatId: ${chatId}`);
+        processEvents.removeListener('walletCreated', walletCreatedHandler);
+        processEvents.removeListener('walletError', walletErrorHandler);
+        
+        // Final check for wallet file
+        if (fs.existsSync(walletFilePath)) {
+          try {
+            const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
+            if (Array.isArray(walletsData) && walletsData.length > 0) {
+              console.log(`Timeout reached but wallet file exists with ${walletsData.length} wallets`);
+              resolve();
+              return;
+            }
+          } catch (err) {
+            // File exists but is invalid
+          }
+        }
+        
+        reject(new Error(`Wallet creation timed out after ${300000}ms`));
+      }, 300000);
+      
+      // Set up listeners
+      processEvents.on('walletCreated', walletCreatedHandler);
+      processEvents.on('walletError', walletErrorHandler);
+      
+      // Start file watcher
+      const fileWatcherInterval = startFileWatcher();
+      
+      // Start the wallet creation process
+      console.log(`Initiating wallet creation for chatId: ${chatId}`);
+      this.walletProcessor.createWallets(chatId, userData)
+        .catch(error => {
+          console.error(`Error initiating wallet creation: ${error.message}`);
+          // The error will be handled by the walletErrorHandler
+        });
+    });
   }
 
   async createLightweightSolSplInstance(userDir, chatId, userData) {
@@ -290,14 +413,14 @@ class InstanceManager {
     }
     
     // Calculate trading parameters
-    const buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
-    const sellAmount = this.tradeStrategy.calculateSellAmount(userData);
-    const takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
-    const stopLoss = this.tradeStrategy.calculateStopLoss(userData);
-    const dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
+      const buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
+      const sellAmount = this.tradeStrategy.calculateSellAmount(userData);
+      const takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
+      const stopLoss = this.tradeStrategy.calculateStopLoss(userData);
+      const dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
 
     // Add sol_spl specific configuration
-    const envContent = `
+      const envContent = `
 CHAT_ID=${chatId}
 TRADE_TYPE=sol_spl
 CONTRACT_ADDRESS=${userData.tokenDetails.mintAddress}
@@ -316,40 +439,8 @@ SIGNAL_ONLY=false
 ENV_PATH=${ENV_PATH}
 `;
 
-    fs.appendFileSync(destEnvPath, envContent);
+      fs.appendFileSync(destEnvPath, envContent);
     console.log(`Added custom SOL/SPL configuration to ${destEnvPath}`);
-  }
-
-  // Modify waitForJobCompletion to include a timeout
-  async waitForJobCompletion(chatId, timeout = 300000) { // 5 minutes timeout
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`Wallet job for chatId ${chatId} timed out after ${timeout}ms`));
-      }, timeout);
-
-      const completionHandler = (job) => {
-        if (job.data.chatId === chatId) {
-          clearTimeout(timer);
-          this.walletProcessor.walletQueue.removeListener('completed', completionHandler);
-          this.walletProcessor.walletQueue.removeListener('failed', failureHandler);
-          console.log(`Wallet job completed for chatId: ${chatId}`);
-          resolve();
-        }
-      };
-
-      const failureHandler = (job, err) => {
-        if (job.data.chatId === chatId) {
-          clearTimeout(timer);
-          this.walletProcessor.walletQueue.removeListener('completed', completionHandler);
-          this.walletProcessor.walletQueue.removeListener('failed', failureHandler);
-          console.error(`Wallet job failed for chatId: ${chatId}`, err);
-          reject(err);
-        }
-      };
-
-      this.walletProcessor.walletQueue.on('completed', completionHandler);
-      this.walletProcessor.walletQueue.on('failed', failureHandler);
-    });
   }
 
   async startMarketMakerInstance(chatId, userDir) {

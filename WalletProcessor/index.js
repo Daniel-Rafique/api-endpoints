@@ -13,9 +13,11 @@ if (!ENV_PATH) {
 }
 
 class WalletProcessor {
-  constructor(chatId) {
+  constructor(chatId, processEvents) {
     this.chatId = chatId;
     this.walletManager = new WalletManager(chatId);
+    this.processEvents = processEvents; // Store the event emitter
+    
     // Define absolute paths
     const basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
     const instancePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker', 'instances');
@@ -26,8 +28,8 @@ class WalletProcessor {
 
     this.dataManager = dataManager;
     this.network = this.initializeNeuralNetwork();
-    this.MIN_WALLETS = 3; // Reduced from 10 to 3
-    this.MIN_SOL_PER_WALLET = 0.0001; // Increased from 0.001 to ensure enough buying power
+    this.MIN_WALLETS = 3;
+    this.MIN_SOL_PER_WALLET = 0.0001;
 
     // Setup Redis connection with proper configuration and error handling
     const redisConfig = {
@@ -375,90 +377,101 @@ Market Making Strategy Analysis:
 
   async initializeWorker(redisConfig) {
     try {
-      // Make sure we pass the same Redis connection config to the worker
-      new Worker('walletQueue', async job => {
+      const worker = new Worker('walletQueue', async job => {
         const { chatId, userData } = job.data;
-        const { boostCost, tokenDetails } = userData;
         
         try {
-          console.log(`Processing wallet creation job for chatId: ${chatId}`);
-          console.log(`Market cap: ${tokenDetails?.marketCap}, Liquidity: ${tokenDetails?.liquidity?.usd}, SOL Amount: ${boostCost}`);
-          
-          // Handle undefined solAmount with a default value
-          const actualSolAmount = boostCost || 1; // Default to 1 SOL if undefined
-          
-          if (!tokenDetails || !tokenDetails.marketCap || !tokenDetails.liquidity || !tokenDetails.liquidity.usd) {
-            console.error('Invalid token details:', tokenDetails);
-            throw new Error('Token details are missing or invalid');
-          }
-          
-          const result = await this.calculateOptimalWallets(
-            tokenDetails.marketCap,
-            tokenDetails.liquidity.usd,
-            actualSolAmount,
-            tokenDetails.supply || 1000000000
-          );
-
-          // Check that we got a valid wallet count
-          if (!result.walletCount || isNaN(result.walletCount) || result.walletCount <= 0) {
-            throw new Error(`Invalid wallet count: ${result.walletCount}`);
-          }
-          
-          console.log(`Creating ${result.walletCount} wallets with ${result.solPerWallet} SOL per wallet`);
-          const walletsArray = await this.walletManager.createSolanaWallets(result.walletCount);
-          
-          if (!walletsArray || walletsArray.length === 0) {
-            throw new Error('Failed to create wallets - empty array returned');
-          }
-          
-          await this.walletManager.saveWallets(chatId, walletsArray);
-          
-          console.log(`Successfully created and saved ${walletsArray.length} wallets for chatId: ${chatId}`);
-          return { success: true, walletCount: walletsArray.length };
-
+          // Use the direct method
+          return await this.createWallets(chatId, userData);
         } catch (error) {
-          console.error(`Error processing wallet creation job for chatId ${chatId}:`, error);
-          throw new Error(`Failed to process wallet creation job: ${error.message}`);
+          console.error(`Worker error processing wallet creation for chatId ${chatId}:`, error);
+          throw error;
         }
       }, { connection: redisConfig });
+      
+      // Add event listeners
+      worker.on('completed', job => {
+        console.log(`Job ${job.id} completed for chatId: ${job.data.chatId}`);
+        this.processEvents.emit('walletCreated', { 
+          chatId: job.data.chatId, 
+          walletCount: job.returnvalue.walletCount,
+          message: 'Wallets created successfully via job' 
+        });
+      });
+      
+      worker.on('failed', (job, err) => {
+        console.error(`Job ${job?.id} failed for chatId: ${job?.data?.chatId}:`, err);
+        if (job?.data?.chatId) {
+          this.processEvents.emit('walletError', { 
+            chatId: job.data.chatId, 
+            error: err.message 
+          });
+        }
+      });
       
       console.log('Wallet queue worker initialized successfully');
     } catch (error) {
       console.error('Failed to initialize wallet queue worker:', error);
-      // Continue without failing the entire application
+    }
+  }
+
+  async createWallets(chatId, userData) {
+    try {
+      console.log(`Direct wallet creation for chatId: ${chatId}`);
+      
+      // Extract required data
+      const { solAmount, tokenDetails } = userData;
+      
+      // Handle undefined solAmount with a default value
+      const actualSolAmount = solAmount || 1;
+      
+      if (!tokenDetails || !tokenDetails.marketCap || !tokenDetails.liquidity || !tokenDetails.liquidity.usd) {
+        const error = new Error('Token details are missing or invalid');
+        this.processEvents.emit('walletError', { chatId, error: error.message });
+        throw error;
+      }
+      
+      // Calculate optimal wallet count
+      console.log(`Calculating optimal wallets for marketCap: ${tokenDetails.marketCap}, liquidity: ${tokenDetails.liquidity.usd}`);
+      const result = await this.calculateOptimalWallets(
+        tokenDetails.marketCap,
+        tokenDetails.liquidity.usd,
+        actualSolAmount,
+        tokenDetails.supply || 1000000000
+      );
+      
+      // Create the wallets
+      console.log(`Creating ${result.walletCount} wallets for chatId: ${chatId}`);
+      const walletsArray = await this.walletManager.createSolanaWallets(result.walletCount);
+      
+      if (!walletsArray || walletsArray.length === 0) {
+        const error = new Error('Failed to create wallets - empty array returned');
+        this.processEvents.emit('walletError', { chatId, error: error.message });
+        throw error;
+      }
+      
+      // Save the wallets
+      await this.walletManager.saveWallets(chatId, walletsArray);
+      
+      console.log(`Successfully created and saved ${walletsArray.length} wallets for chatId: ${chatId}`);
+      
+      // Emit successful completion event
+      this.processEvents.emit('walletCreated', { 
+        chatId, 
+        walletCount: walletsArray.length,
+        message: 'Wallets created successfully' 
+      });
+      
+      return { success: true, walletCount: walletsArray.length };
+    } catch (error) {
+      console.error(`Error creating wallets for chatId ${chatId}:`, error);
+      this.processEvents.emit('walletError', { chatId, error: error.message });
+      throw error;
     }
   }
 
   addJob(data) {
-    if (!data || !data.chatId) {
-      console.error('Invalid job data: Missing chatId');
-      return Promise.reject(new Error('Invalid job data: Missing chatId'));
-    }
-    
-    if (!data.userData) {
-      console.error('Invalid job data: Missing userData for chatId:', data.chatId);
-      return Promise.reject(new Error('Invalid job data: Missing userData'));
-    }
-    
-    // Ensure userData has tokenDetails, and add default solAmount if missing
-    if (!data.userData.tokenDetails) {
-      console.error('Invalid job data: Missing tokenDetails for chatId:', data.chatId);
-      return Promise.reject(new Error('Invalid job data: Missing tokenDetails'));
-    }
-    
-    // Set default solAmount if undefined
-    if (data.userData.boostCost === undefined) {
-      console.warn(`solAmount is undefined for chatId: ${data.chatId}, setting default value of 1`);
-      data.userData.boostCost = 1;
-    }
-    
-    console.log('Adding create wallet job to queue:', {
-      chatId: data.chatId,
-      solAmount: data.userData?.boostCost,
-      marketCap: data.userData.tokenDetails?.marketCap,
-      liquidity: data.userData.tokenDetails?.liquidity?.usd
-    });
-    
+    console.log('Adding create wallet job to queue:', data);
     return this.walletQueue.add('createWallets', data);
   }
 }
