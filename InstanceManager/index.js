@@ -330,61 +330,184 @@ class InstanceManager {
     // Create dist directory if it doesn't exist
     const distDir = path.join(destDir, 'dist');
     if (!fs.existsSync(distDir)) {
-      fs.mkdirSync(distDir, { recursive: true });
+        fs.mkdirSync(distDir, { recursive: true });
     }
+    
+    // Create the services directory structure
+    const servicesDir = path.join(distDir, 'core', 'services');
+    const discordDir = path.join(servicesDir, 'discord');
+    const telegramDir = path.join(servicesDir, 'telegram');
+    
+    fs.mkdirSync(discordDir, { recursive: true });
+    fs.mkdirSync(telegramDir, { recursive: true });
+    
+    // Create patched Discord service file
+    const patchedDiscordService = `
+"use strict";
+class DiscordService {
+    constructor() {
+        console.log('Market Maker mode: Discord notifications disabled');
+        this.enabled = false;
+    }
+    
+    async sendMessage(data) {
+        // No-op in market maker mode
+        console.log('Discord notification suppressed in market maker mode');
+        return true;
+    }
+    
+    setupChannels() {
+        // No-op
+    }
+}
+
+module.exports = DiscordService;
+`;
+    
+    // Create patched Telegram service file
+    const patchedTelegramService = `
+"use strict";
+class TelegramService {
+    constructor() {
+        console.log('Market Maker mode: Telegram notifications disabled');
+        this.enabled = false;
+    }
+    
+    async sendMessage(data) {
+        // No-op in market maker mode
+        console.log('Telegram notification suppressed in market maker mode');
+        return true;
+    }
+}
+
+module.exports = TelegramService;
+`;
+    
+    // Write the patched files
+    fs.writeFileSync(path.join(discordDir, 'index.js'), patchedDiscordService);
+    fs.writeFileSync(path.join(telegramDir, 'index.js'), patchedTelegramService);
+    
+    // Create a patched Redis client that safely handles disconnection
+    const redisDir = path.join(servicesDir, 'redis');
+    fs.mkdirSync(redisDir, { recursive: true });
+    
+    const patchedRedisService = `
+"use strict";
+const redis = require('redis');
+
+// Create a dummy client that doesn't throw errors
+class SafeRedisClient {
+    constructor() {
+        this.connected = false;
+        try {
+            this.client = redis.createClient({
+                socket: {
+                    host: 'localhost',
+                    port: 6379,
+                    connectTimeout: 3000,
+                    reconnectStrategy: () => new Error('Redis connection disabled in market maker mode')
+                }
+            });
+            console.log('Market Maker mode: Redis client initialized in safe mode');
+        } catch (err) {
+            console.log('Market Maker mode: Redis client initialization skipped');
+        }
+    }
+    
+    async connect() {
+        // No-op
+        console.log('Market Maker mode: Redis connection simulated');
+        return Promise.resolve(true);
+    }
+    
+    async get() {
+        return Promise.resolve(null);
+    }
+    
+    async set() {
+        return Promise.resolve(true);
+    }
+    
+    async setEx() {
+        return Promise.resolve(true);
+    }
+    
+    // Add other methods as needed
+}
+
+module.exports = SafeRedisClient;
+`;
+    
+    fs.writeFileSync(path.join(redisDir, 'index.js'), patchedRedisService);
     
     // Copy or symlink files from template
     for (const entry of entries) {
-      const srcPath = path.join(srcDir, entry.name);
-      const destPath = path.join(destDir, entry.name);
+        const srcPath = path.join(srcDir, entry.name);
+        const destPath = path.join(destDir, entry.name);
 
-      if (entry.isDirectory()) {
-        // For dist directory, we'll copy essential files later
-        if (entry.name === 'dist') {
-          continue;
+        if (entry.isDirectory()) {
+            // For dist directory, we'll copy essential files later
+            if (entry.name === 'dist') {
+                continue;
+            }
+            
+            // Other directories we can symlink
+            if (!fs.existsSync(destPath)) {
+                console.log(`Creating symlink for directory: ${entry.name}`);
+                fs.symlinkSync(srcPath, destPath, 'junction');
+            }
+        } else {
+            // For files, either copy or symlink based on our list
+            if (filesToCopy.includes(entry.name)) {
+                console.log(`Copying file: ${entry.name}`);
+                fs.copyFileSync(srcPath, destPath);
+            } else if (!fs.existsSync(destPath)) {
+                console.log(`Creating symlink for file: ${entry.name}`);
+                fs.symlinkSync(srcPath, destPath, 'file');
+            }
         }
-        
-        // Other directories we can symlink
-      if (!fs.existsSync(destPath)) {
-          console.log(`Creating symlink for directory: ${entry.name}`);
-          fs.symlinkSync(srcPath, destPath, 'junction');
-        }
-      } else {
-        // For files, either copy or symlink based on our list
-        if (filesToCopy.includes(entry.name)) {
-          console.log(`Copying file: ${entry.name}`);
-          fs.copyFileSync(srcPath, destPath);
-        } else if (!fs.existsSync(destPath)) {
-          console.log(`Creating symlink for file: ${entry.name}`);
-          fs.symlinkSync(srcPath, destPath, 'file');
-        }
-      }
     }
     
     // Copy essential files from dist directory
     const srcDistDir = path.join(srcDir, 'dist');
     if (fs.existsSync(srcDistDir)) {
-      const distEntries = fs.readdirSync(srcDistDir, { withFileTypes: true });
-      
-      for (const entry of distEntries) {
-        const srcDistPath = path.join(srcDistDir, entry.name);
-        const destDistPath = path.join(distDir, entry.name);
+        const distEntries = fs.readdirSync(srcDistDir, { withFileTypes: true });
         
-        // Only copy index.js and essential modules
-        if (entry.name === 'index.js' || entry.name.startsWith('solana-') || entry.name.startsWith('spl-')) {
-          console.log(`Copying dist file: ${entry.name}`);
-          if (entry.isDirectory()) {
-            fs.mkdirSync(destDistPath, { recursive: true });
-            this.copyDirSync(srcDistPath, destDistPath);
-          } else {
-            fs.copyFileSync(srcDistPath, destDistPath);
-          }
-        } else if (!fs.existsSync(destDistPath)) {
-          // Symlink other files/directories
-          console.log(`Creating symlink for dist file/dir: ${entry.name}`);
-          fs.symlinkSync(srcDistPath, destDistPath, entry.isDirectory() ? 'junction' : 'file');
+        for (const entry of distEntries) {
+            // Skip the 'core/services/discord' and 'core/services/telegram' directories
+            if ((entry.isDirectory() && entry.name === 'core') ||
+                entry.name.includes('discord') || 
+                entry.name.includes('telegram')) {
+                continue;
+            }
+            
+            const srcDistPath = path.join(srcDistDir, entry.name);
+            const destDistPath = path.join(distDir, entry.name);
+            
+            // Only copy index.js and essential modules
+            if (entry.name === 'index.js' || entry.name.startsWith('solana-') || entry.name.startsWith('spl-')) {
+                console.log(`Copying dist file: ${entry.name}`);
+                if (entry.isDirectory()) {
+                    fs.mkdirSync(destDistPath, { recursive: true });
+                    this.copyDirSync(srcDistPath, destDistPath);
+                } else {
+                    if (entry.name === 'index.js') {
+                        // Create a patched index.js that handles missing services
+                        const indexContent = fs.readFileSync(srcDistPath, 'utf8');
+                        
+                        // Modify the index.js to handle missing services
+                        const patchedIndexContent = this.patchIndexFile(indexContent);
+                        fs.writeFileSync(destDistPath, patchedIndexContent);
+                    } else {
+                        fs.copyFileSync(srcDistPath, destDistPath);
+                    }
+                }
+            } else if (!fs.existsSync(destDistPath)) {
+                // Symlink other files/directories
+                console.log(`Creating symlink for dist file/dir: ${entry.name}`);
+                fs.symlinkSync(srcDistPath, destDistPath, entry.isDirectory() ? 'junction' : 'file');
+            }
         }
-      }
     }
   }
   
@@ -444,6 +567,15 @@ SENDER_WALLET=${userData.senderWallet}
 AMOUNT_PER_WALLET=${userData.amountPerWallet}
 SIGNAL_ONLY=false
 ENV_PATH=${ENV_PATH}
+
+# Dummy values for services not needed in market maker instances
+DISCORD_TOKEN=dummy_token
+DISCORD_CHANNELS=dummy_channel
+TELEGRAM_TOKEN=dummy_token
+TELEGRAM_CHAT_ID=${chatId}
+DISCORD_BOT_TOKEN=dummy_token
+DISCORD_CHANNEL_ID=dummy_channel
+MM_MODE=true
 `;
 
       fs.appendFileSync(destEnvPath, envContent);
@@ -509,6 +641,42 @@ ENV_PATH=${ENV_PATH}
         }
       });
     });
+  }
+
+  patchIndexFile(content) {
+    // Wrap the Discord and Telegram initializations in try-catch blocks
+    return content.replace(
+        "const discord = new DiscordService();",
+        `// Safe initialization of services
+let discord;
+try {
+    discord = new DiscordService();
+} catch (err) {
+    console.log('Discord service initialization failed, using dummy service');
+    discord = {
+        sendMessage: () => Promise.resolve(true)
+    };
+}`
+    ).replace(
+        "const telegram = new TelegramService();",
+        `let telegram;
+try {
+    telegram = new TelegramService();
+} catch (err) {
+    console.log('Telegram service initialization failed, using dummy service');
+    telegram = {
+        sendMessage: () => Promise.resolve(true)
+    };
+}`
+    ).replace(
+        "await client.connect();",
+        `try {
+    await client.connect();
+    console.log('Connected to Redis');
+} catch (err) {
+    console.log('Redis connection failed in market maker mode, continuing without Redis');
+}`
+    );
   }
 }
 
