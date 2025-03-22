@@ -327,7 +327,7 @@ class InstanceManager {
     const entries = fs.readdirSync(srcDir, { withFileTypes: true });
     
     // Files we want to copy (not symlink)
-    const filesToCopy = ['.env.example', 'package.json', 'tsconfig.json'];
+    const filesToCopy = ['.env.template', 'package.json', 'tsconfig.json'];
     
     // Create dist directory if it doesn't exist
     const distDir = path.join(destDir, 'dist');
