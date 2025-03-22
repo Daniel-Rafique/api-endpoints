@@ -387,32 +387,223 @@ class TradeStrategy {
     // Calculate optimal buy amount based on user data
     calculateBuyAmount(userData) {
         try {
-            // Default values if neural network isn't trained yet
-            if (this.metricsHistory.length < 20) {
-                // Conservative default based on wallet balance
+            // Get token details
+            const marketCap = userData.tokenDetails?.marketCap || 0;
+            const liquidity = userData.tokenDetails?.liquidity?.usd || 0;
+            const tokenPrice = userData.tokenDetails?.priceUSD || 0;
+            const tokenSupply = userData.tokenDetails?.totalSupply || 0;
                 const walletBalance = userData.amountPerWallet || 1;
-                return Math.min(0.1 * walletBalance, 0.5); // 10% of balance, max 0.5 SOL
+            
+            // Adjust market cap tiers for more refined position sizing
+            let marketCapFactor = 1.0;
+            if (marketCap > 0) {
+                if (marketCap < 50000) { // Micro caps below $50k
+                    marketCapFactor = 0.15;
+                } else if (marketCap < 100000) { // Up to $100k
+                    marketCapFactor = 0.2;
+                } else if (marketCap < 500000) { // $100k-$500k
+                    marketCapFactor = 0.3;
+                } else if (marketCap < 1000000) { // $500k-$1M
+                    marketCapFactor = 0.4;
+                } else if (marketCap < 5000000) { // $1M-$5M
+                    marketCapFactor = 0.6;
+                } else if (marketCap < 10000000) { // $5M-$10M
+                    marketCapFactor = 0.8;
+                }
+            }
+            
+            // More granular liquidity tiers
+            let liquidityFactor = 1.0;
+            if (liquidity > 0) {
+                if (liquidity < 5000) { // Very low liquidity
+                    liquidityFactor = 0.15;
+                } else if (liquidity < 10000) { // Up to $10k
+                    liquidityFactor = 0.25;
+                } else if (liquidity < 25000) { // $10k-$25k
+                    liquidityFactor = 0.35;
+                } else if (liquidity < 50000) { // $25k-$50k
+                    liquidityFactor = 0.5;
+                } else if (liquidity < 100000) { // $50k-$100k
+                    liquidityFactor = 0.7;
+                } else if (liquidity < 200000) { // $100k-$200k
+                    liquidityFactor = 0.85;
+                }
             }
 
-            // Prepare input data
-            const inputData = this.prepareInputData(userData);
-
-            // Run neural network
+            // Calculate the impact ratio (helps determine how much we can buy without affecting price)
+            const impactRatio = liquidity > 0 ? Math.min(1, (walletBalance / (liquidity * 0.1))) : 1;
+            const impactFactor = Math.max(0.1, 1 - impactRatio);
+            
+            // Volatility adjustment (if available)
+            const volatility = userData.volatility || 0;
+            const volatilityFactor = volatility > 50 ? 0.8 : volatility > 25 ? 0.9 : 1.0;
+            
+            // Neural network input (if available and trained)
+            let nnRatio = 0.5; // Default if not trained
+            if (this.metricsHistory.length >= 20) {
+                const inputData = this.prepareInputData(userData);
             const result = this.buyNet.run(inputData);
-
-            // Get buy amount from result (between 0 and 1)
-            const buyRatio = result.buyAmount;
-
-            // Calculate actual buy amount based on wallet balance
-            const walletBalance = userData.amountPerWallet || 1;
-            const maxBuyAmount = Math.min(walletBalance * 0.5, 5); // Max 50% of balance or 5 SOL
-            const buyAmount = buyRatio * maxBuyAmount;
-
-            // Ensure minimum buy amount
-            return Math.max(buyAmount, 0.05);
+                nnRatio = result.buyAmount || 0.5;
+            }
+            
+            // Combine all factors for a comprehensive position sizing
+            const combinedFactor = Math.min(
+                marketCapFactor, 
+                liquidityFactor, 
+                impactFactor,
+                volatilityFactor
+            );
+            
+            // Adjust buy ratio based on neural network and combined factors
+            const adjustedBuyRatio = nnRatio * combinedFactor;
+            
+            // Calculate potential slippage and adjust position size accordingly
+            const slippageEstimate = this.estimateSlippage(walletBalance, liquidity, marketCap);
+            const slippageAdjustment = Math.max(0.5, 1 - (slippageEstimate * 2));
+            
+            // Calculate max buy amount (more conservative for market making)
+            // For market making, we generally want to make smaller but more frequent trades
+            const maxBuyAmount = Math.min(walletBalance * 0.3, 2) * slippageAdjustment; 
+            const buyAmount = adjustedBuyRatio * maxBuyAmount;
+            
+            // Set minimum buy based on token price to ensure meaningful order size
+            let minBuyAmount = 0.005; // Base minimum
+            if (tokenPrice > 0) {
+                // Adjust minimum buy amount to ensure we're buying at least a meaningful amount of tokens
+                const minTokenAmount = 100000; // Want to buy at least this many tokens
+                const solNeededForMinTokens = (minTokenAmount * tokenPrice) / userData.solPrice;
+                minBuyAmount = Math.max(minBuyAmount, Math.min(solNeededForMinTokens, walletBalance * 0.05));
+            }
+            
+            // Log detailed calculation for analysis
+            console.log(`Market Making Buy Amount Calculation:
+                Wallet Balance: ${walletBalance} SOL
+                Token Price: $${tokenPrice}
+                Market Cap: $${marketCap}
+                Liquidity: $${liquidity}
+                Market Cap Factor: ${marketCapFactor}
+                Liquidity Factor: ${liquidityFactor}
+                Impact Factor: ${impactFactor}
+                Volatility Factor: ${volatilityFactor}
+                Combined Factor: ${combinedFactor}
+                Neural Network Ratio: ${nnRatio}
+                Adjusted Buy Ratio: ${adjustedBuyRatio}
+                Estimated Slippage: ${slippageEstimate.toFixed(4)}
+                Slippage Adjustment: ${slippageAdjustment}
+                Max Buy Amount: ${maxBuyAmount} SOL
+                Calculated Buy Amount: ${buyAmount} SOL
+                Min Buy Amount: ${minBuyAmount} SOL
+                Final Buy Amount: ${Math.max(buyAmount, minBuyAmount)} SOL
+            `);
+            
+            // Return the appropriate buy amount for this wallet
+            return Math.max(buyAmount, minBuyAmount);
         } catch (error) {
-            console.error('Error calculating buy amount:', error);
-            return 0.1; // Default fallback
+            console.error('Error calculating market making buy amount:', error);
+            return 0.05; // Safe fallback for market making
+        }
+    }
+    
+    // Helper function to estimate slippage based on order size and liquidity
+    estimateSlippage(orderAmount, liquidity, marketCap) {
+        if (!liquidity || liquidity <= 0) return 0.1; // Default 10% if unknown
+        
+        // Basic slippage model: impact increases as order size increases relative to liquidity
+        const liquidityImpact = orderAmount / (liquidity || 1);
+        
+        // Adjust based on market cap - smaller caps tend to have higher slippage
+        let marketCapMultiplier = 1.0;
+        if (marketCap < 100000) marketCapMultiplier = 2.0;
+        else if (marketCap < 1000000) marketCapMultiplier = 1.5;
+        else if (marketCap < 10000000) marketCapMultiplier = 1.2;
+        
+        return Math.min(0.2, liquidityImpact * marketCapMultiplier); // Cap at 20%
+    }
+    
+    calculateTakeProfit(userData) {
+        try {
+            // Get token details for context-aware take profit
+            const marketCap = userData.tokenDetails?.marketCap || 0;
+            const liquidity = userData.tokenDetails?.liquidity?.usd || 0;
+            const volume24h = userData.tokenDetails?.volume24h || userData.tokenDetails?.volume?.h24 || 0;
+            const volatility = userData.volatility || 0;
+            
+            // Base take profit percentage - default different by market cap
+            let baseTakeProfit = 0.2; // Default 20%
+            
+            // Adjust take profit based on market cap tiers
+            if (marketCap < 100000) { // Micro cap
+                baseTakeProfit = 0.35; // 35% for micro caps - higher volatility, higher targets
+            } else if (marketCap < 1000000) { // Small cap
+                baseTakeProfit = 0.25; // 25% for small caps
+            } else if (marketCap < 10000000) { // Mid cap
+                baseTakeProfit = 0.15; // 15% for mid caps
+            } else { // Large cap
+                baseTakeProfit = 0.1; // 10% for large caps - more stable, smaller targets
+            }
+            
+            // Adjust for liquidity - lower liquidity means higher price impact, so higher take profit
+            let liquidityAdjustment = 1.0;
+            if (liquidity < 10000) {
+                liquidityAdjustment = 1.3; // 30% increase for very low liquidity
+            } else if (liquidity < 50000) {
+                liquidityAdjustment = 1.2; // 20% increase for low liquidity
+            } else if (liquidity < 200000) {
+                liquidityAdjustment = 1.1; // 10% increase for medium liquidity
+            }
+            
+            // Adjust for volatility - higher volatility allows higher take profit
+            let volatilityAdjustment = 1.0;
+            if (volatility > 50) {
+                volatilityAdjustment = 1.3; // 30% increase for high volatility
+            } else if (volatility > 25) {
+                volatilityAdjustment = 1.15; // 15% increase for medium volatility
+            }
+            
+            // Volume adjustment - higher volume relative to market cap means more achievable targets
+            const volumeToMarketCapRatio = marketCap > 0 ? volume24h / marketCap : 0;
+            let volumeAdjustment = 1.0;
+            if (volumeToMarketCapRatio > 0.5) {
+                volumeAdjustment = 1.2; // 20% increase for high volume tokens
+            } else if (volumeToMarketCapRatio < 0.1) {
+                volumeAdjustment = 0.9; // 10% decrease for low volume tokens
+            }
+            
+            // Neural network input if trained
+            let nnAdjustment = 1.0;
+            if (this.metricsHistory.length >= 20) {
+                const inputData = this.prepareInputData(userData);
+                const result = this.takeProfitNet.run(inputData);
+                // Use neural network as a multiplier from 0.7 to 1.3
+                nnAdjustment = 0.7 + (result.takeProfit * 0.6);
+            }
+            
+            // Calculate final take profit percentage
+            const takeProfit = baseTakeProfit * liquidityAdjustment * volatilityAdjustment * volumeAdjustment * nnAdjustment;
+            
+            // Cap take profit to reasonable range for market making (5% to 50%)
+            const finalTakeProfit = Math.max(0.05, Math.min(0.5, takeProfit));
+            
+            // Log calculation for analysis
+            console.log(`Market Making Take Profit Calculation:
+                Market Cap: $${marketCap}
+                Liquidity: $${liquidity}
+                Volume 24h: $${volume24h}
+                Volatility: ${volatility}%
+                Base Take Profit: ${(baseTakeProfit * 100).toFixed(1)}%
+                Liquidity Adjustment: ${liquidityAdjustment.toFixed(2)}x
+                Volatility Adjustment: ${volatilityAdjustment.toFixed(2)}x
+                Volume/MarketCap Ratio: ${volumeToMarketCapRatio.toFixed(3)}
+                Volume Adjustment: ${volumeAdjustment.toFixed(2)}x
+                Neural Network Adjustment: ${nnAdjustment.toFixed(2)}x
+                Calculated Take Profit: ${(takeProfit * 100).toFixed(1)}%
+                Final Take Profit: ${(finalTakeProfit * 100).toFixed(1)}%
+            `);
+            
+            return finalTakeProfit;
+        } catch (error) {
+            console.error('Error calculating market making take profit:', error);
+            return 0.2; // Default fallback
         }
     }
 
