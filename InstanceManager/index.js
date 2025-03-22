@@ -23,9 +23,11 @@ class InstanceManager {
     // ENV_PATH=/root/marketMaker/
     this.basePath = path.resolve(os.homedir(), ENV_PATH);
     // Path to the specific sol_spl template we want to use
-    this.templatePath = path.resolve(os.homedir(), ENV_PATH, '.env.template');
+    this.templatePath = path.resolve(os.homedir(), ENV_PATH, 'instances', 'sol_spl');
     // Path where user instances will be created
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances', 'user');
+    // Path to the template env file  
+    this.envTemplatePath = path.resolve(os.homedir(), ENV_PATH, '.env.template');
     this.dataManager = dataManager;
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -530,20 +532,22 @@ module.exports = SafeRedisClient;
 
   async createCustomEnvFile(chatId, userData, instancePath) {
     try {
-      // Get the paths right
-      const templateEnvPath = path.resolve(os.homedir(), ENV_PATH, '.env.template');
-      const destEnvPath = path.join(instancePath, '.env');
-      
-      console.log(`Copying template .env from ${templateEnvPath} to ${destEnvPath}`);
-      
-      // Copy the template .env file
-      if (fs.existsSync(templateEnvPath)) {
-        fs.copyFileSync(templateEnvPath, destEnvPath);
-      } else {
-        console.error(`Template .env file not found at ${templateEnvPath}`);
-        // Create an empty .env file as fallback
-        fs.writeFileSync(destEnvPath, '');
-      }
+      // Get the paths right      
+       // Define the source and destination paths correctly
+    const templatePath = path.resolve(os.homedir(), this.envTemplatePath);
+    const destEnvPath = path.join(instancePath, '.env'); // Proper path to destination .env file
+    
+    console.log(`Copying template from ${templatePath} to ${destEnvPath}`);
+    
+    // Copy the template .env file with the correct name
+    if (fs.existsSync(templatePath)) {
+      fs.copyFileSync(templatePath, destEnvPath);
+      console.log('Successfully copied .env.template to .env');
+    } else {
+      console.error(`Template .env file not found at ${templatePath}`);
+      // Create an empty .env file as fallback
+      fs.writeFileSync(destEnvPath, '');
+    }
       
       // Calculate trading parameters using TradeStrategy
       console.log('Calculating trading parameters using TradeStrategy...');
@@ -599,8 +603,8 @@ DISCORD_CHANNEL_ID=dummy_channel
 MM_MODE=true
 `;
 
-      fs.appendFileSync(destEnvPath, envAppend);
-      console.log(`Successfully appended market maker configuration to ${destEnvPath}`);
+        fs.appendFileSync(instancePath, envAppend);
+      console.log(`Successfully appended market maker configuration to ${instancePath}`);
       
       return true;
     } catch (error) {
