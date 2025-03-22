@@ -75,6 +75,7 @@ class InstanceManager {
         console.log(`Processing step: ${step}`);
 
         // Fetch fresh user data before each step
+        userData = await this.dataManager.getCollection(chatId);
         if (!userData) {
           throw new Error("userData is undefined. Stopping initialization.");
         }
@@ -104,22 +105,34 @@ class InstanceManager {
               break;
 
             case "CHECK_COMMISSION_PAID":
-              if (userData.walletsCreated && !userData.commissionPaid) {
+              // Force commission check by reading the flag directly
+              const commissionPaidFlag = userData.commissionPaid === true;
+              if (!commissionPaidFlag) {
                 console.log('Commission not paid. Sending commission...');
-                await this.commissionPaid.sendToCommissionWallet(chatId, userData, interaction);
-                await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
-                console.log('Commission sent successfully.');
+                const signature = await this.commissionPaid.sendToCommissionWallet(chatId, userData, interaction);
+                if (signature) {
+                  await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
+                  console.log('Commission sent successfully with signature:', signature);
+                } else {
+                  throw new Error('Commission transaction failed - no signature returned');
+                }
               } else {
                 console.log('Commission already paid.');
               }
               break;
 
             case "CHECK_SOLANA_DISTRIBUTION":
-              if (userData.commissionPaid && !userData.distributeSolana) {
+              // Force distribution check by reading the flag directly
+              const distributionFlag = userData.distributeSolana === true;
+              if (!distributionFlag) {
                 console.log('Distributing Solana...');
-                await this.distributeSolana.distributeSolana(chatId, userData, interaction);
-                await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
-                console.log('Solana distributed successfully.');
+                const result = await this.distributeSolana.distributeSolana(chatId, userData, interaction);
+                if (result === true) {
+                  await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
+                  console.log('Solana distributed successfully.');
+                } else {
+                  throw new Error('SOL distribution failed');
+                }
               } else {
                 console.log('Solana already distributed.');
               }
@@ -128,13 +141,9 @@ class InstanceManager {
             case "CHECK_INSTANCES_STARTED":
               if (!userData.instancesStarted) {
                 console.log('Starting market maker instance...');
-                // await this.startMarketMakerInstance(chatId, userDir);
-                await this.dataManager.updateCollection(chatIdStr, {
-                  instancesStarted: true,
-                  commissionPaid: true,
-                  distributeSolana: true,
-                  topUpState: false
-                });
+                // Uncomment this line to actually start the instance
+                await this.startMarketMakerInstance(chatId, userDir);
+                await this.dataManager.updateCollection(chatIdStr, { instancesStarted: true });
                 console.log('Market maker instance started successfully.');
               } else {
                 console.log('Market maker instance already started.');
@@ -145,9 +154,7 @@ class InstanceManager {
               if (userData.topUpState) {
                 console.log('Distributing topup...');
                 await this.topUp.handleCommission(chatId, userData);
-                await this.dataManager.updateCollection(chatIdStr, {
-                  topUpState: false
-                });
+                await this.dataManager.updateCollection(chatIdStr, { topUpState: false });
                 console.log('Market makers topped up.');
               } else {
                 console.log('Market maker already topped up.');
