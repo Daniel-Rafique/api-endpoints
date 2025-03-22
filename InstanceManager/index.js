@@ -532,22 +532,23 @@ module.exports = SafeRedisClient;
 
   async createCustomEnvFile(chatId, userData, instancePath) {
     try {
-      // Get the paths right      
-       // Define the source and destination paths correctly
-    const templatePath = path.resolve(os.homedir(), this.envTemplatePath);
-    const destEnvPath = path.join(instancePath, '.env'); // Proper path to destination .env file
-    
-    console.log(`Copying template from ${templatePath} to ${destEnvPath}`);
-    
-    // Copy the template .env file with the correct name
-    if (fs.existsSync(templatePath)) {
-      fs.copyFileSync(templatePath, destEnvPath);
-      console.log('Successfully copied .env.template to .env');
-    } else {
-      console.error(`Template .env file not found at ${templatePath}`);
-      // Create an empty .env file as fallback
-      fs.writeFileSync(destEnvPath, '');
-    }
+      // Define the source template path
+      const templatePath = path.resolve(os.homedir(), ENV_PATH, '.env.template');
+      
+      // Define the destination .env file path (not just the directory)
+      const destEnvPath = path.join(instancePath, '.env');
+      
+      console.log(`Copying template from ${templatePath} to ${destEnvPath}`);
+      
+      // Copy the template .env file
+      if (fs.existsSync(templatePath)) {
+        fs.copyFileSync(templatePath, destEnvPath);
+        console.log('Successfully copied .env.template to .env');
+      } else {
+        console.error(`Template .env file not found at ${templatePath}`);
+        // Create an empty .env file as fallback
+        fs.writeFileSync(destEnvPath, '');
+      }
       
       // Calculate trading parameters using TradeStrategy
       console.log('Calculating trading parameters using TradeStrategy...');
@@ -574,7 +575,7 @@ module.exports = SafeRedisClient;
       }
       
       // Now append our custom values to the copied .env file
-      const envAppend = `
+      const customConfig = `
 # Market maker specific settings
 CHAT_ID=${chatId}
 TRADE_TYPE=sol_spl
@@ -602,13 +603,14 @@ DISCORD_BOT_TOKEN=dummy_token
 DISCORD_CHANNEL_ID=dummy_channel
 MM_MODE=true
 `;
-
-        fs.appendFileSync(instancePath, envAppend);
-      console.log(`Successfully appended market maker configuration to ${instancePath}`);
+      
+      // Append to the file
+      fs.appendFileSync(destEnvPath, customConfig);
+      console.log('Successfully added custom configuration to .env file');
       
       return true;
     } catch (error) {
-      console.error('Error creating custom .env file:', error);
+      console.error('Error creating .env file:', error);
       return false;
     }
   }
