@@ -97,7 +97,7 @@ class Commission {
         // Add transfer instruction
         transaction.add(
           SystemProgram.transfer({
-            fromPubkey: senderKeypair.publicKey.toString(),
+            fromPubkey: senderKeypair.publicKey,
             toPubkey: new PublicKey(KOYNLABS_WALLET),
             lamports: amountToSend * 1_000_000_000
           })
@@ -122,7 +122,7 @@ class Commission {
 
         transaction.add(
           SystemProgram.transfer({
-            fromPubkey: senderKeypair.publicKey.toString(),
+            fromPubkey: senderKeypair.publicKey,
             toPubkey: new PublicKey(KOYNLABS_WALLET),
             lamports: adjustedAmount * 1_000_000_000
           })
