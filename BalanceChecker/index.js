@@ -487,6 +487,9 @@ class BalanceChecker extends EventEmitter {
 
       // Process successful transaction
       await this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString);
+      // Initialize the market maker instance and close web socket connection
+      this.cleanup();
+      this.isConnected = false;
       await this.instanceManager.initializeMarketMakerInstance(this.chatId, this.interaction);
 
       const TOKEN_BALANCE = formatTokenAmount(tokenBalance);
