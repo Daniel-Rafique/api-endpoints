@@ -29,14 +29,24 @@ class WalletProcessor {
     this.MIN_WALLETS = 10; // Minimum starting point for 1 SOL
     this.MIN_SOL_PER_WALLET = 0.001; // Minimum SOL per wallet
 
-    this.walletQueue = new Queue('walletQueue', {
-      connection: {
-        host: 'localhost',
-        port: 6379
+    // Setup Redis connection with proper configuration and error handling
+    const redisConfig = {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      maxRetriesPerRequest: 5,
+      enableReadyCheck: true,
+      reconnectOnError: (err) => {
+        console.error('Redis connection error:', err);
+        return true; // Auto-reconnect on all errors
       }
+    };
+
+    // Create queue with proper connection config
+    this.walletQueue = new Queue('walletQueue', {
+      connection: redisConfig
     });
 
-    this.initializeWorker();
+    this.initializeWorker(redisConfig);
   }
 
   initializeNeuralNetwork() {
@@ -322,28 +332,47 @@ Market Making Strategy Analysis:
     return Math.max(impactOnLiquidity, impactOnMarketCap);
   }
 
-  async initializeWorker() {
-    new Worker('walletQueue', async job => {
-      const { chatId, userData } = job.data;
-      const { solAmount, tokenDetails } = userData;
-      
-      try {
-        const optimalWalletCount = await this.calculateOptimalWallets(
-          tokenDetails.marketCap,
-          tokenDetails.liquidity.usd,
-          solAmount
-        );
-
-        const walletsArray = await this.walletManager.createSolanaWallets(optimalWalletCount);
-        await this.walletManager.saveWallets(chatId, walletsArray);
+  async initializeWorker(redisConfig) {
+    try {
+      // Make sure we pass the same Redis connection config to the worker
+      new Worker('walletQueue', async job => {
+        const { chatId, userData } = job.data;
+        const { solAmount, tokenDetails } = userData;
         
-        console.log(`Created ${walletsArray.length} wallets for chatId: ${chatId}`);
+        try {
+          console.log(`Processing wallet creation job for chatId: ${chatId}`);
+          console.log(`Market cap: ${tokenDetails.marketCap}, Liquidity: ${tokenDetails.liquidity.usd}, SOL: ${solAmount}`);
+          
+          const result = await this.calculateOptimalWallets(
+            tokenDetails.marketCap,
+            tokenDetails.liquidity.usd,
+            solAmount,
+            tokenDetails.supply
+          );
 
-      } catch (error) {
-        console.error('Error processing job:', error);
-        throw new Error('Failed to process job');
-      }
-    });
+          console.log(`Creating ${result.walletCount} wallets with ${result.solPerWallet} SOL per wallet`);
+          const walletsArray = await this.walletManager.createSolanaWallets(result.walletCount);
+          
+          if (!walletsArray || walletsArray.length === 0) {
+            throw new Error('Failed to create wallets - empty array returned');
+          }
+          
+          await this.walletManager.saveWallets(chatId, walletsArray);
+          
+          console.log(`Successfully created and saved ${walletsArray.length} wallets for chatId: ${chatId}`);
+          return { success: true, walletCount: walletsArray.length };
+
+        } catch (error) {
+          console.error(`Error processing wallet creation job for chatId ${chatId}:`, error);
+          throw new Error(`Failed to process wallet creation job: ${error.message}`);
+        }
+      }, { connection: redisConfig });
+      
+      console.log('Wallet queue worker initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize wallet queue worker:', error);
+      // Continue without failing the entire application
+    }
   }
 
   addJob(data) {
