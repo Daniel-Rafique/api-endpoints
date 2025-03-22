@@ -86,7 +86,13 @@ class Distribute {
       const retryLimit = 3;
       let attempt = 0;
 
-      const updatedBalance = await this.connection.getBalance(userKeypair.publicKey);
+      // Convert publicKey to a proper PublicKey object if it's a string
+      const publicKeyObj = typeof userKeypair.publicKey === 'string' 
+        ? new PublicKey(userKeypair.publicKey) 
+        : userKeypair.publicKey;
+
+      console.log(`Checking balance for public key: ${publicKeyObj.toString()}`);
+      const updatedBalance = await this.connection.getBalance(publicKeyObj);
       console.log(`Initial balance: ${updatedBalance / 1e9} SOL`);
 
       if (updatedBalance <= 0) {
@@ -96,7 +102,7 @@ class Distribute {
       while (attempt < retryLimit) {
         try {
           const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userKeypair.secretKey)));
-          const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
+          const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/user/${chatId}/.config/wallets.json`);
 
           await this.waitForFile(filePath, 30000);
 
@@ -126,7 +132,7 @@ class Distribute {
           }
 
           await this.sendNotification(
-            this.chatId,
+            userData,
             `✅ Labs ${userData.boostName} tier will begin shortly for ${userData.tokenDetails.name}\n`,
             interaction
           );

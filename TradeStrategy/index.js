@@ -384,69 +384,83 @@ class TradeStrategy {
         this.saveModels();
     }
 
+    // Add these validation helpers at the top of the file, outside any method
+    isNumeric(value) {
+        return !isNaN(parseFloat(value)) && isFinite(value);
+    }
+
+    getSafeNumber(value, defaultValue = 0) {
+        return this.isNumeric(value) ? parseFloat(value) : defaultValue;
+    }
+
     // Calculate optimal buy amount based on user data
     calculateBuyAmount(userData) {
         try {
-            // Get token details
-            const marketCap = userData.tokenDetails?.marketCap || 0;
-            const liquidity = userData.tokenDetails?.liquidity?.usd || 0;
-            const tokenPrice = userData.tokenDetails?.priceUSD || 0;
-            const tokenSupply = userData.tokenDetails?.totalSupply || 0;
-                const walletBalance = userData.amountPerWallet || 1;
+            // Safely extract and validate all input values
+            const walletBalance = this.getSafeNumber(userData.amountPerWallet, 1);
+            const marketCap = this.getSafeNumber(userData.tokenDetails?.marketCap, 0);
+            const liquidity = this.getSafeNumber(userData.tokenDetails?.liquidity?.usd, 0);
+            const tokenPrice = this.getSafeNumber(userData.tokenDetails?.priceUSD, 0);
+            const volatility = this.getSafeNumber(userData.volatility, 0);
+            const solPrice = this.getSafeNumber(userData.solPrice, 20); // Default SOL price if not provided
             
-            // Adjust market cap tiers for more refined position sizing
+            // Use safe values for all calculations
             let marketCapFactor = 1.0;
             if (marketCap > 0) {
-                if (marketCap < 50000) { // Micro caps below $50k
+                if (marketCap < 50000) {
                     marketCapFactor = 0.15;
-                } else if (marketCap < 100000) { // Up to $100k
+                } else if (marketCap < 100000) {
                     marketCapFactor = 0.2;
-                } else if (marketCap < 500000) { // $100k-$500k
+                } else if (marketCap < 500000) {
                     marketCapFactor = 0.3;
-                } else if (marketCap < 1000000) { // $500k-$1M
+                } else if (marketCap < 1000000) {
                     marketCapFactor = 0.4;
-                } else if (marketCap < 5000000) { // $1M-$5M
+                } else if (marketCap < 5000000) {
                     marketCapFactor = 0.6;
-                } else if (marketCap < 10000000) { // $5M-$10M
+                } else if (marketCap < 10000000) {
                     marketCapFactor = 0.8;
                 }
             }
             
-            // More granular liquidity tiers
+            // Safe liquidity factor calculation
             let liquidityFactor = 1.0;
             if (liquidity > 0) {
-                if (liquidity < 5000) { // Very low liquidity
+                if (liquidity < 5000) {
                     liquidityFactor = 0.15;
-                } else if (liquidity < 10000) { // Up to $10k
+                } else if (liquidity < 10000) {
                     liquidityFactor = 0.25;
-                } else if (liquidity < 25000) { // $10k-$25k
+                } else if (liquidity < 25000) {
                     liquidityFactor = 0.35;
-                } else if (liquidity < 50000) { // $25k-$50k
+                } else if (liquidity < 50000) {
                     liquidityFactor = 0.5;
-                } else if (liquidity < 100000) { // $50k-$100k
+                } else if (liquidity < 100000) {
                     liquidityFactor = 0.7;
-                } else if (liquidity < 200000) { // $100k-$200k
+                } else if (liquidity < 200000) {
                     liquidityFactor = 0.85;
                 }
             }
 
-            // Calculate the impact ratio (helps determine how much we can buy without affecting price)
-            const impactRatio = liquidity > 0 ? Math.min(1, (walletBalance / (liquidity * 0.1))) : 1;
+            // Safe impact calculation
+            const impactRatio = liquidity > 0 ? Math.min(1, (walletBalance / Math.max(0.1, liquidity * 0.1))) : 1;
             const impactFactor = Math.max(0.1, 1 - impactRatio);
             
-            // Volatility adjustment (if available)
-            const volatility = userData.volatility || 0;
+            // Safe volatility factor
             const volatilityFactor = volatility > 50 ? 0.8 : volatility > 25 ? 0.9 : 1.0;
             
-            // Neural network input (if available and trained)
-            let nnRatio = 0.5; // Default if not trained
+            // Safe neural network calculation
+            let nnRatio = 0.5;
             if (this.metricsHistory.length >= 20) {
-                const inputData = this.prepareInputData(userData);
+                try {
+                    const inputData = this.prepareInputData(userData);
             const result = this.buyNet.run(inputData);
-                nnRatio = result.buyAmount || 0.5;
+                    nnRatio = this.getSafeNumber(result.buyAmount, 0.5);
+                } catch (nnError) {
+                    console.error('Neural network calculation error:', nnError);
+                    // Keep default nnRatio if there's an error
+                }
             }
             
-            // Combine all factors for a comprehensive position sizing
+            // Safe combined factor calculation
             const combinedFactor = Math.min(
                 marketCapFactor, 
                 liquidityFactor, 
@@ -454,31 +468,39 @@ class TradeStrategy {
                 volatilityFactor
             );
             
-            // Adjust buy ratio based on neural network and combined factors
+            // Safe buy ratio calculation
             const adjustedBuyRatio = nnRatio * combinedFactor;
             
-            // Calculate potential slippage and adjust position size accordingly
+            // Safe slippage calculation
             const slippageEstimate = this.estimateSlippage(walletBalance, liquidity, marketCap);
             const slippageAdjustment = Math.max(0.5, 1 - (slippageEstimate * 2));
             
-            // Calculate max buy amount (more conservative for market making)
-            // For market making, we generally want to make smaller but more frequent trades
-            const maxBuyAmount = Math.min(walletBalance * 0.3, 2) * slippageAdjustment; 
+            // Safe maximum buy amount
+            const maxBuyAmount = Math.min(walletBalance * 0.3, 2) * slippageAdjustment;
             const buyAmount = adjustedBuyRatio * maxBuyAmount;
             
-            // Set minimum buy based on token price to ensure meaningful order size
+            // Safe minimum buy amount with token price consideration
             let minBuyAmount = 0.005; // Base minimum
-            if (tokenPrice > 0) {
-                // Adjust minimum buy amount to ensure we're buying at least a meaningful amount of tokens
-                const minTokenAmount = 100000; // Want to buy at least this many tokens
-                const solNeededForMinTokens = (minTokenAmount * tokenPrice) / userData.solPrice;
-                minBuyAmount = Math.max(minBuyAmount, Math.min(solNeededForMinTokens, walletBalance * 0.05));
+            if (tokenPrice > 0 && solPrice > 0) {
+                try {
+                    // Calculate minimum tokens we want to buy
+                    const minTokenAmount = 100000; // Want to buy at least this many tokens
+                    const solNeededForMinTokens = (minTokenAmount * tokenPrice) / solPrice;
+                    minBuyAmount = Math.max(minBuyAmount, Math.min(solNeededForMinTokens, walletBalance * 0.05));
+                } catch (calcError) {
+                    console.error('Error calculating minimum buy amount:', calcError);
+                    // Keep default minBuyAmount if there's an error
+                }
             }
             
-            // Log detailed calculation for analysis
+            // Ensure final buy amount is valid
+            const finalBuyAmount = Math.max(buyAmount, minBuyAmount);
+            
+            // Log all values to help with debugging
             console.log(`Market Making Buy Amount Calculation:
                 Wallet Balance: ${walletBalance} SOL
                 Token Price: $${tokenPrice}
+                SOL Price: $${solPrice}
                 Market Cap: $${marketCap}
                 Liquidity: $${liquidity}
                 Market Cap Factor: ${marketCapFactor}
@@ -493,11 +515,10 @@ class TradeStrategy {
                 Max Buy Amount: ${maxBuyAmount} SOL
                 Calculated Buy Amount: ${buyAmount} SOL
                 Min Buy Amount: ${minBuyAmount} SOL
-                Final Buy Amount: ${Math.max(buyAmount, minBuyAmount)} SOL
+                Final Buy Amount: ${finalBuyAmount} SOL
             `);
             
-            // Return the appropriate buy amount for this wallet
-            return Math.max(buyAmount, minBuyAmount);
+            return finalBuyAmount;
         } catch (error) {
             console.error('Error calculating market making buy amount:', error);
             return 0.05; // Safe fallback for market making
