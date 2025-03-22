@@ -161,6 +161,14 @@ class WalletProcessor {
   }
 
   async calculateOptimalWallets(marketCap, liquidity, solAmount, tokenSupply = 1000000000) {
+    // Safety checks for input values
+    marketCap = Number(marketCap) || 1000;  // Default to 1000 if invalid
+    liquidity = Number(liquidity) || 1000;  // Default to 1000 if invalid
+    solAmount = Number(solAmount) || 1;     // Default to 1 SOL if invalid
+    tokenSupply = Number(tokenSupply) || 1000000000; // Default to 1B if invalid
+    
+    console.log(`Validated inputs: MarketCap=${marketCap}, Liquidity=${liquidity}, SOL=${solAmount}, Supply=${tokenSupply}`);
+    
     // Starting with a maximum of 100 wallets for low cap tokens (reduced by factor of 10)
     let walletCount;
     
@@ -188,21 +196,38 @@ class WalletProcessor {
     walletCount = Math.round(walletCount * Math.min(Math.sqrt(solAmount), 3));
     
     // Ensure we have at least the minimum number of wallets
-    // Also reduce the minimum wallets from 10 to 3
-    walletCount = Math.max(walletCount, 3);  // was this.MIN_WALLETS (10)
+    walletCount = Math.max(walletCount, this.MIN_WALLETS);
+
+    // Additional safety check
+    if (isNaN(walletCount) || walletCount <= 0) {
+      console.warn('Invalid wallet count calculated, using minimum:', this.MIN_WALLETS);
+      walletCount = this.MIN_WALLETS;
+    }
 
     // Calculate SOL per wallet based on our target wallet count
     const solPerWallet = this.calculateOptimalSolPerWallet(solAmount, walletCount, marketCap, liquidity);
     
+    // Additional safety check
+    if (isNaN(solPerWallet) || solPerWallet <= 0) {
+      console.warn('Invalid SOL per wallet calculated, using minimum:', this.MIN_SOL_PER_WALLET);
+      solPerWallet = this.MIN_SOL_PER_WALLET;
+    }
+    
     // Recalculate wallet count based on the SOL per wallet to ensure we don't exceed our SOL amount
-    const maxWalletsFromSol = Math.floor(solAmount / solPerWallet);
+    const maxWalletsFromSol = Math.floor(solAmount / solPerWallet) || this.MIN_WALLETS;
     walletCount = Math.min(walletCount, maxWalletsFromSol);
+    
+    // Additional safety check after adjustments
+    if (isNaN(walletCount) || walletCount <= 0) {
+      console.warn('Invalid adjusted wallet count, using minimum:', this.MIN_WALLETS);
+      walletCount = this.MIN_WALLETS;
+    }
     
     // Calculate trading parameters for these wallets
     const tradingParams = this.calculateTradingParameters(marketCap, liquidity, solPerWallet, tokenSupply);
     
     // Calculate total expected transactions
-    const txPerWallet = Math.floor(10 / solPerWallet); // Estimate 10 transactions per SOL
+    const txPerWallet = Math.floor(10 / solPerWallet) || 1; // Estimate 10 transactions per SOL, minimum 1
     const totalTransactions = txPerWallet * walletCount;
 
     console.log(`
@@ -242,20 +267,32 @@ Market Making Strategy Analysis:
   }
 
   calculateOptimalSolPerWallet(totalSol, walletCount, marketCap, liquidity) {
+    // Safety checks for input values
+    totalSol = Number(totalSol) || 1;         // Default to 1 SOL if invalid
+    walletCount = Number(walletCount) || 3;   // Default to 3 wallets if invalid
+    marketCap = Number(marketCap) || 1000;    // Default to 1000 if invalid
+    liquidity = Number(liquidity) || 1000;    // Default to 1000 if invalid
+    
     // Base calculation - evenly distribute SOL among wallets
     let solPerWallet = totalSol / walletCount;
     
+    // Safety check result
+    if (isNaN(solPerWallet) || solPerWallet <= 0) {
+      console.warn('Invalid SOL per wallet calculation, using default distribution');
+      solPerWallet = totalSol / 3; // Default to 3 wallets distribution
+    }
+    
     // Minimum SOL per wallet - increased to ensure enough buying power
-    const MIN_TX_SOL = 0.0001; // Increased minimum SOL per wallet (was 0.000005)
+    const MIN_TX_SOL = 0.0001; // Increased minimum SOL per wallet
     
     // Adjust based on liquidity
     const mcapToLiqRatio = marketCap / Math.max(liquidity, 1);
     if (mcapToLiqRatio > 5) {
       // Very illiquid tokens need careful sizing - reduce less
-      solPerWallet *= 0.8; // was 0.6
+      solPerWallet *= 0.8;
     } else if (mcapToLiqRatio > 2) {
       // Moderately illiquid tokens - reduce less
-      solPerWallet *= 0.9; // was 0.8
+      solPerWallet *= 0.9;
     }
     
     // Ensure we have enough SOL for trading plus a buffer
@@ -345,15 +382,28 @@ Market Making Strategy Analysis:
         
         try {
           console.log(`Processing wallet creation job for chatId: ${chatId}`);
-          console.log(`Market cap: ${tokenDetails.marketCap}, Liquidity: ${tokenDetails.liquidity.usd}, SOL: ${solAmount}`);
+          console.log(`Market cap: ${tokenDetails?.marketCap}, Liquidity: ${tokenDetails?.liquidity?.usd}, SOL Amount: ${solAmount}`);
+          
+          // Handle undefined solAmount with a default value
+          const actualSolAmount = solAmount || 1; // Default to 1 SOL if undefined
+          
+          if (!tokenDetails || !tokenDetails.marketCap || !tokenDetails.liquidity || !tokenDetails.liquidity.usd) {
+            console.error('Invalid token details:', tokenDetails);
+            throw new Error('Token details are missing or invalid');
+          }
           
           const result = await this.calculateOptimalWallets(
             tokenDetails.marketCap,
             tokenDetails.liquidity.usd,
-            solAmount,
-            tokenDetails.supply
+            actualSolAmount,
+            tokenDetails.supply || 1000000000
           );
 
+          // Check that we got a valid wallet count
+          if (!result.walletCount || isNaN(result.walletCount) || result.walletCount <= 0) {
+            throw new Error(`Invalid wallet count: ${result.walletCount}`);
+          }
+          
           console.log(`Creating ${result.walletCount} wallets with ${result.solPerWallet} SOL per wallet`);
           const walletsArray = await this.walletManager.createSolanaWallets(result.walletCount);
           
@@ -380,7 +430,35 @@ Market Making Strategy Analysis:
   }
 
   addJob(data) {
-    console.log('Adding create wallet job to queue:', data);
+    if (!data || !data.chatId) {
+      console.error('Invalid job data: Missing chatId');
+      return Promise.reject(new Error('Invalid job data: Missing chatId'));
+    }
+    
+    if (!data.userData) {
+      console.error('Invalid job data: Missing userData for chatId:', data.chatId);
+      return Promise.reject(new Error('Invalid job data: Missing userData'));
+    }
+    
+    // Ensure userData has tokenDetails, and add default solAmount if missing
+    if (!data.userData.tokenDetails) {
+      console.error('Invalid job data: Missing tokenDetails for chatId:', data.chatId);
+      return Promise.reject(new Error('Invalid job data: Missing tokenDetails'));
+    }
+    
+    // Set default solAmount if undefined
+    if (data.userData.solAmount === undefined) {
+      console.warn(`solAmount is undefined for chatId: ${data.chatId}, setting default value of 1`);
+      data.userData.solAmount = 1;
+    }
+    
+    console.log('Adding create wallet job to queue:', {
+      chatId: data.chatId,
+      solAmount: data.userData.solAmount,
+      marketCap: data.userData.tokenDetails?.marketCap,
+      liquidity: data.userData.tokenDetails?.liquidity?.usd
+    });
+    
     return this.walletQueue.add('createWallets', data);
   }
 }
