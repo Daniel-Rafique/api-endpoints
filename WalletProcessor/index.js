@@ -26,8 +26,8 @@ class WalletProcessor {
 
     this.dataManager = dataManager;
     this.network = this.initializeNeuralNetwork();
-    this.MIN_WALLETS = 10; // Minimum starting point for 1 SOL
-    this.MIN_SOL_PER_WALLET = 0.001; // Minimum SOL per wallet
+    this.MIN_WALLETS = 3; // Reduced from 10 to 3
+    this.MIN_SOL_PER_WALLET = 0.0001; // Increased from 0.001 to ensure enough buying power
 
     // Setup Redis connection with proper configuration and error handling
     const redisConfig = {
@@ -161,35 +161,36 @@ class WalletProcessor {
   }
 
   async calculateOptimalWallets(marketCap, liquidity, solAmount, tokenSupply = 1000000000) {
-    // Starting with a maximum of 1000 wallets for low cap tokens
+    // Starting with a maximum of 100 wallets for low cap tokens (reduced by factor of 10)
     let walletCount;
     
     if (marketCap < 1000) {
-      // Micro cap tokens - maximum 1000 wallets
-      walletCount = 1000;
+      // Micro cap tokens - maximum 100 wallets (was 1000)
+      walletCount = 100;
     } else if (marketCap < 10000) {
       // Small cap tokens - half of micro caps
-      walletCount = 500;
+      walletCount = 50;  // was 500
     } else if (marketCap < 50000) {
       // Medium-small cap - half again
-      walletCount = 250;
+      walletCount = 25;  // was 250
     } else if (marketCap < 200000) {
       // Medium cap - half again
-      walletCount = 125;
+      walletCount = 12;  // was 125
     } else if (marketCap < 500000) {
       // Medium-large cap
-      walletCount = 60;
+      walletCount = 6;   // was 60
     } else {
       // Large cap
-      walletCount = 30;
+      walletCount = 3;   // was 30
     }
     
     // Scale by SOL amount (more SOL = proportionally more wallets)
-    walletCount = Math.round(walletCount * Math.sqrt(solAmount));
+    walletCount = Math.round(walletCount * Math.min(Math.sqrt(solAmount), 3));
     
     // Ensure we have at least the minimum number of wallets
-    walletCount = Math.max(walletCount, this.MIN_WALLETS);
-    
+    // Also reduce the minimum wallets from 10 to 3
+    walletCount = Math.max(walletCount, 3);  // was this.MIN_WALLETS (10)
+
     // Calculate SOL per wallet based on our target wallet count
     const solPerWallet = this.calculateOptimalSolPerWallet(solAmount, walletCount, marketCap, liquidity);
     
@@ -201,9 +202,9 @@ class WalletProcessor {
     const tradingParams = this.calculateTradingParameters(marketCap, liquidity, solPerWallet, tokenSupply);
     
     // Calculate total expected transactions
-    const txPerSol = Math.floor(1 / solPerWallet);
-    const totalTransactions = txPerSol * solAmount;
-    
+    const txPerWallet = Math.floor(10 / solPerWallet); // Estimate 10 transactions per SOL
+    const totalTransactions = txPerWallet * walletCount;
+
     console.log(`
 Market Making Strategy Analysis:
   Market Metrics:
@@ -214,9 +215,10 @@ Market Making Strategy Analysis:
     
   Wallet Strategy:
     Total SOL: ${solAmount}
-    Wallet Count: ${walletCount.toLocaleString()}
-    SOL per Wallet: ${solPerWallet.toFixed(8)}
-    Expected Transactions: ~${Math.floor(totalTransactions).toLocaleString()} (${txPerSol.toLocaleString()} per SOL)
+    Wallet Count: ${walletCount.toLocaleString()} (reduced for more buying power)
+    SOL per Wallet: ${solPerWallet.toFixed(6)}
+    Buying Power per Wallet: $${(solPerWallet * 20).toFixed(2)}
+    Expected Transactions: ~${Math.floor(totalTransactions).toLocaleString()} (${txPerWallet.toLocaleString()} per wallet)
     
   Trading Parameters:
     Take Profit: ${tradingParams.takeProfit.toFixed(2)}%
@@ -226,8 +228,9 @@ Market Making Strategy Analysis:
     Expected Slippage: ${tradingParams.expectedSlippage.toFixed(4)}%
     
   Market Making Impact:
-    Avg Trade Size: $${(solPerWallet * 20).toFixed(4)}
-    Liquidity Impact per Trade: ${((solPerWallet * 20 / liquidity) * 100).toFixed(4)}%
+    Avg Trade Size: $${(solPerWallet * 20 * 0.25).toFixed(4)} (25% of wallet)
+    Max Trade Size: $${(solPerWallet * 20 * 0.5).toFixed(4)} (50% of wallet)
+    Liquidity Impact per Trade: ${((solPerWallet * 20 * 0.25 / liquidity) * 100).toFixed(4)}%
     `);
 
     return {
@@ -242,20 +245,20 @@ Market Making Strategy Analysis:
     // Base calculation - evenly distribute SOL among wallets
     let solPerWallet = totalSol / walletCount;
     
-    // The minimum SOL needed per transaction (covers fees)
-    const MIN_TX_SOL = 0.000005; // Minimum SOL needed for a transaction
+    // Minimum SOL per wallet - increased to ensure enough buying power
+    const MIN_TX_SOL = 0.0001; // Increased minimum SOL per wallet (was 0.000005)
     
     // Adjust based on liquidity
     const mcapToLiqRatio = marketCap / Math.max(liquidity, 1);
     if (mcapToLiqRatio > 5) {
-      // Very illiquid tokens need smaller trade sizes
-      solPerWallet *= 0.6;
+      // Very illiquid tokens need careful sizing - reduce less
+      solPerWallet *= 0.8; // was 0.6
     } else if (mcapToLiqRatio > 2) {
-      // Moderately illiquid tokens
-      solPerWallet *= 0.8;
+      // Moderately illiquid tokens - reduce less
+      solPerWallet *= 0.9; // was 0.8
     }
     
-    // Ensure we have enough SOL for tx fees plus a small buffer
+    // Ensure we have enough SOL for trading plus a buffer
     return Math.max(solPerWallet, MIN_TX_SOL);
   }
 
@@ -264,52 +267,53 @@ Market Making Strategy Analysis:
     // as they tend to be more volatile and have larger price swings
     let takeProfit;
     if (marketCap < 1000) {
-      takeProfit = 30; // 30% for micro caps
+      takeProfit = 25; // Slightly reduced from 30% for micro caps
     } else if (marketCap < 10000) {
-      takeProfit = 20; // 20% for small caps
+      takeProfit = 18; // Slightly reduced from 20% for small caps
     } else if (marketCap < 50000) {
-      takeProfit = 15; // 15% for medium-small caps
+      takeProfit = 12; // Slightly reduced from 15% for medium-small caps
     } else if (marketCap < 200000) {
-      takeProfit = 10; // 10% for medium caps
+      takeProfit = 8; // Slightly reduced from 10% for medium caps
     } else {
-      takeProfit = 5; // 5% for larger caps
+      takeProfit = 5; // Unchanged for larger caps
     }
     
     // Stop loss should be tighter for more liquid tokens
     // and wider for less liquid ones
     let stopLoss;
     if (liquidity < 500) {
-      stopLoss = 15; // 15% for very low liquidity
+      stopLoss = 12; // Tightened from 15% for very low liquidity
     } else if (liquidity < 2000) {
-      stopLoss = 12; // 12% for low liquidity
+      stopLoss = 10; // Tightened from 12% for low liquidity
     } else if (liquidity < 10000) {
-      stopLoss = 10; // 10% for medium liquidity
+      stopLoss = 8; // Tightened from 10% for medium liquidity
     } else {
-      stopLoss = 8; // 8% for high liquidity
+      stopLoss = 6; // Tightened from 8% for high liquidity
     }
     
     // Adjust for market cap to liquidity ratio
     const mcapToLiqRatio = marketCap / Math.max(liquidity, 1);
     if (mcapToLiqRatio > 5) {
-      stopLoss *= 1.5; // Wider stop loss for very illiquid tokens
+      stopLoss *= 1.3; // Reduced from 1.5 for very illiquid tokens
     } else if (mcapToLiqRatio > 2) {
-      stopLoss *= 1.2; // Slightly wider stop loss for moderately illiquid tokens
+      stopLoss *= 1.1; // Reduced from 1.2 for moderately illiquid tokens
     }
     
     // Calculate the estimated token price and average order size
     const estimatedTokenPrice = marketCap / tokenSupply;
     const solValueInUsd = solPerWallet * 20; // Approximate SOL value in USD
-    const averageOrderSize = solValueInUsd / estimatedTokenPrice; // Tokens per order
+    const averageOrderSize = (solValueInUsd * 0.25) / estimatedTokenPrice; // 25% of wallet per order (reduced from 50%)
     
     // Calculate expected slippage based on order size and liquidity
-    const expectedSlippage = (solValueInUsd / Math.sqrt(liquidity)) * 100;
+    const expectedSlippage = (solValueInUsd * 0.25 / Math.sqrt(liquidity)) * 100;
     
     // For market making, calculate spread based on liquidity
-    const spreadPercentage = Math.min(Math.max(0.5, 5000 / Math.sqrt(liquidity)), 10);
+    // Slightly tighter spreads with more wallet power
+    const spreadPercentage = Math.min(Math.max(0.4, 4000 / Math.sqrt(liquidity)), 8);
     
     return {
-      takeProfit: Math.min(takeProfit, 50), // Cap at 50%
-      stopLoss: Math.min(stopLoss, 25),     // Cap at 25%
+      takeProfit: Math.min(takeProfit, 40), // Reduced cap from 50% to 40%
+      stopLoss: Math.min(stopLoss, 20),     // Reduced cap from 25% to 20%
       orderSize: averageOrderSize,
       expectedSlippage,
       spreadPercentage
