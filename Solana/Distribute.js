@@ -95,7 +95,7 @@ class Distribute {
 
       while (attempt < retryLimit) {
         try {
-          const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userKeypair.privateKey)));
+          const senderKeypair = Keypair.fromSecretKey(bs58.decode(Encryption.decrypt(userKeypair.secretKey)));
           const filePath = path.resolve(os.homedir(), ENV_PATH, `instances/${chatId}/dist/wallets.json`);
 
           await this.waitForFile(filePath, 30000);
