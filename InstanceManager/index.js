@@ -17,7 +17,9 @@ class InstanceManager {
   constructor(chatId) {
     // ENV_PATH=/root/marketMaker/
     this.basePath = path.resolve(os.homedir(), ENV_PATH);
-    // instances/user/chatId
+    // Path to the specific sol_spl template we want to use
+    this.templatePath = path.resolve(os.homedir(), ENV_PATH, 'instances', 'sol_spl');
+    // Path where user instances will be created
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances', 'user');
     this.dataManager = dataManager;
     this.firestore = new Firestore({
@@ -34,7 +36,7 @@ class InstanceManager {
 
   async initializeMarketMakerInstance(chatId, interaction) {
     try {
-      console.log('Initializing market maker instance:', chatId);
+      console.log('Initializing SOL/SPL market maker instance:', chatId);
 
       const userDir = path.join(this.instancePath, chatId.toString());
       const chatIdStr = chatId.toString();
@@ -45,8 +47,14 @@ class InstanceManager {
         fs.mkdirSync(userDir, { recursive: true });
       }
 
-      // Step 2: Create symbolic links for the user directory
-      await this.createSymbolicLinksIndividually(this.basePath, userDir);
+      // Step 2: Create .config directory if it doesn't exist
+      const configDir = path.join(userDir, '.config');
+      if (!fs.existsSync(configDir)) {
+        console.log(`Creating .config directory at ${configDir}`);
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+
+      // Get user data
       let userData = await this.dataManager.getCollection(chatId);
 
       const steps = [
@@ -70,10 +78,10 @@ class InstanceManager {
           switch (step) {
             case "CHECK_INSTANCES_CREATED":
               if (!userData.instancesCreated) {
-                console.log('Instances not created. Creating now...');
-                await this.copyUnlinkAndAppendEnv(userDir, chatId, userData);
+                console.log('Instances not created. Creating lightweight sol_spl instance...');
+                await this.createLightweightSolSplInstance(userDir, chatId, userData);
                 await this.dataManager.updateCollection(chatIdStr, { instancesCreated: true });
-                console.log('Instances created.');
+                console.log('Lightweight sol_spl instance created.');
               } else {
                 console.log('Instances already created.');
               }
@@ -147,13 +155,12 @@ class InstanceManager {
           }
         } catch (stepError) {
           console.error(`Error in step ${step}:`, stepError);
-          // Optionally, update Firestore with the error state
           await this.dataManager.updateCollection(chatIdStr, { lastError: `Error in ${step}: ${stepError.message}` });
-          throw stepError; // Re-throw to stop the process
+          throw stepError;
         }
       }
 
-      console.log('Market maker instance initialization completed successfully.');
+      console.log('SOL/SPL market maker instance initialization completed successfully.');
 
     } catch (error) {
       console.error('Error initializing market maker instance:', error);
@@ -161,6 +168,157 @@ class InstanceManager {
     }
   }
 
+  async createLightweightSolSplInstance(userDir, chatId, userData) {
+    try {
+      // Check if source template exists
+      if (!fs.existsSync(this.templatePath)) {
+        throw new Error(`Template directory not found: ${this.templatePath}`);
+      }
+
+      console.log(`Creating lightweight instance from template: ${this.templatePath}`);
+      
+      // Copy essential files and create symlinks for others
+      await this.copyEssentialFilesAndSymlinkOthers(this.templatePath, userDir);
+      
+      // Create or update .env file with user-specific configuration
+      await this.createCustomEnvFile(userDir, chatId, userData);
+      
+      console.log(`Lightweight SOL/SPL instance created successfully at ${userDir}`);
+      return true;
+    } catch (error) {
+      console.error('Error creating lightweight SOL/SPL instance:', error);
+      throw error;
+    }
+  }
+
+  async copyEssentialFilesAndSymlinkOthers(srcDir, destDir) {
+    const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+    
+    // Files we want to copy (not symlink)
+    const filesToCopy = ['.env.example', 'package.json', 'tsconfig.json'];
+    
+    // Create dist directory if it doesn't exist
+    const distDir = path.join(destDir, 'dist');
+    if (!fs.existsSync(distDir)) {
+      fs.mkdirSync(distDir, { recursive: true });
+    }
+    
+    // Copy or symlink files from template
+    for (const entry of entries) {
+      const srcPath = path.join(srcDir, entry.name);
+      const destPath = path.join(destDir, entry.name);
+
+      if (entry.isDirectory()) {
+        // For dist directory, we'll copy essential files later
+        if (entry.name === 'dist') {
+          continue;
+        }
+        
+        // Other directories we can symlink
+      if (!fs.existsSync(destPath)) {
+          console.log(`Creating symlink for directory: ${entry.name}`);
+          fs.symlinkSync(srcPath, destPath, 'junction');
+        }
+      } else {
+        // For files, either copy or symlink based on our list
+        if (filesToCopy.includes(entry.name)) {
+          console.log(`Copying file: ${entry.name}`);
+          fs.copyFileSync(srcPath, destPath);
+        } else if (!fs.existsSync(destPath)) {
+          console.log(`Creating symlink for file: ${entry.name}`);
+          fs.symlinkSync(srcPath, destPath, 'file');
+        }
+      }
+    }
+    
+    // Copy essential files from dist directory
+    const srcDistDir = path.join(srcDir, 'dist');
+    if (fs.existsSync(srcDistDir)) {
+      const distEntries = fs.readdirSync(srcDistDir, { withFileTypes: true });
+      
+      for (const entry of distEntries) {
+        const srcDistPath = path.join(srcDistDir, entry.name);
+        const destDistPath = path.join(distDir, entry.name);
+        
+        // Only copy index.js and essential modules
+        if (entry.name === 'index.js' || entry.name.startsWith('solana-') || entry.name.startsWith('spl-')) {
+          console.log(`Copying dist file: ${entry.name}`);
+          if (entry.isDirectory()) {
+            fs.mkdirSync(destDistPath, { recursive: true });
+            this.copyDirSync(srcDistPath, destDistPath);
+          } else {
+            fs.copyFileSync(srcDistPath, destDistPath);
+          }
+        } else if (!fs.existsSync(destDistPath)) {
+          // Symlink other files/directories
+          console.log(`Creating symlink for dist file/dir: ${entry.name}`);
+          fs.symlinkSync(srcDistPath, destDistPath, entry.isDirectory() ? 'junction' : 'file');
+        }
+      }
+    }
+  }
+  
+  // Helper method to recursively copy directories
+  copyDirSync(src, dest) {
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      
+      if (entry.isDirectory()) {
+        fs.mkdirSync(destPath, { recursive: true });
+        this.copyDirSync(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+  }
+
+  async createCustomEnvFile(userDir, chatId, userData) {
+    const destEnvPath = path.join(userDir, '.env');
+    const templateEnvPath = path.join(this.templatePath, '.env.example');
+    
+    // Copy the template .env if it exists
+    if (fs.existsSync(templateEnvPath)) {
+      console.log(`Using template .env from ${templateEnvPath}`);
+      fs.copyFileSync(templateEnvPath, destEnvPath);
+    } else {
+      // Create empty .env file
+      console.log('Creating empty .env file');
+      fs.writeFileSync(destEnvPath, '');
+    }
+    
+    // Calculate trading parameters
+    const buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
+    const sellAmount = this.tradeStrategy.calculateSellAmount(userData);
+    const takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
+    const stopLoss = this.tradeStrategy.calculateStopLoss(userData);
+    const dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
+
+    // Add sol_spl specific configuration
+    const envContent = `
+CHAT_ID=${chatId}
+TRADE_TYPE=sol_spl
+CONTRACT_ADDRESS=${userData.tokenDetails.mintAddress}
+TOKEN_DECIMALS=${userData.tokenDetails.decimals}
+TOKEN_SYMBOL=${userData.tokenDetails.symbol}
+BATCH_SIZE=${userData.batchSize}
+BOOST_TYPE=${userData.boostType}
+BUY_AMOUNT=${buyAmount}
+SELL_AMOUNT=${sellAmount}
+TAKE_PROFIT=${takeProfit}
+STOP_LOSS=${stopLoss}
+DCA_AMOUNT=${dcaAmount}
+SENDER_WALLET=${userData.senderWallet}
+AMOUNT_PER_WALLET=${userData.amountPerWallet}
+SIGNAL_ONLY=false
+ENV_PATH=${ENV_PATH}
+`;
+
+    fs.appendFileSync(destEnvPath, envContent);
+    console.log(`Added custom SOL/SPL configuration to ${destEnvPath}`);
+  }
 
   // Modify waitForJobCompletion to include a timeout
   async waitForJobCompletion(chatId, timeout = 300000) { // 5 minutes timeout
@@ -192,71 +350,6 @@ class InstanceManager {
       this.walletProcessor.walletQueue.on('completed', completionHandler);
       this.walletProcessor.walletQueue.on('failed', failureHandler);
     });
-  }
-
-  async createSymbolicLinksIndividually(srcDir, destDir) {
-    const entries = fs.readdirSync(srcDir, { withFileTypes: true });
-    entries.forEach(entry => {
-      const srcPath = path.join(srcDir, entry.name);
-      const destPath = path.join(destDir, entry.name);
-
-      if (!fs.existsSync(destPath)) {
-        console.log(`Creating symbolic link from ${srcPath} to ${destPath}`);
-        fs.symlinkSync(srcPath, destPath, entry.isDirectory() ? 'junction' : 'file');
-      }
-    });
-  }
-
-  async copyUnlinkAndAppendEnv(userDir, chatId, userData) {
-    const parentEnvPath = path.join(this.basePath, '.env');
-    const destEnvPath = path.join(userDir, '.env');
-
-    if (fs.existsSync(parentEnvPath)) {
-      console.log(`Parent .env file found at ${parentEnvPath}`);
-
-      if (!fs.existsSync(destEnvPath)) {
-        console.log(`Copying parent .env file to ${destEnvPath}`);
-        fs.copyFileSync(parentEnvPath, destEnvPath);
-      }
-
-      try {
-        if (fs.existsSync(destEnvPath) && fs.lstatSync(destEnvPath).isSymbolicLink()) {
-          fs.unlinkSync(destEnvPath);
-          fs.copyFileSync(parentEnvPath, destEnvPath);
-        }
-      } catch (error) {
-        console.error(`Failed to unlink .env at ${destEnvPath}:`, error);
-      }
-
-      const buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
-      const sellAmount = this.tradeStrategy.calculateSellAmount(userData);
-      const takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
-      const stopLoss = this.tradeStrategy.calculateStopLoss(userData);
-      const dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
-
-      // Add sol_spl trade type and other parameters
-      const envContent = `
-CHAT_ID=${chatId}
-TRADE_TYPE=sol_spl
-CONTRACT_ADDRESS=${userData.tokenDetails.mintAddress}
-TOKEN_DECIMALS=${userData.tokenDetails.decimals}
-TOKEN_SYMBOL=${userData.tokenDetails.symbol}
-BATCH_SIZE=${userData.batchSize}
-BOOST_TYPE=${userData.boostType}
-BUY_AMOUNT=${buyAmount}
-SELL_AMOUNT=${sellAmount}
-TAKE_PROFIT=${takeProfit}
-STOP_LOSS=${stopLoss}
-DCA_AMOUNT=${dcaAmount}
-SENDER_WALLET=${userData.senderWallet}
-AMOUNT_PER_WALLET=${userData.amountPerWallet}
-SIGNAL_ONLY=false
-`;
-      fs.appendFileSync(destEnvPath, envContent);
-      console.log(`Appended sol_spl configuration to ${destEnvPath}`);
-    } else {
-      throw new Error('Parent .env file not found');
-    }
   }
 
   async startMarketMakerInstance(chatId, userDir) {
