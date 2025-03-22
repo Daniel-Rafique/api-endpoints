@@ -18,7 +18,7 @@ class WalletProcessor {
     this.walletManager = new WalletManager(chatId);
     // Define absolute paths
     const basePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker');
-    const instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
+    const instancePath = path.resolve(os.homedir(), ENV_PATH, 'marketMaker', 'instances');
 
     if (!basePath || !instancePath) {
       throw new Error('Error resolving basePath or instancePath.');
