@@ -113,8 +113,30 @@ class Distribute {
             throw new Error('Maximum wallet limit exceeded (1000)');
           }
 
-          const amountPerWallet = userData.amountPerWallet;
-          console.log(`Amount per wallet: ${amountPerWallet / 1e9} SOL`);
+          // Ensure we're working with lamports (integers)
+          let amountPerWallet;
+          if (typeof userData.amountPerWallet === 'number') {
+            // If in SOL, convert to lamports
+            if (userData.amountPerWallet < 1) {
+              // This is likely in SOL, convert to lamports
+              amountPerWallet = Math.floor(userData.amountPerWallet * 1e9);
+            } else {
+              // Already in lamports
+              amountPerWallet = Math.floor(userData.amountPerWallet);
+            }
+          } else {
+            // Default to minimum amount if missing
+            amountPerWallet = 5000; // 0.000005 SOL minimum
+          }
+
+          // Ensure amount is at least enough for rent exemption
+          const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+          if (amountPerWallet < minRentExemption) {
+            console.warn(`Amount per wallet (${amountPerWallet}) is less than minimum rent exemption (${minRentExemption}). Using minimum rent exemption + 5000 lamports`);
+            amountPerWallet = minRentExemption + 5000;
+          }
+
+          console.log(`Amount per wallet: ${amountPerWallet} lamports (${amountPerWallet / 1e9} SOL)`);
 
           const totalBatches = Math.ceil(newWallets.length / batchSize);
           for (let i = 0; i < newWallets.length; i += batchSize) {
@@ -133,7 +155,7 @@ class Distribute {
 
           await this.sendNotification(
             userData,
-            `✅ Labs ${userData.boostName} tier will begin shortly for ${userData.tokenDetails.name}\n`,
+            `✅ Labs ${userData.boostName || 'Basic'} tier will begin shortly for ${userData.tokenDetails?.name || 'your token'}\n`,
             interaction
           );
 
@@ -168,7 +190,7 @@ class Distribute {
   }
 
   async generateTransactions(dropList, fromWallet, userData, retries = 3) {
-    if (!dropList?.length || !fromWallet || !userData?.makers) {
+    if (!dropList?.length || !fromWallet) {
       throw new Error('Invalid parameters for transaction generation');
     }
 
@@ -188,12 +210,19 @@ class Distribute {
         transaction.recentBlockhash = data.blockhash.blockhash;
         transaction.feePayer = fromWallet.publicKey;
 
-        // Add initial transfer instruction
+        // Convert to integer lamports - ensure it's a whole number
+        const lamports = Math.floor(drop.numLamports);
+        if (lamports <= 0) {
+          console.warn(`Skipping transfer to ${drop.walletAddress} due to amount too small: ${drop.numLamports}`);
+          continue; // Skip this transfer if amount is too small
+        }
+
+        // Add initial transfer instruction with integer lamports
         transaction.add(
           SystemProgram.transfer({
             fromPubkey: fromWallet.publicKey,
             toPubkey: new PublicKey(drop.walletAddress),
-            lamports: drop.numLamports
+            lamports: lamports
           })
         );
 
@@ -202,16 +231,21 @@ class Distribute {
         const { value: fee } = await this.connection.getFeeForMessage(message);
         const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
         const totalFee = fee + minRentExemption;
+        
         // Create new transaction with adjusted amount
         transaction = new Transaction();
         transaction.recentBlockhash = data.blockhash.blockhash;
         transaction.feePayer = fromWallet.publicKey;
 
-        const adjustedAmount = drop.numLamports - totalFee;
+        // Ensure adjusted amount is an integer
+        const adjustedAmount = Math.floor(lamports - totalFee);
         if (adjustedAmount <= 0) {
-          throw new Error('Amount too small to cover transaction fee');
+          console.warn(`Skipping transfer to ${drop.walletAddress} due to amount too small after fees: ${lamports} lamports, fee: ${totalFee} lamports`);
+          continue; // Skip this transfer if amount is too small after fees
         }
 
+        console.log(`Sending ${adjustedAmount} lamports (${adjustedAmount / 1e9} SOL) to ${drop.walletAddress}`);
+        
         transaction.add(
           SystemProgram.transfer({
             fromPubkey: fromWallet.publicKey,
@@ -230,7 +264,7 @@ class Distribute {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chatId: this.chatId,
-            publicKey: fromWallet.publicKey,
+            publicKey: fromWallet.publicKey.toString(),
             signedTransaction: encodedTx,
             type: 'send'
           })
@@ -247,12 +281,12 @@ class Distribute {
         });
 
       } catch (error) {
-        if (retries > 0) {
-          console.log(`Retrying transaction for ${drop.walletAddress}... (${retries} attempts left)`);
-          await new Promise(resolve => setTimeout(resolve, 2000 * (4 - retries)));
-          return this.generateTransactions(dropList, fromWallet, userData, retries - 1);
-        }
-        throw error;
+        console.error(`Transaction error:`, error);
+        results.push({
+          success: false,
+          error: error.message,
+          recipient: drop.walletAddress
+        });
       }
     }
 
@@ -260,8 +294,9 @@ class Distribute {
   }
 
   async logTransactionResults(results, batchNumber) {
-    const successful = results.filter(r => r.status === 'fulfilled').length;
-    const failed = results.filter(r => r.status === 'rejected').length;
+    // Count successes and failures
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
 
     const message = `Batch ${batchNumber} results: ` +
       `✅ ${successful} successful, ❌ ${failed} failed`;
