@@ -378,14 +378,14 @@ Market Making Strategy Analysis:
       // Make sure we pass the same Redis connection config to the worker
       new Worker('walletQueue', async job => {
         const { chatId, userData } = job.data;
-        const { solAmount, tokenDetails } = userData;
+        const { boostCost, tokenDetails } = userData;
         
         try {
           console.log(`Processing wallet creation job for chatId: ${chatId}`);
-          console.log(`Market cap: ${tokenDetails?.marketCap}, Liquidity: ${tokenDetails?.liquidity?.usd}, SOL Amount: ${solAmount}`);
+          console.log(`Market cap: ${tokenDetails?.marketCap}, Liquidity: ${tokenDetails?.liquidity?.usd}, SOL Amount: ${boostCost}`);
           
           // Handle undefined solAmount with a default value
-          const actualSolAmount = solAmount || 1; // Default to 1 SOL if undefined
+          const actualSolAmount = boostCost || 1; // Default to 1 SOL if undefined
           
           if (!tokenDetails || !tokenDetails.marketCap || !tokenDetails.liquidity || !tokenDetails.liquidity.usd) {
             console.error('Invalid token details:', tokenDetails);
@@ -454,7 +454,7 @@ Market Making Strategy Analysis:
     
     console.log('Adding create wallet job to queue:', {
       chatId: data.chatId,
-      solAmount: data.userData.boostCost,
+      solAmount: data.userData?.boostCost,
       marketCap: data.userData.tokenDetails?.marketCap,
       liquidity: data.userData.tokenDetails?.liquidity?.usd
     });
