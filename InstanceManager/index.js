@@ -311,7 +311,7 @@ class InstanceManager {
       await this.copyEssentialFilesAndSymlinkOthers(this.templatePath, userDir);
       
       // Create or update .env file with user-specific configuration
-      await this.createCustomEnvFile(userDir, chatId, userData);
+      await this.createCustomEnvFile(chatId, userData, userDir);
       
       console.log(`Lightweight SOL/SPL instance created successfully at ${userDir}`);
       return true;
@@ -528,58 +528,88 @@ module.exports = SafeRedisClient;
     }
   }
 
-  async createCustomEnvFile(userDir, chatId, userData) {
-    const destEnvPath = path.join(userDir, '.env');
-    const templateEnvPath = path.join(this.templatePath, '.env.example');
-    
-    // Copy the template .env if it exists
-    if (fs.existsSync(templateEnvPath)) {
-      console.log(`Using template .env from ${templateEnvPath}`);
-      fs.copyFileSync(templateEnvPath, destEnvPath);
-    } else {
-      // Create empty .env file
-      console.log('Creating empty .env file');
-      fs.writeFileSync(destEnvPath, '');
+  async createCustomEnvFile(chatId, userData, instancePath) {
+    try {
+      // Get the original .env file content
+      const envPath = path.resolve(os.homedir(), ENV_PATH, '.env');
+      const envContent = await fs.readFile(envPath, 'utf8');
+      
+      // Parse the existing .env file
+      const envVars = {};
+      envContent.split('\n').forEach(line => {
+        if (line.trim() && !line.startsWith('#')) {
+          const [key, ...valueParts] = line.split('=');
+          if (key) {
+            envVars[key.trim()] = valueParts.join('=').trim();
+          }
+        }
+      });
+
+      // Create new .env content with required variables for market maker
+      let newEnvContent = `ENABLE_TRADING=true\n`;
+      newEnvContent += `SIGNAL_ONLY=false\n`;
+      newEnvContent += `ENV=${ENV_PATH}\n`;
+      
+      // Add RPC endpoints (required for blockchain connection)
+      newEnvContent += `SOLANA_RPC=${envVars.SOLANA_RPC || 'https://rpc.shyft.to?api_key=W_H_kKiU8tlk60QU'}\n`;
+      newEnvContent += `SOLANA_WEBSOCKET=${envVars.SOLANA_WEBSOCKET || 'wss://rpc.shyft.to?api_key=W_H_kKiU8tlk60QU'}\n`;
+      newEnvContent += `SOLANA_RPC_2=${envVars.SOLANA_RPC_2 || 'https://rpc.shyft.to/?api_key=CSQ0QaYcTqKZl3sB'}\n`;
+      newEnvContent += `SOLANA_WEBSOCKET_2=${envVars.SOLANA_WEBSOCKET_2 || 'wss://rpc.shyft.to/?api_key=CSQ0QaYcTqKZl3sB'}\n`;
+      
+      // Add additional RPC endpoints (numbered 1-5) that might be required
+      for (let i = 1; i <= 5; i++) {
+        const rpcKey = `SOLANA_RPC_ENDPOINT_${i}`;
+        if (envVars[rpcKey]) {
+          newEnvContent += `${rpcKey}=${envVars[rpcKey]}\n`;
+        } else {
+          // Provide fallback values for missing endpoints
+          newEnvContent += `${rpcKey}=${envVars.SOLANA_RPC || 'https://rpc.shyft.to?api_key=W_H_kKiU8tlk60QU'}\n`;
+        }
+      }
+      
+      // Add APIs and services needed for trading
+      newEnvContent += `HELIUS_API_KEY=${envVars.HELIUS_API_KEY || '89b5a742-db67-46ec-8089-a2da6ef46355'}\n`;
+      newEnvContent += `JUPITER_API_KEY=${envVars.JUPITER_API_KEY || '3fe4b715ce732c60f2767c52671fa92f3850aa7d1e7635e6a654b756e4ae66b9'}\n`;
+      newEnvContent += `JUPITER_V6_SWAP_API=${envVars.JUPITER_V6_SWAP_API || 'https://quote-api.jup.ag'}\n`;
+      newEnvContent += `JUPITER_V2_PRICE_API=${envVars.JUPITER_V2_PRICE_API || 'https://price.jup.ag/v6/price'}\n`;
+      
+      // Add dummy values for Discord/Telegram (to prevent errors)
+      newEnvContent += `DISCORD_BOT_TOKEN=dummy_token\n`;
+      newEnvContent += `DISCORD_CHANNEL_ID=dummy_channel\n`;
+      newEnvContent += `TELEGRAM_BOT_TOKEN=dummy_token\n`;
+      newEnvContent += `TELEGRAM_CHAT_ID=dummy_chat\n`;
+      
+      // Add wallet & trading settings
+      newEnvContent += `PRIVATE_KEY=${userData.solanaKey || envVars.PRIVATE_KEY}\n`;
+      newEnvContent += `SENDER_WALLET=${userData.address}\n`;
+      
+      // Add token-specific configuration
+      newEnvContent += `BATCH_SIZE=1\n`;
+      newEnvContent += `CONTRACT_ADDRESS=${userData.contractAddress}\n`;
+      newEnvContent += `TOKEN_SYMBOL=${userData.tokenSymbol}\n`;
+      newEnvContent += `TOKEN_DECIMALS=${userData.tokenDecimals || 6}\n`;
+      newEnvContent += `TRADE_TYPE=sol_spl\n`;  // Use sol_spl for market making
+      
+      // Add trading parameters
+      newEnvContent += `BUY_AMOUNT=${userData.buyAmount || 0.05}\n`;
+      newEnvContent += `SELL_AMOUNT=${userData.sellAmount || 100}\n`;
+      newEnvContent += `PROFIT_MARGIN=${userData.profitMargin || 50}\n`;
+      newEnvContent += `STOP_LOSS=${userData.stopLoss || 50}\n`;
+      newEnvContent += `MIN_SOL_BALANCE=0.0001\n`;
+      newEnvContent += `SLIPPAGE_BPS=10\n`;
+      newEnvContent += `REQUEST_DELAY=10000\n`;
+      newEnvContent += `MAX_PAIRS=1\n`;
+      newEnvContent += `MAX_CONCURRENT_TRADES=1\n`;
+      newEnvContent += `MM_MODE=true\n`;  // Flag to indicate this is a market maker instance
+      
+      // Write the new .env file
+      const instanceEnvPath = path.join(instancePath, '.env');
+      await fs.writeFile(instanceEnvPath, newEnvContent);
+      return true;
+    } catch (error) {
+      console.error('Error creating custom .env file:', error);
+      return false;
     }
-    
-    // Calculate trading parameters
-      const buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
-      const sellAmount = this.tradeStrategy.calculateSellAmount(userData);
-      const takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
-      const stopLoss = this.tradeStrategy.calculateStopLoss(userData);
-      const dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
-
-    // Add sol_spl specific configuration
-      const envContent = `
-CHAT_ID=${chatId}
-TRADE_TYPE=sol_spl
-CONTRACT_ADDRESS=${userData.tokenDetails.mintAddress}
-TOKEN_DECIMALS=${userData.tokenDetails.decimals}
-TOKEN_SYMBOL=${userData.tokenDetails.symbol}
-BATCH_SIZE=${userData.batchSize}
-BOOST_TYPE=${userData.boostType}
-BUY_AMOUNT=${buyAmount}
-SELL_AMOUNT=${sellAmount}
-TAKE_PROFIT=${takeProfit}
-STOP_LOSS=${stopLoss}
-DCA_AMOUNT=${dcaAmount}
-SENDER_WALLET=${userData.senderWallet}
-AMOUNT_PER_WALLET=${userData.amountPerWallet}
-SIGNAL_ONLY=false
-ENV_PATH=${ENV_PATH}
-
-# Dummy values for services not needed in market maker instances
-DISCORD_TOKEN=dummy_token
-DISCORD_CHANNELS=dummy_channel
-TELEGRAM_TOKEN=dummy_token
-TELEGRAM_CHAT_ID=${chatId}
-DISCORD_BOT_TOKEN=dummy_token
-DISCORD_CHANNEL_ID=dummy_channel
-MM_MODE=true
-`;
-
-      fs.appendFileSync(destEnvPath, envContent);
-    console.log(`Added custom SOL/SPL configuration to ${destEnvPath}`);
   }
 
   async startMarketMakerInstance(chatId, userDir) {
