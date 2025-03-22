@@ -15,8 +15,10 @@ const ENV_PATH = process.env.ENV_PATH;
 
 class InstanceManager {
   constructor(chatId) {
-    this.basePath = path.resolve(os.homedir(), ENV_PATH, '../marketMaker');
-    this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances');
+    // ENV_PATH=/root/marketMaker/
+    this.basePath = path.resolve(os.homedir(), ENV_PATH);
+    // instances/user/chatId
+    this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances', 'user');
     this.dataManager = dataManager;
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
