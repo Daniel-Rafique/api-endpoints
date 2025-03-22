@@ -103,7 +103,7 @@ class InstanceManager {
               if (userData.walletsCreated && !userData.commissionPaid) {
                 console.log('Commission not paid. Sending commission...');
                 await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
-                // await this.commissionPaid.sendToCommissionWallet(chatId, userData, interaction);
+                await this.commissionPaid.sendToCommissionWallet(chatId, userData, interaction);
                 console.log('Commission sent successfully.');
               } else {
                 console.log('Commission already paid.');
