@@ -27,7 +27,7 @@ class InstanceManager {
     // Path where user instances will be created
     this.instancePath = path.resolve(os.homedir(), ENV_PATH, 'instances', 'user');
     // Path to the template env file  
-    this.envTemplatePath = path.resolve(os.homedir(), ENV_PATH, '.env.template');
+    this.envTemplatePath = path.resolve(os.homedir(), ENV_PATH, '.env.example');
     this.dataManager = dataManager;
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
@@ -326,17 +326,17 @@ class InstanceManager {
       }
       
       // 3. Copy and update .env file
-      const envTemplatePath = path.join(mainDir, '.env.template');
+      const envTemplatePath = path.join(mainDir, '.env.example');
       const destEnvPath = path.join(userDir, '.env');
       
       if (!fs.existsSync(envTemplatePath)) {
-        console.error(`Error: .env.template not found at ${envTemplatePath}`);
+        console.error(`Error: .env.example not found at ${envTemplatePath}`);
         return false;
       }
       
       // Copy template file
       fs.copyFileSync(envTemplatePath, destEnvPath);
-      console.log(`Copied .env.template to ${destEnvPath}`);
+      console.log(`Copied .env.example to ${destEnvPath}`);
       
       // Calculate trading parameters with proper error handling
       let buyAmount, sellAmount, takeProfit, stopLoss, dcaAmount;
