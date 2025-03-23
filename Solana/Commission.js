@@ -173,7 +173,7 @@ class Commission {
 
         // Send notification about successful commission payment
         try {
-          await this.sendNotification(userData, `✅ Commission payment of ${(adjustedAmount / 1e9).toFixed(6)} SOL sent successfully.`);
+          await this.sendNotification(userData, `✅ Setup complete, distributing SOL.`);
         } catch (notifyError) {
           console.error('Failed to send notification (non-critical):', notifyError);
         }
