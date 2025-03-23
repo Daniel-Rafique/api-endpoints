@@ -378,14 +378,7 @@ SENDER_WALLET=${userData.address || ''}
 AMOUNT_PER_WALLET=${userData.amountPerWallet || 0.05}
 SIGNAL_ONLY=false
 ENV_PATH=${ENV_PATH}
-
 # Dummy values for services not needed in market maker instances
-DISCORD_TOKEN=dummy_token
-DISCORD_CHANNELS=dummy_channel
-TELEGRAM_TOKEN=dummy_token
-TELEGRAM_CHAT_ID=${chatId}
-DISCORD_BOT_TOKEN=dummy_token
-DISCORD_CHANNEL_ID=dummy_channel
 MM_MODE=true
 `;
       
