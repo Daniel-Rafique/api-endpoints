@@ -124,10 +124,10 @@ class Distribute {
         : userKeypair.publicKey;
 
       console.log(`Checking balance for public key: ${publicKeyObj.toString()}`);
-      const updatedBalance = await this.connection.getBalance(publicKeyObj);
-      console.log(`Initial balance: ${updatedBalance / 1e9} SOL`);
+      const senderBalance = await this.connection.getBalance(publicKeyObj);
+      console.log(`Initial balance: ${senderBalance / 1e9} SOL`);
 
-      if (updatedBalance <= 0) {
+      if (senderBalance <= 0) {
         throw new InsufficientBalanceError('Insufficient balance in sender wallet');
       }
 
@@ -145,30 +145,32 @@ class Distribute {
             throw new Error('Maximum wallet limit exceeded (1000)');
           }
 
-          // Ensure we're working with lamports (integers)
-          let amountPerWallet;
-          if (typeof userData.amountPerWallet === 'number') {
-            // If in SOL, convert to lamports
-            if (userData.amountPerWallet < 1) {
-              // This is likely in SOL, convert to lamports
-              amountPerWallet = Math.floor(userData.amountPerWallet * 1e9);
-            } else {
-              // Already in lamports
-              amountPerWallet = Math.floor(userData.amountPerWallet);
-            }
-          } else {
-            // Default to minimum amount if missing
-            amountPerWallet = 5000; // 0.000005 SOL minimum
-          }
-
-          // Ensure amount is at least enough for rent exemption
+          // Get minimum rent exemption
           const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
-          if (amountPerWallet < minRentExemption) {
-            console.warn(`Amount per wallet (${amountPerWallet}) is less than minimum rent exemption (${minRentExemption}). Using minimum rent exemption + 5000 lamports`);
+          console.log(`Minimum rent exemption: ${minRentExemption} lamports (${minRentExemption / 1e9} SOL)`);
+
+          // Use distribution amount from InstanceManager if available
+          let amountPerWallet;
+          
+          if (userData.solDistributionAmount) {
+            // Use the pre-calculated amount from TradeStrategy
+            amountPerWallet = Math.floor(userData.solDistributionAmount);
+            console.log(`Using calculated distribution amount: ${amountPerWallet} lamports (${amountPerWallet / 1e9} SOL)`);
+          } else {
+            // Fallback calculation - allocate 70% of balance evenly among wallets
+            console.log('No pre-calculated amount found, calculating fallback amount');
+            const availableForDistribution = Math.floor(senderBalance * 0.7);
+            amountPerWallet = Math.floor(availableForDistribution / newWallets.length);
+          }
+          
+          // Ensure minimum viable amount
+          if (amountPerWallet < minRentExemption + 5000) {
+            console.warn(`Calculated amount (${amountPerWallet}) is below minimum viable amount. Using minimum rent exemption + 5000 lamports.`);
             amountPerWallet = minRentExemption + 5000;
           }
 
-          console.log(`Amount per wallet: ${amountPerWallet} lamports (${amountPerWallet / 1e9} SOL)`);
+          console.log(`Final amount per wallet: ${amountPerWallet} lamports (${amountPerWallet / 1e9} SOL)`);
+          console.log(`Total distribution: ${(amountPerWallet * newWallets.length) / 1e9} SOL across ${newWallets.length} wallets`);
 
           const totalBatches = Math.ceil(newWallets.length / batchSize);
           for (let i = 0; i < newWallets.length; i += batchSize) {
@@ -190,7 +192,7 @@ class Distribute {
             const boostName = userData.boostName || 'Basic';
             await this.sendNotification(
               userData,
-              `✅ SOL distribution successful. ${boostName} tier for ${tokenName} will begin shortly.`,
+              `✅ SOL distribution complete: ${(amountPerWallet * newWallets.length / 1e9).toFixed(4)} SOL distributed across ${newWallets.length} wallets. ${boostName} tier for ${tokenName} will begin shortly.`,
               interaction
             );
           } catch (notifyError) {

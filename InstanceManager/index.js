@@ -13,6 +13,7 @@ const TopUp = require('../Solana/TopUp');
 const TradeStrategy = require('../TradeStrategy');
 const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const ENV_PATH = process.env.ENV_PATH;
+const { PublicKey } = require('@solana/web3.js');
 
 // Create a dedicated event emitter for processing steps
 class ProcessStepEmitter extends EventEmitter {}
@@ -128,10 +129,54 @@ class InstanceManager {
               const distributionFlag = userData.distributeSolana === true;
               if (!distributionFlag) {
                 console.log('Distributing Solana...');
+                
+                // First check the wallet file to get the actual number of wallets
+                const walletFilePath = path.join(userDir, '.config', 'wallets.json');
+                let walletCount = 0;
+                
+                try {
+                  if (fs.existsSync(walletFilePath)) {
+                    const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
+                    walletCount = Array.isArray(walletsData) ? walletsData.length : 0;
+                    console.log(`Found ${walletCount} wallets for distribution`);
+                  }
+                } catch (error) {
+                  console.error('Error reading wallet file:', error);
+                }
+                
+                // Get the sender's current balance
+                let senderBalance = 0;
+                try {
+                  const publicKeyObj = typeof userData.userKeypair.publicKey === 'string' 
+                    ? new PublicKey(userData.userKeypair.publicKey) 
+                    : userData.userKeypair.publicKey;
+                  
+                  senderBalance = await this.distributeSolana.connection.getBalance(publicKeyObj);
+                  console.log(`Sender wallet balance: ${senderBalance / 1e9} SOL`);
+                } catch (error) {
+                  console.error('Error getting sender balance:', error);
+                }
+                
+                // Use TradeStrategy to calculate optimal wallet amount
+                if (walletCount > 0) {
+                  // Enrich userData with additional context for calculation
+                  userData.walletCount = walletCount;
+                  userData.totalBalance = senderBalance;
+                  
+                  // Calculate optimal amount per wallet
+                  const walletAmountResult = this.tradeStrategy.calculateWalletAmount(userData);
+                  
+                  // Add to userData for the distribute method to use
+                  userData.solDistributionAmount = walletAmountResult.lamports;
+                  userData.calculatedSolAmount = walletAmountResult.solAmount;
+                  
+                  console.log(`Using calculated distribution amount: ${walletAmountResult.solAmount} SOL per wallet`);
+                }
+                
                 const result = await this.distributeSolana.distributeSolana(chatId, userData, interaction);
                 if (result === true) {
-                await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
-                console.log('Solana distributed successfully.');
+                  await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
+                  console.log('Solana distributed successfully.');
                 } else {
                   throw new Error('SOL distribution failed');
                 }
