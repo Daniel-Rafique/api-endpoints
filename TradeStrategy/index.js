@@ -949,123 +949,123 @@ class TradeStrategy {
         };
     }
 
-    // Add this method to TradeStrategy class
+    // Add this new method to calculate wallet amounts
     calculateWalletAmount(userData) {
         try {
             // Safely extract and validate input values
             const marketCap = this.getSafeNumber(userData.tokenDetails?.marketCap, 0);
             const tokenPrice = this.getSafeNumber(userData.tokenDetails?.priceUSD, 0);
-            const solPrice = this.getSafeNumber(userData.solPrice, 20); // Default SOL price
             const liquidity = this.getSafeNumber(userData.tokenDetails?.liquidity?.usd, 0);
-            const totalWallets = this.getSafeNumber(userData.walletCount, 10); // Use actual wallet count if available
-            const userBalance = this.getSafeNumber(userData.totalBalance, 0); // Total balance available for distribution
+            const walletCount = this.getSafeNumber(userData.walletCount, 5);
+            const totalBalance = this.getSafeNumber(userData.totalBalance, 0);
             
-            // Base amount calculation based on market cap tiers
-            let baseAmountSOL = 0.05; // Default minimum
+            // Reserve some balance for trading fees (keep 20% of balance)
+            const availableForDistribution = totalBalance * 0.8;
             
-            if (marketCap > 0) {
-                if (marketCap < 100000) { // Micro cap
-                    baseAmountSOL = 0.03; // Less capital needed for micro caps
-                } else if (marketCap < 500000) { // Small cap
-                    baseAmountSOL = 0.05; // Default for small caps
-                } else if (marketCap < 2000000) { // Medium cap
-                    baseAmountSOL = 0.08; // More capital for medium caps
-                } else if (marketCap < 5000000) { // Medium-large cap
-                    baseAmountSOL = 0.12; // Significant capital for medium-large caps
-                } else { // Large cap
-                    baseAmountSOL = 0.15; // Substantial capital for large caps
-                }
-            }
+            // Maximum possible amount per wallet based on available balance
+            const maxSolPerWallet = availableForDistribution / (walletCount * 1e9);
             
-            // Adjust for token price to ensure enough tokens are bought
-            let tokenPriceAdjustment = 1.0;
-            if (tokenPrice > 0 && solPrice > 0) {
-                // Calculate how many tokens our base amount would buy
-                const tokensPerSOL = solPrice / tokenPrice;
-                const baseTokenAmount = tokensPerSOL * baseAmountSOL;
-                
-                // If base amount buys less than target minimum tokens, adjust up
-                const targetMinTokens = 100000; // Want to buy at least 100k tokens
-                if (baseTokenAmount < targetMinTokens) {
-                    tokenPriceAdjustment = Math.min(3.0, targetMinTokens / baseTokenAmount);
-                }
-            }
-            
-            // Liquidity adjustment (lower liquidity needs smaller amounts to avoid price impact)
-            let liquidityAdjustment = 1.0;
-            if (liquidity > 0) {
-                if (liquidity < 10000) {
-                    liquidityAdjustment = 0.7; // Reduce size for very low liquidity
-                } else if (liquidity < 25000) {
-                    liquidityAdjustment = 0.8; // Reduce size for low liquidity
-                } else if (liquidity < 50000) {
-                    liquidityAdjustment = 0.9; // Slightly reduce for medium-low liquidity
-                } else if (liquidity > 200000) {
-                    liquidityAdjustment = 1.2; // Increase for high liquidity
-                }
-            }
-            
-            // Apply neural network adjustment if available
-            let neuralNetworkAdjustment = 1.0;
+            // Use neural network to determine the base amount
+            let optimalAmount = 0;
             if (this.metricsHistory.length >= 20) {
                 try {
                     const inputData = this.prepareInputData(userData);
-                    const buyResult = this.buyNet.run(inputData);
-                    // Use neural network output as a scaling factor (0.5 to 1.5)
-                    neuralNetworkAdjustment = 0.5 + buyResult.buyAmount;
-                    console.log(`Neural network wallet amount adjustment: ${neuralNetworkAdjustment.toFixed(2)}x`);
+                    const result = this.buyNet.run(inputData);
+                    // Scale neural network output to a reasonable amount (0.0025 to maxSolPerWallet)
+                    optimalAmount = 0.0025 + (result.buyAmount * (maxSolPerWallet - 0.0025));
+                    console.log(`Neural network recommended amount: ${optimalAmount} SOL`);
                 } catch (nnError) {
-                    console.error('Neural network error in wallet amount calculation:', nnError);
+                    console.error('Neural network calculation error:', nnError);
+                    // Fall back to rule-based calculation
+                    optimalAmount = this.calculateOptimalAmountByRules(marketCap, tokenPrice, liquidity, maxSolPerWallet);
                 }
+            } else {
+                // Not enough training data - use rule-based approach
+                optimalAmount = this.calculateOptimalAmountByRules(marketCap, tokenPrice, liquidity, maxSolPerWallet);
             }
             
-            // Calculate adjusted amount per wallet
-            let amountPerWalletSOL = baseAmountSOL * tokenPriceAdjustment * liquidityAdjustment * neuralNetworkAdjustment;
+            // Ensure minimum amount for rent exemption (0.002 SOL)
+            const minSolAmount = 0.002;
+            let finalSolAmount = Math.max(optimalAmount, minSolAmount);
             
-            // Cap at reasonable limits
-            amountPerWalletSOL = Math.min(0.5, Math.max(0.01, amountPerWalletSOL));
+            // Ensure we don't exceed per-wallet limit
+            finalSolAmount = Math.min(finalSolAmount, maxSolPerWallet);
             
-            // If we have userBalance information, ensure we don't exceed available funds
-            if (userBalance > 0 && totalWallets > 0) {
-                // Leave 20% of balance for operations and fees
-                const availableForDistribution = userBalance * 0.8;
-                const maxPerWallet = availableForDistribution / totalWallets;
-                
-                if (amountPerWalletSOL > maxPerWallet) {
-                    console.log(`Wallet amount adjusted down due to balance constraints: ${amountPerWalletSOL.toFixed(4)} -> ${maxPerWallet.toFixed(4)} SOL`);
-                    amountPerWalletSOL = maxPerWallet;
-                }
-            }
-            
-            // Convert to lamports for distribution
-            const amountPerWalletLamports = Math.floor(amountPerWalletSOL * 1e9);
+            // Convert to lamports
+            const lamports = Math.floor(finalSolAmount * 1e9);
             
             // Log calculation for analysis
             console.log(`Wallet Amount Calculation:
+                Wallet Count: ${walletCount}
+                Total Balance: ${totalBalance / 1e9} SOL
+                Available for Distribution: ${availableForDistribution / 1e9} SOL
+                Maximum Per Wallet: ${maxSolPerWallet} SOL
                 Market Cap: $${marketCap}
                 Token Price: $${tokenPrice}
-                SOL Price: $${solPrice}
                 Liquidity: $${liquidity}
-                Total Wallets: ${totalWallets}
-                User Balance: ${userBalance / 1e9} SOL
-                Base Amount: ${baseAmountSOL} SOL
-                Token Price Adjustment: ${tokenPriceAdjustment.toFixed(2)}x
-                Liquidity Adjustment: ${liquidityAdjustment.toFixed(2)}x
-                Neural Network Adjustment: ${neuralNetworkAdjustment.toFixed(2)}x
-                Final Amount Per Wallet: ${amountPerWalletSOL} SOL (${amountPerWalletLamports} lamports)
+                Neural Network Trained: ${this.metricsHistory.length >= 20 ? 'Yes' : 'No'}
+                Optimal Amount: ${optimalAmount} SOL
+                Final SOL Amount: ${finalSolAmount} SOL
+                Final Lamports: ${lamports}
             `);
             
             return {
-                solAmount: amountPerWalletSOL,
-                lamports: amountPerWalletLamports
+                solAmount: finalSolAmount,
+                lamports: lamports
             };
         } catch (error) {
             console.error('Error calculating wallet amount:', error);
+            // Emergency fallback - minimal viable amount
             return {
-                solAmount: 0.05,
-                lamports: 50000000 // 0.05 SOL in lamports
+                solAmount: 0.01,
+                lamports: 10000000 // 0.01 SOL in lamports
             };
         }
+    }
+
+    // Helper method to calculate amount by rules when neural network isn't available
+    calculateOptimalAmountByRules(marketCap, tokenPrice, liquidity, maxAmount) {
+        // Base amount is a percentage of max amount depending on market conditions
+        let percentOfMax = 0.3; // Start with 30% of max
+
+        // Adjust based on market cap tiers
+        if (marketCap > 0) {
+            if (marketCap < 50000) { // Micro cap
+                percentOfMax = 0.2; // More conservative with micro caps
+            } else if (marketCap < 500000) { // Small cap
+                percentOfMax = 0.3;
+            } else if (marketCap < 5000000) { // Medium cap
+                percentOfMax = 0.4;
+            } else { // Large cap
+                percentOfMax = 0.5; // More aggressive with established tokens
+            }
+        }
+        
+        // Adjust based on liquidity
+        if (liquidity > 0) {
+            if (liquidity < 10000) { // Very low liquidity
+                percentOfMax *= 0.7; // Reduce by 30%
+            } else if (liquidity < 50000) { // Low liquidity
+                percentOfMax *= 0.8; // Reduce by 20%
+            } else if (liquidity > 500000) { // High liquidity
+                percentOfMax *= 1.2; // Increase by 20%
+            }
+        }
+        
+        // Adjust based on token price (very low price tokens need more capital)
+        if (tokenPrice > 0) {
+            if (tokenPrice < 0.00000001) { // Extremely low price
+                percentOfMax *= 1.3; // Increase by 30%
+            } else if (tokenPrice < 0.000001) { // Very low price
+                percentOfMax *= 1.2; // Increase by 20%
+            }
+        }
+        
+        // Calculate amount
+        const calculatedAmount = maxAmount * percentOfMax;
+        
+        // Ensure reasonable bounds (0.0025 SOL to maxAmount)
+        return Math.max(0.0025, Math.min(calculatedAmount, maxAmount));
     }
 }
 

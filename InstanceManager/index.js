@@ -163,15 +163,19 @@ class InstanceManager {
                   userData.walletCount = walletCount;
                   userData.totalBalance = senderBalance;
                   
-                  // Calculate optimal amount per wallet
+                  // Calculate optimal amount per wallet using neural network
                   const walletAmountResult = this.tradeStrategy.calculateWalletAmount(userData);
                   
-                  // Add to userData for the distribute method to use
+                  // Add to userData for the distribute method to use - override any user-defined values
                   userData.solDistributionAmount = walletAmountResult.lamports;
                   userData.calculatedSolAmount = walletAmountResult.solAmount;
+                  userData.amountPerWallet = walletAmountResult.solAmount; // Replace user value
                   
-                  console.log(`Using calculated distribution amount: ${walletAmountResult.solAmount} SOL per wallet`);
+                  console.log(`Using AI-calculated distribution amount: ${walletAmountResult.solAmount} SOL per wallet`);
                 }
+                
+                // Add this after calculating walletAmountResult
+                userData.originalAmountPerWallet = userData.amountPerWallet; // Preserve the original
                 
                 const result = await this.distributeSolana.distributeSolana(chatId, userData, interaction);
                 if (result === true) {
@@ -420,7 +424,7 @@ TAKE_PROFIT=${takeProfit}
 STOP_LOSS=${stopLoss}
 DCA_AMOUNT=${dcaAmount}
 SENDER_WALLET=${userData.address || ''}
-AMOUNT_PER_WALLET=${userData.amountPerWallet || 0.05}
+AMOUNT_PER_WALLET=${userData.calculatedSolAmount || 0.01}
 SIGNAL_ONLY=false
 ENV_PATH=${ENV_PATH}
 # Dummy values for services not needed in market maker instances
@@ -524,41 +528,6 @@ MM_MODE=true
     });
   }
 
-  patchIndexFile(content) {
-    // Wrap the Discord and Telegram initializations in try-catch blocks
-    return content.replace(
-        "const discord = new DiscordService();",
-        `// Safe initialization of services
-let discord;
-try {
-    discord = new DiscordService();
-} catch (err) {
-    console.log('Discord service initialization failed, using dummy service');
-    discord = {
-        sendMessage: () => Promise.resolve(true)
-    };
-}`
-    ).replace(
-        "const telegram = new TelegramService();",
-        `let telegram;
-try {
-    telegram = new TelegramService();
-} catch (err) {
-    console.log('Telegram service initialization failed, using dummy service');
-    telegram = {
-        sendMessage: () => Promise.resolve(true)
-    };
-}`
-    ).replace(
-        "await client.connect();",
-        `try {
-    await client.connect();
-    console.log('Connected to Redis');
-} catch (err) {
-    console.log('Redis connection failed in market maker mode, continuing without Redis');
-}`
-    );
-  }
 }
 
 module.exports = InstanceManager;
