@@ -232,11 +232,13 @@ class Distribute {
     }
 
     const results = [];
+    
+    // Calculate minimum balance for rent exemption once
+    const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
+    console.log(`Minimum rent exemption: ${minRentExemption} lamports (${minRentExemption / 1e9} SOL)`);
 
     for (const drop of dropList) {
       try {
-        let transaction = new Transaction();
-
         // Get fresh blockhash from API
         const response = await fetch('http://localhost:3000/api/wallet/solana');
         const data = await response.json();
@@ -244,17 +246,24 @@ class Distribute {
           throw new Error('Failed to get blockhash');
         }
 
-        transaction.recentBlockhash = data.blockhash.blockhash;
-        transaction.feePayer = fromWallet.publicKey;
-
-        // Convert to integer lamports - ensure it's a whole number
+        // Ensure lamports amount is a valid integer
         const lamports = Math.floor(drop.numLamports);
         if (lamports <= 0) {
-          console.warn(`Skipping transfer to ${drop.walletAddress} due to amount too small: ${drop.numLamports}`);
-          continue; // Skip this transfer if amount is too small
+          console.warn(`Skipping transfer to ${drop.walletAddress} - amount too small: ${drop.numLamports}`);
+          results.push({
+            success: false,
+            error: 'Amount too small',
+            recipient: drop.walletAddress,
+            amount: drop.numLamports
+          });
+          continue;
         }
 
-        // Add initial transfer instruction with integer lamports
+        // Create transaction to calculate fee
+        let transaction = new Transaction();
+        transaction.recentBlockhash = data.blockhash.blockhash;
+        transaction.feePayer = fromWallet.publicKey;
+        
         transaction.add(
           SystemProgram.transfer({
             fromPubkey: fromWallet.publicKey,
@@ -266,21 +275,25 @@ class Distribute {
         // Calculate fee
         const message = transaction.compileMessage();
         const { value: fee } = await this.connection.getFeeForMessage(message);
-        const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
-        const totalFee = fee + minRentExemption;
         
+        // Calculate adjusted amount
+        const adjustedAmount = Math.floor(lamports - fee);
+        if (adjustedAmount <= minRentExemption) {
+          console.warn(`Skipping transfer to ${drop.walletAddress} - amount after fees (${adjustedAmount}) is less than minimum rent exemption (${minRentExemption})`);
+          results.push({
+            success: false,
+            error: 'Amount too small after fees',
+            recipient: drop.walletAddress,
+            amount: drop.numLamports
+          });
+          continue;
+        }
+
         // Create new transaction with adjusted amount
         transaction = new Transaction();
         transaction.recentBlockhash = data.blockhash.blockhash;
         transaction.feePayer = fromWallet.publicKey;
-
-        // Ensure adjusted amount is an integer
-        const adjustedAmount = Math.floor(lamports - totalFee);
-        if (adjustedAmount <= 0) {
-          console.warn(`Skipping transfer to ${drop.walletAddress} due to amount too small after fees: ${lamports} lamports, fee: ${totalFee} lamports`);
-          continue; // Skip this transfer if amount is too small after fees
-        }
-
+        
         console.log(`Sending ${adjustedAmount} lamports (${adjustedAmount / 1e9} SOL) to ${drop.walletAddress}`);
         
         transaction.add(
@@ -291,11 +304,12 @@ class Distribute {
           })
         );
 
+        // Sign and serialize transaction
         transaction.sign(fromWallet);
         const serializedTransaction = transaction.serialize();
         const encodedTx = bs58.encode(serializedTransaction);
 
-        // Submit transaction through API
+        // Submit transaction
         const submitResponse = await fetch('http://localhost:3000/api/transaction/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -316,6 +330,9 @@ class Distribute {
           recipient: drop.walletAddress,
           amount: adjustedAmount
         });
+
+        // Add delay between transactions
+        await new Promise(resolve => setTimeout(resolve, TX_INTERVAL));
 
       } catch (error) {
         console.error(`Transaction error:`, error);

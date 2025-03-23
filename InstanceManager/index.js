@@ -195,17 +195,15 @@ class InstanceManager {
             return resolve();
           }
         } catch (err) {
-          console.log('Error reading existing wallet file, will create new wallets');
+          console.log('Error reading existing wallet file, will create new wallets:', err);
         }
       }
       
-      // Set up event listeners for wallet creation process
+      // Set up event listeners
       const walletCreatedHandler = (data) => {
         if (data && data.chatId === chatId) {
           console.log(`Received walletCreated event for chatId: ${chatId}`);
-          processEvents.removeListener('walletCreated', walletCreatedHandler);
-          processEvents.removeListener('walletError', walletErrorHandler);
-          clearTimeout(timeout);
+          cleanup();
           resolve();
         }
       };
@@ -213,75 +211,66 @@ class InstanceManager {
       const walletErrorHandler = (data) => {
         if (data && data.chatId === chatId) {
           console.error(`Received walletError event for chatId: ${chatId}:`, data.error);
-          processEvents.removeListener('walletCreated', walletCreatedHandler);
-          processEvents.removeListener('walletError', walletErrorHandler);
-          clearTimeout(timeout);
-          
-          // Check if wallets were created despite the error
-          if (fs.existsSync(walletFilePath)) {
-            try {
-              const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
-              if (Array.isArray(walletsData) && walletsData.length > 0) {
-                console.log(`Despite error, wallet file exists with ${walletsData.length} wallets`);
-                resolve();
-                return;
-              }
-            } catch (err) {
-              // File exists but is invalid, proceed with reject
-            }
-          }
-          
-          reject(new Error(`Wallet creation failed: ${data.error}`));
+          cleanup();
+          checkWalletFileBeforeReject();
         }
       };
       
-      // Set up a file watcher as fallback
+      // Helper to clean up all listeners and timeouts
+      const cleanup = () => {
+        processEvents.removeListener('walletCreated', walletCreatedHandler);
+        processEvents.removeListener('walletError', walletErrorHandler);
+        if (fileWatcherInterval) clearInterval(fileWatcherInterval);
+        if (timeout) clearTimeout(timeout);
+      };
+      
+      // Check wallet file as last resort before rejecting
+      const checkWalletFileBeforeReject = () => {
+        if (fs.existsSync(walletFilePath)) {
+          try {
+            const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
+            if (Array.isArray(walletsData) && walletsData.length > 0) {
+              console.log(`Despite error, wallet file exists with ${walletsData.length} wallets`);
+              resolve();
+              return true;
+            }
+          } catch (err) {
+            // File exists but is invalid
+          }
+        }
+        reject(new Error(`Wallet creation failed`));
+        return false;
+      };
+      
+      // Start the file watcher now (it was defined but never used in your code)
+      let fileWatcherInterval;
       const startFileWatcher = () => {
         console.log(`Starting file watcher for ${walletFilePath}`);
-        const checkWalletFile = () => {
+        fileWatcherInterval = setInterval(() => {
           if (fs.existsSync(walletFilePath)) {
             try {
               const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
               if (Array.isArray(walletsData) && walletsData.length > 0) {
                 console.log(`File watcher detected wallet file with ${walletsData.length} wallets`);
-                clearInterval(fileWatcherInterval);
-                processEvents.removeListener('walletCreated', walletCreatedHandler);
-                processEvents.removeListener('walletError', walletErrorHandler);
-                clearTimeout(timeout);
+                cleanup();
                 resolve();
               }
             } catch (err) {
               console.log('File exists but invalid, continuing to watch');
             }
           }
-        };
-        
-        const fileWatcherInterval = setInterval(checkWalletFile, 5000);
-        return fileWatcherInterval;
+        }, 5000);
       };
+      
+      // Start the file watcher
+      startFileWatcher();
       
       // Set a timeout
       const timeout = setTimeout(() => {
         console.log(`Timeout reached for wallet creation for chatId: ${chatId}`);
-        processEvents.removeListener('walletCreated', walletCreatedHandler);
-        processEvents.removeListener('walletError', walletErrorHandler);
-        
-        // Final check for wallet file
-        if (fs.existsSync(walletFilePath)) {
-          try {
-            const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
-            if (Array.isArray(walletsData) && walletsData.length > 0) {
-              console.log(`Timeout reached but wallet file exists with ${walletsData.length} wallets`);
-              resolve();
-              return;
-            }
-          } catch (err) {
-            // File exists but is invalid
-          }
-        }
-        
-        reject(new Error(`Wallet creation timed out after ${300000}ms`));
-      }, 300000);
+        cleanup();
+        checkWalletFileBeforeReject();
+      }, 300000); // 5 minutes
       
       // Set up listeners
       processEvents.on('walletCreated', walletCreatedHandler);
@@ -292,7 +281,7 @@ class InstanceManager {
       this.walletProcessor.createWallets(chatId, userData)
         .catch(error => {
           console.error(`Error initiating wallet creation: ${error.message}`);
-          // The error will be handled by the walletErrorHandler
+          // Error will be handled by walletErrorHandler
         });
     });
   }
@@ -301,75 +290,83 @@ class InstanceManager {
     try {
       console.log(`Creating lightweight sol_spl instance in ${userDir}`);
       
-      // 1. Create the symlinks for shared code (like in copyInstance.sh)
+      // Ensure base directory exists
+      if (!fs.existsSync(userDir)) {
+        fs.mkdirSync(userDir, { recursive: true });
+      }
+      
+      // Ensure .config directory exists
+      const configDir = path.join(userDir, '.config');
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+      
+      // 1. Get paths to main installation
       const mainDir = path.resolve(os.homedir(), ENV_PATH);
       
-      // Define symlink paths
-      const nodeModulesLink = path.join(userDir, 'node_modules');
-      const distLink = path.join(userDir, 'dist');
+      // 2. Create symlinks for shared code
+      const nodesToSymlink = ['node_modules', 'dist'];
       
-      // Remove existing symlinks or directories if they exist
-      this.safeRemove(nodeModulesLink);
-      this.safeRemove(distLink);
+      for (const node of nodesToSymlink) {
+        const targetPath = path.join(mainDir, node);
+        const linkPath = path.join(userDir, node);
+        
+        // Check if target exists before creating symlink
+        if (!fs.existsSync(targetPath)) {
+          console.warn(`Warning: Target for symlink does not exist: ${targetPath}`);
+          continue;
+        }
+        
+        // Remove existing symlink/directory/file if it exists
+        this.safeRemove(linkPath);
+        
+        // Create new symlink with proper logging
+        console.log(`Creating symlink: ${targetPath} -> ${linkPath}`);
+        fs.symlinkSync(targetPath, linkPath, 'junction');
+      }
       
-      // Create symlinks
-      console.log(`Creating symlink: ${mainDir}/node_modules -> ${nodeModulesLink}`);
-      fs.symlinkSync(path.join(mainDir, 'node_modules'), nodeModulesLink, 'junction');
-      
-      console.log(`Creating symlink: ${mainDir}/dist -> ${distLink}`);
-      fs.symlinkSync(path.join(mainDir, 'dist'), distLink, 'junction');
-      
-      console.log('Created symlinks for node_modules and dist');
-      
-      // 2. Copy the .env.template file (like in copyInstance.sh)
+      // 3. Copy and update .env file
       const envTemplatePath = path.join(mainDir, '.env.template');
       const destEnvPath = path.join(userDir, '.env');
-
-      if (fs.existsSync(envTemplatePath)) {
-        fs.copyFileSync(envTemplatePath, destEnvPath);
-        console.log(`Copied .env.template to ${destEnvPath}`);
-      } else {
-        console.error('Could not find .env.template');
+      
+      if (!fs.existsSync(envTemplatePath)) {
+        console.error(`Error: .env.template not found at ${envTemplatePath}`);
         return false;
       }
       
-      // 3. Update the .env file with user-specific values
-      let envContent = fs.readFileSync(destEnvPath, 'utf8');
+      // Copy template file
+      fs.copyFileSync(envTemplatePath, destEnvPath);
+      console.log(`Copied .env.template to ${destEnvPath}`);
       
-      // Replace TRADE_TYPE in the .env file
-      envContent = envContent.replace(/^TRADE_TYPE=.*$/m, 'TRADE_TYPE=sol_spl');
-      
-      // Calculate trading parameters using TradeStrategy if available
-      console.log('Calculating trading parameters using TradeStrategy...');
+      // Calculate trading parameters with proper error handling
       let buyAmount, sellAmount, takeProfit, stopLoss, dcaAmount;
       
       try {
-        // Calculate dynamic values from TradeStrategy
         buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
         sellAmount = this.tradeStrategy.calculateSellAmount(userData);
         takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
         stopLoss = this.tradeStrategy.calculateStopLoss(userData);
         dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
-        
-        console.log(`Calculated parameters: buyAmount=${buyAmount}, sellAmount=${sellAmount}, takeProfit=${takeProfit}, stopLoss=${stopLoss}, dcaAmount=${dcaAmount}`);
       } catch (calcError) {
         console.error('Error calculating trading parameters:', calcError);
-        // Fall back to default values
+        // Use fallbacks
         buyAmount = userData.buyAmount || 0.05;
         sellAmount = userData.sellAmount || 100;
         takeProfit = userData.profitMargin || 50;
         stopLoss = userData.stopLoss || 50;
         dcaAmount = userData.dcaAmount || 0.025;
-        console.log(`Using fallback parameters: buyAmount=${buyAmount}, sellAmount=${sellAmount}, takeProfit=${takeProfit}, stopLoss=${stopLoss}, dcaAmount=${dcaAmount}`);
       }
       
-      // Add market maker specific settings
+      // Read, update, and append to .env file
+      let envContent = fs.readFileSync(destEnvPath, 'utf8');
+      envContent = envContent.replace(/^TRADE_TYPE=.*$/m, 'TRADE_TYPE=sol_spl');
+      
       const additionalConfig = `
 # Market maker specific settings
 CHAT_ID=${chatId}
-CONTRACT_ADDRESS=${userData.contractAddress}
+CONTRACT_ADDRESS=${userData.contractAddress || ''}
 TOKEN_DECIMALS=${userData.tokenDecimals || 6}
-TOKEN_SYMBOL=${userData.tokenSymbol}
+TOKEN_SYMBOL=${userData.tokenSymbol || ''}
 BATCH_SIZE=${userData.batchSize || 1}
 BOOST_TYPE=${userData.boostType || 'none'}
 BUY_AMOUNT=${buyAmount}
@@ -377,7 +374,7 @@ SELL_AMOUNT=${sellAmount}
 TAKE_PROFIT=${takeProfit}
 STOP_LOSS=${stopLoss}
 DCA_AMOUNT=${dcaAmount}
-SENDER_WALLET=${userData.address}
+SENDER_WALLET=${userData.address || ''}
 AMOUNT_PER_WALLET=${userData.amountPerWallet || 0.05}
 SIGNAL_ONLY=false
 ENV_PATH=${ENV_PATH}
@@ -392,7 +389,6 @@ DISCORD_CHANNEL_ID=dummy_channel
 MM_MODE=true
 `;
       
-      // Write the updated content back to the file
       fs.writeFileSync(destEnvPath, envContent + additionalConfig);
       console.log('Updated .env file with market maker configuration');
       
@@ -417,7 +413,7 @@ MM_MODE=true
           // If it's a directory, remove it recursively
           console.log(`Removing existing directory: ${path}`);
           fs.rmSync(path, { recursive: true, force: true });
-    } else {
+        } else {
           // If it's a regular file
           console.log(`Removing existing file: ${path}`);
           fs.unlinkSync(path);
