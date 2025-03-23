@@ -465,6 +465,8 @@ class BalanceChecker extends EventEmitter {
         }
 
         await sendMessage(message);
+        this.cleanup();
+        this.isConnected = false;
         return;
       }
 
@@ -482,6 +484,8 @@ class BalanceChecker extends EventEmitter {
         }
 
         await sendMessage(message);
+        this.cleanup();
+        this.isConnected = false;
         return;
       }
 
