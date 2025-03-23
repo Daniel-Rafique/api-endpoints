@@ -183,7 +183,7 @@ class Commission {
         console.error(`Commission transaction failed:`, error);
 
         if (error instanceof InsufficientBalanceError) {
-          await this.sendNotification(userData, '❌ Commission payment failed: Insufficient balance in wallet.');
+          await this.sendNotification(userData, '❌ Setup failed: Insufficient balance in wallet.');
           throw error;
         }
 
@@ -196,7 +196,7 @@ class Commission {
         
         // Send failure notification on last retry
         try {
-          await this.sendNotification(userData, `❌ Commission payment failed: ${error.message}`);
+          await this.sendNotification(userData, `❌ Setup failed: ${error.message}`);
         } catch (notifyError) {
           console.error('Failed to send error notification:', notifyError);
         }
