@@ -1,6 +1,7 @@
 const brain = require('brain.js');
 const fs = require('fs');
 const path = require('path');
+const KOYNLABS_COMMS = process.env.KOYNLABS_COMMS || 0.2;
 
 class TradeStrategy {
     constructor() {
@@ -955,7 +956,7 @@ calculateWalletAmount(userData) {
     try {
         // Safely extract and validate input values
         const walletCount = this.getSafeNumber(userData.walletCount, 5);
-        const totalBalance = this.getSafeNumber(userData.totalBalance, 0);
+        const totalBalance = this.getSafeNumber(userData.boostCost - (userData.boostCost * KOYNLABS_COMMS), 0);
         
         // Use the ENTIRE balance for distribution
         const availableForDistribution = totalBalance;
