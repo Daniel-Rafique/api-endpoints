@@ -335,6 +335,38 @@ class InstanceManager {
     });
   }
 
+  // Add a method to patch and copy the index.js file
+  async patchAndCopyIndexFile(userDir, mainDir) {
+    try {
+      const sourceIndexPath = path.join(mainDir, 'dist', 'index.js');
+      const destIndexPath = path.join(userDir, 'dist', 'index.js');
+      
+      // Create dist directory if it doesn't exist (it should already exist from symlink)
+      if (!fs.existsSync(path.dirname(destIndexPath))) {
+        fs.mkdirSync(path.dirname(destIndexPath), { recursive: true });
+      }
+      
+      // Read the source file
+      let indexContent = fs.readFileSync(sourceIndexPath, 'utf8');
+      
+      // Patch the wallet file path to use process.cwd() instead of __dirname
+      indexContent = indexContent.replace(
+        /this\.walletFilePath = path\.resolve\(__dirname, '\.\.\/\.config\/wallets\.json'\);/,
+        `this.walletFilePath = path.resolve(process.cwd(), '.config/wallets.json');`
+      );
+      
+      // Write the patched file directly to the instance's dist directory
+      // This will override the symlinked index.js
+      fs.writeFileSync(destIndexPath, indexContent);
+      console.log(`Patched and copied index.js to ${destIndexPath}`);
+      
+      return true;
+    } catch (error) {
+      console.error('Error patching index.js:', error);
+      return false;
+    }
+  }
+
   async createLightweightSolSplInstance(userDir, chatId, userData) {
     try {
       console.log(`Creating lightweight sol_spl instance in ${userDir}`);
@@ -353,7 +385,7 @@ class InstanceManager {
       // 1. Get paths to main installation
       const mainDir = path.resolve(os.homedir(), ENV_PATH);
       
-      // 2. Create symlinks for shared code
+      // 2. Create symlinks for shared code (including dist)
       const nodesToSymlink = ['node_modules', 'dist'];
       
       for (const node of nodesToSymlink) {
@@ -374,7 +406,11 @@ class InstanceManager {
         fs.symlinkSync(targetPath, linkPath, 'junction');
       }
       
-      // 3. Copy and update .env file
+      // 3. Patch index.js file after creating the symlink
+      // This keeps the symlink to dist/ but replaces just the index.js file
+      await this.patchAndCopyIndexFile(userDir, mainDir);
+      
+      // 4. Copy and update .env file
       const envTemplatePath = path.join(mainDir, '.env.example');
       const destEnvPath = path.join(userDir, '.env');
       
@@ -388,7 +424,7 @@ class InstanceManager {
       console.log(`Copied .env.example to ${destEnvPath}`);
       
       // Calculate trading parameters with proper error handling
-      let buyAmount, sellAmount, takeProfit, stopLoss, dcaAmount;
+      let buyAmount, sellAmount, takeProfit, stopLoss, dcaAmount, walletAmount;
       
       try {
         buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
@@ -396,6 +432,20 @@ class InstanceManager {
         takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
         stopLoss = this.tradeStrategy.calculateStopLoss(userData);
         dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
+        
+        // Calculate wallet amount if not already calculated
+        if (!userData.calculatedSolAmount && userData.walletCount && userData.totalBalance) {
+          const walletAmountResult = this.tradeStrategy.calculateWalletAmount(userData);
+          walletAmount = walletAmountResult.solAmount;
+          console.log(`Calculated wallet amount: ${walletAmount} SOL`);
+        } else if (userData.calculatedSolAmount) {
+          walletAmount = userData.calculatedSolAmount;
+          console.log(`Using pre-calculated wallet amount: ${walletAmount} SOL`);
+        } else {
+          // Default to a small amount only if absolutely no calculation is possible
+          walletAmount = 0.0001;
+          console.log(`Using default wallet amount: ${walletAmount} SOL (calculation not possible)`);
+        }
       } catch (calcError) {
         console.error('Error calculating trading parameters:', calcError);
         // Use fallbacks
@@ -404,6 +454,7 @@ class InstanceManager {
         takeProfit = userData.profitMargin || 50;
         stopLoss = userData.stopLoss || 50;
         dcaAmount = userData.dcaAmount || 0.025;
+        walletAmount = userData.calculatedSolAmount || 0.0001;
       }
       
       // Read, update, and append to .env file
@@ -424,7 +475,7 @@ TAKE_PROFIT=${takeProfit}
 STOP_LOSS=${stopLoss}
 DCA_AMOUNT=${dcaAmount}
 SENDER_WALLET=${userData.address || ''}
-AMOUNT_PER_WALLET=${userData.calculatedSolAmount || 0.01}
+AMOUNT_PER_WALLET=${walletAmount}
 SIGNAL_ONLY=false
 ENV_PATH=${ENV_PATH}
 # Dummy values for services not needed in market maker instances
