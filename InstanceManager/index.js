@@ -301,34 +301,30 @@ class InstanceManager {
     try {
       console.log(`Creating lightweight sol_spl instance in ${userDir}`);
       
-      // 1. Create the basic directory structure
-      const distDir = path.join(userDir, 'dist');
-    if (!fs.existsSync(distDir)) {
-        fs.mkdirSync(distDir, { recursive: true });
-    }
-    
-      // 2. Create symlinks for shared code (like in copyInstance.sh)
+      // 1. Create the symlinks for shared code (like in copyInstance.sh)
       const mainDir = path.resolve(os.homedir(), ENV_PATH);
       
-      // Create symlinks to node_modules and dist
+      // Define symlink paths
       const nodeModulesLink = path.join(userDir, 'node_modules');
       const distLink = path.join(userDir, 'dist');
       
-      // Remove existing symlinks if they exist
-      if (fs.existsSync(nodeModulesLink)) {
-        fs.unlinkSync(nodeModulesLink);
-      }
+      // Remove existing symlinks or directories if they exist
+      this.safeRemove(nodeModulesLink);
+      this.safeRemove(distLink);
       
-      // Create new symlinks
+      // Create symlinks
+      console.log(`Creating symlink: ${mainDir}/node_modules -> ${nodeModulesLink}`);
       fs.symlinkSync(path.join(mainDir, 'node_modules'), nodeModulesLink, 'junction');
+      
+      console.log(`Creating symlink: ${mainDir}/dist -> ${distLink}`);
       fs.symlinkSync(path.join(mainDir, 'dist'), distLink, 'junction');
       
       console.log('Created symlinks for node_modules and dist');
       
-      // 3. Copy the .env.template file (like in copyInstance.sh)
+      // 2. Copy the .env.template file (like in copyInstance.sh)
       const envTemplatePath = path.join(mainDir, '.env.template');
       const destEnvPath = path.join(userDir, '.env');
-      
+
       if (fs.existsSync(envTemplatePath)) {
         fs.copyFileSync(envTemplatePath, destEnvPath);
         console.log(`Copied .env.template to ${destEnvPath}`);
@@ -337,17 +333,40 @@ class InstanceManager {
         return false;
       }
       
-      // 4. Update the .env file with user-specific values
+      // 3. Update the .env file with user-specific values
       let envContent = fs.readFileSync(destEnvPath, 'utf8');
       
       // Replace TRADE_TYPE in the .env file
       envContent = envContent.replace(/^TRADE_TYPE=.*$/m, 'TRADE_TYPE=sol_spl');
       
+      // Calculate trading parameters using TradeStrategy if available
+      console.log('Calculating trading parameters using TradeStrategy...');
+      let buyAmount, sellAmount, takeProfit, stopLoss, dcaAmount;
+      
+      try {
+        // Calculate dynamic values from TradeStrategy
+        buyAmount = this.tradeStrategy.calculateBuyAmount(userData);
+        sellAmount = this.tradeStrategy.calculateSellAmount(userData);
+        takeProfit = this.tradeStrategy.calculateTakeProfit(userData);
+        stopLoss = this.tradeStrategy.calculateStopLoss(userData);
+        dcaAmount = this.tradeStrategy.calculateDCAAmount(userData);
+        
+        console.log(`Calculated parameters: buyAmount=${buyAmount}, sellAmount=${sellAmount}, takeProfit=${takeProfit}, stopLoss=${stopLoss}, dcaAmount=${dcaAmount}`);
+      } catch (calcError) {
+        console.error('Error calculating trading parameters:', calcError);
+        // Fall back to default values
+        buyAmount = userData.buyAmount || 0.05;
+        sellAmount = userData.sellAmount || 100;
+        takeProfit = userData.profitMargin || 50;
+        stopLoss = userData.stopLoss || 50;
+        dcaAmount = userData.dcaAmount || 0.025;
+        console.log(`Using fallback parameters: buyAmount=${buyAmount}, sellAmount=${sellAmount}, takeProfit=${takeProfit}, stopLoss=${stopLoss}, dcaAmount=${dcaAmount}`);
+      }
+      
       // Add market maker specific settings
       const additionalConfig = `
 # Market maker specific settings
 CHAT_ID=${chatId}
-TRADE_TYPE=sol_spl
 CONTRACT_ADDRESS=${userData.contractAddress}
 TOKEN_DECIMALS=${userData.tokenDecimals || 6}
 TOKEN_SYMBOL=${userData.tokenSymbol}
@@ -381,6 +400,32 @@ MM_MODE=true
     } catch (error) {
       console.error('Error creating lightweight sol_spl instance:', error);
       return false;
+    }
+  }
+
+  // Helper method to safely remove a file or directory
+  safeRemove(path) {
+    try {
+      if (fs.existsSync(path)) {
+        const stats = fs.lstatSync(path);
+        
+        if (stats.isSymbolicLink()) {
+          // If it's a symlink, just unlink it
+          console.log(`Removing existing symlink: ${path}`);
+          fs.unlinkSync(path);
+        } else if (stats.isDirectory()) {
+          // If it's a directory, remove it recursively
+          console.log(`Removing existing directory: ${path}`);
+          fs.rmSync(path, { recursive: true, force: true });
+    } else {
+          // If it's a regular file
+          console.log(`Removing existing file: ${path}`);
+          fs.unlinkSync(path);
+        }
+      }
+    } catch (error) {
+      console.error(`Error removing ${path}:`, error);
+      // Continue despite errors
     }
   }
 
