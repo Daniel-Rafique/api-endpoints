@@ -950,78 +950,73 @@ class TradeStrategy {
     }
 
     // Add this new method to calculate wallet amounts
-    calculateWalletAmount(userData) {
-        try {
-            // Safely extract and validate input values
-            const marketCap = this.getSafeNumber(userData.tokenDetails?.marketCap, 0);
-            const tokenPrice = this.getSafeNumber(userData.tokenDetails?.priceUSD, 0);
-            const liquidity = this.getSafeNumber(userData.tokenDetails?.liquidity?.usd, 0);
-            const walletCount = this.getSafeNumber(userData.walletCount, 5);
-            const totalBalance = this.getSafeNumber(userData.totalBalance, 0);
-            
-            // Reserve some balance for trading fees (keep 20% of balance)
-            const availableForDistribution = totalBalance * 0.8;
-            
-            // Maximum possible amount per wallet based on available balance
-            const maxSolPerWallet = availableForDistribution / (walletCount * 1e9);
-            
-            // Use neural network to determine the base amount
-            let optimalAmount = 0;
-            if (this.metricsHistory.length >= 20) {
-                try {
-                    const inputData = this.prepareInputData(userData);
-                    const result = this.buyNet.run(inputData);
-                    // Scale neural network output to a reasonable amount (0.0025 to maxSolPerWallet)
-                    optimalAmount = 0.0025 + (result.buyAmount * (maxSolPerWallet - 0.0025));
-                    console.log(`Neural network recommended amount: ${optimalAmount} SOL`);
-                } catch (nnError) {
-                    console.error('Neural network calculation error:', nnError);
-                    // Fall back to rule-based calculation
-                    optimalAmount = this.calculateOptimalAmountByRules(marketCap, tokenPrice, liquidity, maxSolPerWallet);
-                }
-            } else {
-                // Not enough training data - use rule-based approach
-                optimalAmount = this.calculateOptimalAmountByRules(marketCap, tokenPrice, liquidity, maxSolPerWallet);
+// Update the calculateWalletAmount method
+calculateWalletAmount(userData) {
+    try {
+        // Safely extract and validate input values
+        const walletCount = this.getSafeNumber(userData.walletCount, 5);
+        const totalBalance = this.getSafeNumber(userData.totalBalance, 0);
+        
+        // Use the ENTIRE balance for distribution
+        const availableForDistribution = totalBalance;
+        
+        // Simply divide by wallet count (equal distribution)
+        const equalSolPerWallet = availableForDistribution / (walletCount * 1e9);
+        
+        // No minimum amount check - use exactly what's calculated
+        let finalSolAmount = equalSolPerWallet;
+        
+        // Apply a very minimal neural network adjustment if trained (±2% at most)
+        // Further reduced to minimize any leftover SOL
+        if (this.metricsHistory.length >= 20) {
+            try {
+                const inputData = this.prepareInputData(userData);
+                const result = this.buyNet.run(inputData);
+                // Allow very minimal neural network adjustment (-2% to +2%)
+                const adjustment = 0.98 + (result.buyAmount * 0.04); // Range from 0.98 to 1.02
+                finalSolAmount = finalSolAmount * adjustment;
+                console.log(`Neural network adjustment factor: ${adjustment.toFixed(4)}`);
+            } catch (nnError) {
+                console.error('Neural network adjustment error:', nnError);
+                // Continue with unadjusted amount
             }
-            
-            // Ensure minimum amount for rent exemption (0.002 SOL)
-            const minSolAmount = 0.002;
-            let finalSolAmount = Math.max(optimalAmount, minSolAmount);
-            
-            // Ensure we don't exceed per-wallet limit
-            finalSolAmount = Math.min(finalSolAmount, maxSolPerWallet);
-            
-            // Convert to lamports
-            const lamports = Math.floor(finalSolAmount * 1e9);
-            
-            // Log calculation for analysis
-            console.log(`Wallet Amount Calculation:
-                Wallet Count: ${walletCount}
-                Total Balance: ${totalBalance / 1e9} SOL
-                Available for Distribution: ${availableForDistribution / 1e9} SOL
-                Maximum Per Wallet: ${maxSolPerWallet} SOL
-                Market Cap: $${marketCap}
-                Token Price: $${tokenPrice}
-                Liquidity: $${liquidity}
-                Neural Network Trained: ${this.metricsHistory.length >= 20 ? 'Yes' : 'No'}
-                Optimal Amount: ${optimalAmount} SOL
-                Final SOL Amount: ${finalSolAmount} SOL
-                Final Lamports: ${lamports}
-            `);
-            
-            return {
-                solAmount: finalSolAmount,
-                lamports: lamports
-            };
-        } catch (error) {
-            console.error('Error calculating wallet amount:', error);
-            // Emergency fallback - minimal viable amount
-            return {
-                solAmount: 0.01,
-                lamports: 10000000 // 0.01 SOL in lamports
-            };
         }
+        
+        // Convert to lamports - ensure it's an integer
+        const lamports = Math.floor(finalSolAmount * 1e9);
+        
+        // Calculate estimated total distribution
+        const totalDistribution = lamports * walletCount;
+        const percentOfBalance = (totalDistribution / totalBalance) * 100;
+        
+        // Log calculation for analysis
+        console.log(`Wallet Amount Calculation:
+            Wallet Count: ${walletCount}
+            Total Balance: ${totalBalance / 1e9} SOL
+            Available for Distribution: ${availableForDistribution / 1e9} SOL (100% of balance)
+            Equal Amount Per Wallet: ${equalSolPerWallet} SOL
+            Final SOL Amount Per Wallet: ${finalSolAmount} SOL
+            Final Lamports Per Wallet: ${lamports}
+            Total Distribution: ${totalDistribution / 1e9} SOL (${percentOfBalance.toFixed(2)}% of balance)
+            Remaining After Distribution: ${(totalBalance - totalDistribution) / 1e9} SOL
+            Note: Distribute.js will handle minimum rent exemption and fee adjustments
+        `);
+        
+        return {
+            solAmount: finalSolAmount,
+            lamports: lamports,
+            totalDistribution: totalDistribution
+        };
+    } catch (error) {
+        console.error('Error calculating wallet amount:', error);
+        // Emergency fallback - only used in case of calculation errors
+        return {
+            solAmount: 0.0001, // Much smaller fallback
+            lamports: 100000, // 0.0001 SOL in lamports
+            totalDistribution: 0
+        };
     }
+}
 
     // Helper method to calculate amount by rules when neural network isn't available
     calculateOptimalAmountByRules(marketCap, tokenPrice, liquidity, maxAmount) {
