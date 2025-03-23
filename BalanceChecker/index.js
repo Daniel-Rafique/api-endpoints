@@ -445,6 +445,8 @@ class BalanceChecker extends EventEmitter {
               amountReceived,
               this.platform === 'discord' ? this.interaction : null
             );
+            this.cleanup();
+            this.isConnected = false;
             return;
           }
         }
