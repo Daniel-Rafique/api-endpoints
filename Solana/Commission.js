@@ -9,7 +9,9 @@ const Discord = require('../Discord');
 const KOYNLABS_WALLET = process.env.KOYNLABS_WALLET;
 const KOYNLABS_COMMS = process.env.KOYNLABS_COMMS || 0.2;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+const discordToken = process.env.DISCORD_BOT_TOKEN;
+
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
 class InsufficientBalanceError extends Error {
@@ -32,8 +34,8 @@ class Commission {
     });
 
     this.chatId = chatId;
-    this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
-    this.discordNotifier = new Discord();
+    this.telegramNotifier = new Telegram(telegramToken);
+    this.discordNotifier = new Discord(discordToken);
     this.messageCache = new Map();
     this.isProcessingCommission = false;
 
@@ -45,9 +47,9 @@ class Commission {
   async sendNotification(userData, message) {
     try {
       if (userData.platform === 'discord') {
-        await this.discordNotifier.sendMessage(this.chatId, message);
+        await this.discordNotifier.sendDiscordMessage(this.chatId, message);
       } else {
-        await this.telegramNotifier.sendMessage(this.chatId, message);
+        await this.telegramNotifier.sendTelegramMessage(this.chatId, message);
       }
     } catch (error) {
       console.error(`Failed to send notification: ${error.message}`);

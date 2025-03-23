@@ -23,7 +23,8 @@ const FIRESTORE_KEYSTORE = process.env.FIRESTORE_KEYSTORE;
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT_1;
 const TX_INTERVAL = 1000;
 const ENV_PATH = process.env.ENV_PATH;
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+const discordToken = process.env.DISCORD_BOT_TOKEN;
 
 class InsufficientBalanceError extends Error {
   constructor(message) {
@@ -40,8 +41,8 @@ class Distribute {
       confirmTransactionInitialTimeout: 60000,
       wsEndpoint: process.env.SOLANA_WEBSOCKET
     });
-    this.telegramNotifier = new Telegram(TELEGRAM_TOKEN);
-    this.discordNotifier = new Discord();
+    this.telegramNotifier = new Telegram(telegramToken);
+    this.discordNotifier = new Discord(discordToken);
     this.messageCache = new Map();
     this.firestore = new Firestore({
       projectId: 'koynlabs-2f749',
