@@ -796,6 +796,7 @@ class BalanceChecker extends EventEmitter {
       if (newMode === 'sniper' && this.chatId === chatId) {
         console.log('Sniper mode activated, closing Bitquery connections');
         this.cleanup();
+        this.isConnected = false;
         this.emit('modeChanged', { chatId, mode: newMode });
       }
     };

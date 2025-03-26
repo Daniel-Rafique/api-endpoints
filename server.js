@@ -136,7 +136,16 @@ app.post('/api/create', async (req, res) => {
 // Use dataManager directly
 app.post('/api/mode', async (req, res) => {
   try {
-    const { chatId, mode } = req.body;
+    const { chatId, mode, timestamp, hash } = req.body;
+    if (!chatId || !mode) {
+      console.log('Missing required parameters');
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    const expectedHash = generateHash(chatId, timestamp);
+    if (hash !== expectedHash) {
+      console.log(`Hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+      return res.status(403).json({ error: 'Invalid request signature' });
+    }
     await dataManager.setMode(chatId, mode);
     res.json({ success: true });
   } catch (error) {
