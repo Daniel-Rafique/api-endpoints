@@ -35,6 +35,9 @@ app.use(bodyParser.json());
 // Secret key (store this securely, e.g., in environment variables)
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
+// Add map to store active balance checker instances
+const activeBalanceCheckers = new Map();
+
 // Function to generate the hash
 function generateHash(chatId, timestamp) {
   const data = `${chatId}:${timestamp}:${ENCRYPTION_KEY}`;
@@ -98,6 +101,9 @@ app.post('/api/create', async (req, res) => {
         userData
       );
 
+      // Store the balance checker instance
+      activeBalanceCheckers.set(chatId.toString(), balance);
+
       if (!userData?.distributeSolana) {
         try {
           await balance.getBalance(interaction);
@@ -147,6 +153,14 @@ app.post('/api/mode', async (req, res) => {
       return res.status(403).json({ error: 'Invalid request signature' });
     }
     await dataManager.setMode(chatId, mode);
+    
+    // Get the balance checker instance and cleanup
+    const balance = activeBalanceCheckers.get(chatId.toString());
+    if (balance) {
+      balance.cleanup();
+      activeBalanceCheckers.delete(chatId.toString());
+    }
+    
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
