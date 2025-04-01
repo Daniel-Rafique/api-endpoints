@@ -425,10 +425,22 @@ Market Making Strategy Analysis:
       // Handle undefined solAmount with a default value
       const actualSolAmount = solAmount || 1;
       
-      if (!tokenDetails || !tokenDetails.marketCap || !tokenDetails.liquidity || !tokenDetails.liquidity.usd) {
-        const error = new Error('Token details are missing or invalid');
+      if (!tokenDetails) {
+        const error = new Error('Token details could not be retrieved');
         this.processEvents.emit('walletError', { chatId, error: error.message });
         throw error;
+      }
+      
+      // For new tokens, set default values if market cap or liquidity data is missing
+      if (!tokenDetails.marketCap) {
+        console.log(`Token ${tokenDetails.symbol || 'unknown'} has no market cap data - using defaults for new token`);
+        tokenDetails.marketCap = 0;
+      }
+
+      if (!tokenDetails.liquidity || !tokenDetails.liquidity.usd) {
+        console.log(`Token ${tokenDetails.symbol || 'unknown'} has no liquidity data - using defaults for new token`);
+        tokenDetails.liquidity = tokenDetails.liquidity || {};
+        tokenDetails.liquidity.usd = 0;
       }
       
       // Calculate optimal wallet count
