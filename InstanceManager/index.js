@@ -107,22 +107,22 @@ class InstanceManager {
               }
               break;
 
-            case "CHECK_COMMISSION_PAID":
-              // Force commission check by reading the flag directly
-              const commissionPaidFlag = userData.commissionPaid === true;
-              if (!commissionPaidFlag) {
-                console.log('Commission not paid. Sending commission...');
-                const signature = await this.commissionPaid.sendToCommissionWallet(chatId, userData, interaction);
-                if (signature) {
-                await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
-                  console.log('Commission sent successfully with signature:', signature);
-                } else {
-                  throw new Error('Commission transaction failed - no signature returned');
-                }
-              } else {
-                console.log('Commission already paid.');
-              }
-              break;
+            // case "CHECK_COMMISSION_PAID":
+            //   // Force commission check by reading the flag directly
+            //   const commissionPaidFlag = userData.commissionPaid === true;
+            //   if (!commissionPaidFlag) {
+            //     console.log('Commission not paid. Sending commission...');
+            //     const signature = await this.commissionPaid.sendToCommissionWallet(chatId, userData, interaction);
+            //     if (signature) {
+            //     await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
+            //       console.log('Commission sent successfully with signature:', signature);
+            //     } else {
+            //       throw new Error('Commission transaction failed - no signature returned');
+            //     }
+            //   } else {
+            //     console.log('Commission already paid.');
+            //   }
+            //   break;
 
             case "CHECK_SOLANA_DISTRIBUTION":
               // Force distribution check by reading the flag directly

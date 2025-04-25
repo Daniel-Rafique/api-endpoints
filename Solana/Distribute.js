@@ -114,7 +114,7 @@ class Distribute {
     this.distributionLocks.set(chatId, true);
 
     try {
-      const { batchSize, userKeypair } = userData;
+      const { userKeypair } = userData;
       const retryLimit = 3;
       let attempt = 0;
 
@@ -139,60 +139,45 @@ class Distribute {
           await this.waitForFile(filePath, 30000);
 
           const fileContent = await fs.readFile(filePath, 'utf8');
-          const newWallets = JSON.parse(fileContent);
+          const wallets = JSON.parse(fileContent);
 
-          if (newWallets.length > 1000) {
-            throw new Error('Maximum wallet limit exceeded (1000)');
+          if (wallets.length === 0) {
+            throw new Error('No wallets found in wallet file');
           }
+
+          // Get the first wallet only - this will be responsible for handling all other wallets
+          const firstWallet = wallets[0];
+          console.log(`Using first wallet for SOL distribution: ${firstWallet.publicKey}`);
 
           // Get minimum rent exemption
           const minRentExemption = await this.connection.getMinimumBalanceForRentExemption(0);
           console.log(`Minimum rent exemption: ${minRentExemption} lamports (${minRentExemption / 1e9} SOL)`);
 
-          // Use distribution amount from InstanceManager if available
-          let amountPerWallet;
+          // Calculate the total amount to send to the first wallet
+          // Reserve a small buffer for the transaction fee (0.001 SOL = 1,000,000 lamports)
+          const FEE_BUFFER = 1_000_000;
+          const totalAmount = Math.max(0, senderBalance - FEE_BUFFER);
           
-          if (userData.solDistributionAmount) {
-            // Use the pre-calculated amount from TradeStrategy
-            amountPerWallet = Math.floor(userData.solDistributionAmount);
-            console.log(`Using calculated distribution amount: ${amountPerWallet} lamports (${amountPerWallet / 1e9} SOL)`);
-          } else {
-            // Fallback calculation - allocate 70% of balance evenly among wallets
-            console.log('No pre-calculated amount found, calculating fallback amount');
-            const availableForDistribution = Math.floor(senderBalance * 0.7);
-            amountPerWallet = Math.floor(availableForDistribution / newWallets.length);
-          }
-          
-          // Ensure minimum viable amount
-          if (amountPerWallet < minRentExemption + 5000) {
-            console.warn(`Calculated amount (${amountPerWallet}) is below minimum viable amount. Using minimum rent exemption + 5000 lamports.`);
-            amountPerWallet = minRentExemption + 5000;
-          }
+          console.log(`Using entire sender balance (${senderBalance / 1e9} SOL) minus fee buffer (${FEE_BUFFER / 1e9} SOL)`);
+          console.log(`Final amount to send to first wallet: ${totalAmount / 1e9} SOL`);
 
-          console.log(`Final amount per wallet: ${amountPerWallet} lamports (${amountPerWallet / 1e9} SOL)`);
-          console.log(`Total distribution: ${(amountPerWallet * newWallets.length) / 1e9} SOL across ${newWallets.length} wallets`);
+          // Create a single transfer to the first wallet
+          const dropList = [{
+            walletAddress: firstWallet.publicKey,
+            numLamports: totalAmount
+          }];
 
-          const totalBatches = Math.ceil(newWallets.length / batchSize);
-          for (let i = 0; i < newWallets.length; i += batchSize) {
-            const currentBatch = Math.floor(i / batchSize) + 1;
-            console.log(`Processing batch ${currentBatch}/${totalBatches}`);
-
-            const chunk = newWallets.slice(i, i + batchSize);
-            const dropList = chunk.map(wallet => ({
-              walletAddress: wallet.publicKey,
-              numLamports: amountPerWallet,
-            }));
-
-            const results = await this.generateTransactions(dropList, senderKeypair, userData);
-            await this.logTransactionResults(results, currentBatch);
-          }
+          // Send the transaction
+          console.log(`Sending ${totalAmount / 1e9} SOL to the first wallet which will handle distribution`);
+          const results = await this.generateTransactions(dropList, senderKeypair, userData);
+          await this.logTransactionResults(results, 1);
 
           try {
             const tokenName = userData.tokenDetails?.name || 'your token';
             const boostName = userData.boostName || 'Basic';
             await this.sendNotification(
               userData,
-              `✅ SOL distribution complete: ${(amountPerWallet * newWallets.length / 1e9).toFixed(4)} SOL distributed across ${newWallets.length} wallets. ${boostName} tier for ${tokenName} will begin shortly.`,
+              `✅ SOL successfully sent to manager wallet: ${(totalAmount / 1e9).toFixed(4)} SOL. ${boostName} tier for ${tokenName} will begin shortly.`,
               interaction
             );
           } catch (notifyError) {

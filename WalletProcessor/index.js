@@ -1,10 +1,7 @@
 require('dotenv').config();
 const path = require('path');
 const os = require('os');
-const { Queue, Worker } = require('bullmq');
-const dataManager = require('../database');
 const WalletManager = require('../WalletManager');
-const brain = require('brain.js');
 
 const ENV_PATH = process.env.ENV_PATH;
 
@@ -12,6 +9,11 @@ if (!ENV_PATH) {
   throw new Error('ENV_PATH is not defined. Please check your .env file.');
 }
 
+/**
+ * Simplified WalletProcessor class
+ * Calculates optimal wallet counts and distributions based on token metrics
+ * Removed neural network complexity and queue management
+ */
 class WalletProcessor {
   constructor(chatId, processEvents) {
     this.chatId = chatId;
@@ -26,142 +28,15 @@ class WalletProcessor {
       throw new Error('Error resolving basePath or instancePath.');
     }
 
-    this.dataManager = dataManager;
-    this.network = this.initializeNeuralNetwork();
+    // Constants for wallet calculations
     this.MIN_WALLETS = 3;
     this.MIN_SOL_PER_WALLET = 0.0001;
-
-    // Setup Redis connection with proper configuration and error handling
-    const redisConfig = {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      maxRetriesPerRequest: 5,
-      enableReadyCheck: true,
-      reconnectOnError: (err) => {
-        console.error('Redis connection error:', err);
-        return true; // Auto-reconnect on all errors
-      }
-    };
-
-    // Create queue with proper connection config
-    this.walletQueue = new Queue('walletQueue', {
-      connection: redisConfig
-    });
-
-    this.initializeWorker(redisConfig);
   }
 
-  initializeNeuralNetwork() {
-    const network = new brain.NeuralNetwork({
-      hiddenLayers: [10, 8], // Enhanced network complexity for better pattern recognition
-      activation: 'leaky-relu', // Better for continuous number prediction
-      learningRate: 0.008     // Slightly reduced for more stable learning
-    });
-
-    const trainingData = this.generateTrainingData();
-    
-    network.train(trainingData, {
-      iterations: 75000,      // Increased iterations for better training
-      errorThresh: 0.0005,    // Lower error threshold for higher accuracy
-      logPeriod: 5000,
-      log: (stats) => console.log('Network training stats:', stats)
-    });
-
-    return network;
-  }
-  
-  generateTrainingData() {
-    const data = [];
-    
-    // Generate more comprehensive training examples across different market conditions
-    for (let marketCap of [500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000]) {
-      for (let liquidity of [100, 500, 2000, 5000, 20000, 50000, 200000, 500000]) {
-        for (let solAmount of [0.5, 1, 2, 3, 5, 8, 10]) {
-          // Calculate ideal wallet count based on market conditions
-          const baseWalletCount = this.calculateBaseWalletCount(marketCap, liquidity, solAmount);
-          
-          data.push({
-            input: {
-              marketCap: this.normalizeValue(marketCap, 2000000),
-              liquidity: this.normalizeValue(liquidity, 1000000),
-              solAmount: this.normalizeValue(solAmount, 15),
-              mcapToLiq: this.normalizeValue(marketCap / liquidity, 10),
-              supplyFactor: this.normalizeValue(Math.min(1000000000, Math.pow(10, 9 + Math.random() * 3)), Math.pow(10, 12))
-            },
-            output: {
-              walletMultiplier: this.normalizeValue(baseWalletCount / 100, 15)
-            }
-          });
-        }
-      }
-    }
-
-    // Add edge cases for micro-cap and highly illiquid tokens
-    for (let i = 0; i < 200; i++) {
-      const marketCap = 100 + Math.random() * 900;  // 100-1000 range
-      const liquidity = 50 + Math.random() * 450;   // 50-500 range
-      const solAmount = 0.5 + Math.random() * 2.5;  // 0.5-3 range
-      
-      const baseWalletCount = this.calculateBaseWalletCount(marketCap, liquidity, solAmount);
-      
-      data.push({
-        input: {
-          marketCap: this.normalizeValue(marketCap, 2000000),
-          liquidity: this.normalizeValue(liquidity, 1000000),
-          solAmount: this.normalizeValue(solAmount, 15),
-          mcapToLiq: this.normalizeValue(marketCap / liquidity, 10),
-          supplyFactor: this.normalizeValue(Math.pow(10, 9 + Math.random() * 3), Math.pow(10, 12))
-        },
-        output: {
-          walletMultiplier: this.normalizeValue(baseWalletCount / 100, 15)
-        }
-      });
-    }
-
-    return data;
-  }
-
-  calculateBaseWalletCount(marketCap, liquidity, solAmount) {
-    // Enhanced dynamic wallet calculation for training data
-    const mcapFactor = Math.log10(Math.max(marketCap, 100)) / Math.log10(2000000);
-    const liqFactor = Math.log10(Math.max(liquidity, 50)) / Math.log10(500000);
-    const mcapToLiqRatio = marketCap / Math.max(liquidity, 1);
-    
-    // More wallets for lower mcap and higher liquidity
-    let baseCount = 120 * solAmount * (1.7 - mcapFactor) * (1.2 + liqFactor);
-    
-    // Progressive adjustments based on market conditions
-    if (marketCap < 1000) {
-      // Micro-cap tokens need more granular distribution
-      baseCount *= 1.5;
-    } else if (marketCap > 500000) {
-      // Higher cap tokens can use fewer, larger wallets
-      baseCount *= 0.7;
-    }
-    
-    // Liquidity-based adjustments
-    if (liquidity < 500) {
-      // Very low liquidity - we need to be careful not to move the market too much
-      baseCount *= 1.4;
-    }
-    
-    // Adjust based on mcap/liquidity ratio for optimal market impact
-    if (mcapToLiqRatio < 0.5) baseCount *= 1.4; // Much more fragmented for excellent liquidity
-    else if (mcapToLiqRatio < 1) baseCount *= 1.2; // More fragmented for good liquidity
-    else if (mcapToLiqRatio > 5) baseCount *= 0.6; // Much less fragmented for very poor liquidity
-    else if (mcapToLiqRatio > 2) baseCount *= 0.8; // Less fragmented for poor liquidity
-    
-    return Math.round(baseCount);
-  }
-
-  normalizeValue(value, max) {
-    return Math.log2(1 + value) / Math.log2(1 + max);
-  }
-
-  denormalizeValue(normalized, max) {
-    return Math.pow(2, normalized * Math.log2(1 + max)) - 1;
-  }
-
+  /**
+   * Calculate the optimal number of wallets based on token metrics
+   * Simplified calculation without neural network
+   */
   async calculateOptimalWallets(marketCap, liquidity, solAmount, tokenSupply = 1000000000) {
     // Safety checks for input values
     marketCap = Number(marketCap) || 1000;  // Default to 1000 if invalid
@@ -171,27 +46,27 @@ class WalletProcessor {
     
     console.log(`Validated inputs: MarketCap=${marketCap}, Liquidity=${liquidity}, SOL=${solAmount}, Supply=${tokenSupply}`);
     
-    // Starting with a maximum of 100 wallets for low cap tokens (reduced by factor of 10)
+    // Starting with a maximum of 50 wallets for low cap tokens (reduced by factor of 2)
     let walletCount;
     
     if (marketCap < 1000) {
-      // Micro cap tokens - maximum 100 wallets (was 1000)
-      walletCount = 100;
+      // Micro cap tokens - maximum 50 wallets
+      walletCount = 50;
     } else if (marketCap < 10000) {
       // Small cap tokens - half of micro caps
-      walletCount = 50;  // was 500
+      walletCount = 25;
     } else if (marketCap < 50000) {
       // Medium-small cap - half again
-      walletCount = 25;  // was 250
+      walletCount = 12;
     } else if (marketCap < 200000) {
       // Medium cap - half again
-      walletCount = 12;  // was 125
+      walletCount = 6;
     } else if (marketCap < 500000) {
       // Medium-large cap
-      walletCount = 6;   // was 60
+      walletCount = 3;
     } else {
       // Large cap
-      walletCount = 3;   // was 30
+      walletCount = 3;
     }
     
     // Scale by SOL amount (more SOL = proportionally more wallets)
@@ -242,7 +117,7 @@ Market Making Strategy Analysis:
     
   Wallet Strategy:
     Total SOL: ${solAmount}
-    Wallet Count: ${walletCount.toLocaleString()} (reduced for more buying power)
+    Wallet Count: ${walletCount.toLocaleString()}
     SOL per Wallet: ${solPerWallet.toFixed(6)}
     Buying Power per Wallet: $${(solPerWallet * 20).toFixed(2)}
     Expected Transactions: ~${Math.floor(totalTransactions).toLocaleString()} (${txPerWallet.toLocaleString()} per wallet)
@@ -359,62 +234,12 @@ Market Making Strategy Analysis:
     };
   }
 
-  calculateExpectedImpact(marketCap, liquidity, solAmount, walletCount) {
-    // Enhanced impact calculation
-    const totalValue = solAmount * 20; // Approximate SOL value in USD
-    
-    // Calculate average trade size
-    const avgTradeSize = (totalValue / walletCount) * 0.5; // Assuming 50% of wallet per trade
-    
-    // Impact on liquidity - sqrt relationship for more realistic slippage modeling
-    const impactOnLiquidity = (avgTradeSize / Math.sqrt(liquidity)) * 100 * Math.sqrt(walletCount / 10);
-    
-    // Impact on market cap - linear but scaled by sqrt of wallet count for distribution effect
-    const impactOnMarketCap = (totalValue / marketCap) * 100 * Math.sqrt(walletCount / 20);
-    
-    return Math.max(impactOnLiquidity, impactOnMarketCap);
-  }
-
-  async initializeWorker(redisConfig) {
-    try {
-      const worker = new Worker('walletQueue', async job => {
-      const { chatId, userData } = job.data;
-        
-        try {
-          // Use the direct method
-          return await this.createWallets(chatId, userData);
-        } catch (error) {
-          console.error(`Worker error processing wallet creation for chatId ${chatId}:`, error);
-          throw error;
-        }
-      }, { connection: redisConfig });
-      
-      // Add event listeners
-      worker.on('completed', job => {
-        console.log(`Job ${job.id} completed for chatId: ${job.data.chatId}`);
-        this.processEvents.emit('walletCreated', { 
-          chatId: job.data.chatId, 
-          walletCount: job.returnvalue.walletCount,
-          message: 'Wallets created successfully via job' 
-        });
-      });
-      
-      worker.on('failed', (job, err) => {
-        console.error(`Job ${job?.id} failed for chatId: ${job?.data?.chatId}:`, err);
-        if (job?.data?.chatId) {
-          this.processEvents.emit('walletError', { 
-            chatId: job.data.chatId, 
-            error: err.message 
-          });
-        }
-      });
-      
-      console.log('Wallet queue worker initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize wallet queue worker:', error);
-    }
-  }
-
+  /**
+   * Create wallets based on token metrics
+   * @param {string} chatId - Chat ID for the user
+   * @param {object} userData - User data including token details and SOL amount
+   * @returns {object} Result of wallet creation
+   */
   async createWallets(chatId, userData) {
     try {
       console.log(`Direct wallet creation for chatId: ${chatId}`);
@@ -446,8 +271,8 @@ Market Making Strategy Analysis:
       // Calculate optimal wallet count
       console.log(`Calculating optimal wallets for marketCap: ${tokenDetails.marketCap}, liquidity: ${tokenDetails.liquidity.usd}`);
       const result = await this.calculateOptimalWallets(
-          tokenDetails.marketCap,
-          tokenDetails.liquidity.usd,
+        tokenDetails.marketCap,
+        tokenDetails.liquidity.usd,
         actualSolAmount,
         tokenDetails.supply || 1000000000
       );
@@ -463,8 +288,8 @@ Market Making Strategy Analysis:
       }
       
       // Save the wallets
-        await this.walletManager.saveWallets(chatId, walletsArray);
-        
+      await this.walletManager.saveWallets(chatId, walletsArray);
+      
       console.log(`Successfully created and saved ${walletsArray.length} wallets for chatId: ${chatId}`);
       
       // Emit successful completion event
@@ -475,16 +300,11 @@ Market Making Strategy Analysis:
       });
       
       return { success: true, walletCount: walletsArray.length };
-      } catch (error) {
+    } catch (error) {
       console.error(`Error creating wallets for chatId ${chatId}:`, error);
       this.processEvents.emit('walletError', { chatId, error: error.message });
       throw error;
-      }
-  }
-
-  addJob(data) {
-    console.log('Adding create wallet job to queue:', data);
-    return this.walletQueue.add('createWallets', data);
+    }
   }
 }
 
