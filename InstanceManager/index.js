@@ -107,87 +107,87 @@ class InstanceManager {
               }
               break;
 
-            // case "CHECK_COMMISSION_PAID":
-            //   // Force commission check by reading the flag directly
-            //   const commissionPaidFlag = userData.commissionPaid === true;
-            //   if (!commissionPaidFlag) {
-            //     console.log('Commission not paid. Sending commission...');
-            //     const signature = await this.commissionPaid.sendToCommissionWallet(chatId, userData, interaction);
-            //     if (signature) {
-            //     await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
-            //       console.log('Commission sent successfully with signature:', signature);
-            //     } else {
-            //       throw new Error('Commission transaction failed - no signature returned');
-            //     }
-            //   } else {
-            //     console.log('Commission already paid.');
-            //   }
-            //   break;
-
-            case "CHECK_SOLANA_DISTRIBUTION":
-              // Force distribution check by reading the flag directly
-              const distributionFlag = userData.distributeSolana === true;
-              if (!distributionFlag) {
-                console.log('Distributing Solana...');
-                
-                // First check the wallet file to get the actual number of wallets
-                const walletFilePath = path.join(userDir, '.config', 'wallets.json');
-                let walletCount = 0;
-                
-                try {
-                  if (fs.existsSync(walletFilePath)) {
-                    const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
-                    walletCount = Array.isArray(walletsData) ? walletsData.length : 0;
-                    console.log(`Found ${walletCount} wallets for distribution`);
-                  }
-                } catch (error) {
-                  console.error('Error reading wallet file:', error);
-                }
-                
-                // Get the sender's current balance
-                let senderBalance = 0;
-                try {
-                  const publicKeyObj = typeof userData.userKeypair.publicKey === 'string' 
-                    ? new PublicKey(userData.userKeypair.publicKey) 
-                    : userData.userKeypair.publicKey;
-                  
-                  senderBalance = await this.distributeSolana.connection.getBalance(publicKeyObj);
-                  console.log(`Sender wallet balance: ${senderBalance / 1e9} SOL`);
-                } catch (error) {
-                  console.error('Error getting sender balance:', error);
-                }
-                
-                // Use TradeStrategy to calculate optimal wallet amount
-                if (walletCount > 0) {
-                  // Enrich userData with additional context for calculation
-                  userData.walletCount = walletCount;
-                  userData.totalBalance = senderBalance;
-                  
-                  // Calculate optimal amount per wallet using neural network
-                  const walletAmountResult = this.tradeStrategy.calculateWalletAmount(userData);
-                  
-                  // Add to userData for the distribute method to use - override any user-defined values
-                  userData.solDistributionAmount = walletAmountResult.lamports;
-                  userData.calculatedSolAmount = walletAmountResult.solAmount;
-                  userData.amountPerWallet = walletAmountResult.solAmount; // Replace user value
-                  
-                  console.log(`Using AI-calculated distribution amount: ${walletAmountResult.solAmount} SOL per wallet`);
-                }
-                
-                // Add this after calculating walletAmountResult
-                userData.originalAmountPerWallet = userData.amountPerWallet; // Preserve the original
-                
-                const result = await this.distributeSolana.distributeSolana(chatId, userData, interaction);
-                if (result === true) {
-                  await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
-                  console.log('Solana distributed successfully.');
+            case "CHECK_COMMISSION_PAID":
+              // Force commission check by reading the flag directly
+              const commissionPaidFlag = userData.commissionPaid === true;
+              if (!commissionPaidFlag) {
+                console.log('Commission not paid. Sending commission...');
+                const signature = await this.commissionPaid.sendToCommissionWallet(chatId, userData, interaction);
+                if (signature) {
+                await this.dataManager.updateCollection(chatIdStr, { commissionPaid: true });
+                  console.log('Commission sent successfully with signature:', signature);
                 } else {
-                  throw new Error('SOL distribution failed');
+                  throw new Error('Commission transaction failed - no signature returned');
                 }
               } else {
-                console.log('Solana already distributed.');
+                console.log('Commission already paid.');
               }
               break;
+
+            // case "CHECK_SOLANA_DISTRIBUTION":
+            //   // Force distribution check by reading the flag directly
+            //   const distributionFlag = userData.distributeSolana === true;
+            //   if (!distributionFlag) {
+            //     console.log('Distributing Solana...');
+                
+            //     // First check the wallet file to get the actual number of wallets
+            //     const walletFilePath = path.join(userDir, '.config', 'wallets.json');
+            //     let walletCount = 0;
+                
+            //     try {
+            //       if (fs.existsSync(walletFilePath)) {
+            //         const walletsData = JSON.parse(fs.readFileSync(walletFilePath, 'utf8'));
+            //         walletCount = Array.isArray(walletsData) ? walletsData.length : 0;
+            //         console.log(`Found ${walletCount} wallets for distribution`);
+            //       }
+            //     } catch (error) {
+            //       console.error('Error reading wallet file:', error);
+            //     }
+                
+            //     // Get the sender's current balance
+            //     let senderBalance = 0;
+            //     try {
+            //       const publicKeyObj = typeof userData.userKeypair.publicKey === 'string' 
+            //         ? new PublicKey(userData.userKeypair.publicKey) 
+            //         : userData.userKeypair.publicKey;
+                  
+            //       senderBalance = await this.distributeSolana.connection.getBalance(publicKeyObj);
+            //       console.log(`Sender wallet balance: ${senderBalance / 1e9} SOL`);
+            //     } catch (error) {
+            //       console.error('Error getting sender balance:', error);
+            //     }
+                
+            //     // Use TradeStrategy to calculate optimal wallet amount
+            //     if (walletCount > 0) {
+            //       // Enrich userData with additional context for calculation
+            //       userData.walletCount = walletCount;
+            //       userData.totalBalance = senderBalance;
+                  
+            //       // Calculate optimal amount per wallet using neural network
+            //       const walletAmountResult = this.tradeStrategy.calculateWalletAmount(userData);
+                  
+            //       // Add to userData for the distribute method to use - override any user-defined values
+            //       userData.solDistributionAmount = walletAmountResult.lamports;
+            //       userData.calculatedSolAmount = walletAmountResult.solAmount;
+            //       userData.amountPerWallet = walletAmountResult.solAmount; // Replace user value
+                  
+            //       console.log(`Using AI-calculated distribution amount: ${walletAmountResult.solAmount} SOL per wallet`);
+            //     }
+                
+            //     // Add this after calculating walletAmountResult
+            //     userData.originalAmountPerWallet = userData.amountPerWallet; // Preserve the original
+                
+            //     const result = await this.distributeSolana.distributeSolana(chatId, userData, interaction);
+            //     if (result === true) {
+            //       await this.dataManager.updateCollection(chatIdStr, { distributeSolana: true });
+            //       console.log('Solana distributed successfully.');
+            //     } else {
+            //       throw new Error('SOL distribution failed');
+            //     }
+            //   } else {
+            //     console.log('Solana already distributed.');
+            //   }
+            //   break;
 
             case "CHECK_INSTANCES_STARTED":
               if (!userData.instancesStarted) {
@@ -464,6 +464,7 @@ class InstanceManager {
       const additionalConfig = `
 # Market maker specific settings
 CHAT_ID=${chatId}
+JITO=false
 CONTRACT_ADDRESS=${userData.contractAddress || ''}
 TOKEN_DECIMALS=${userData.tokenDecimals || 6}
 TOKEN_SYMBOL=${userData.tokenSymbol || ''}
