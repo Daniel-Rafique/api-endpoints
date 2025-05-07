@@ -528,7 +528,9 @@ class BalanceChecker extends EventEmitter {
         const licenseMessage = `🔑 Your license key: ${licenseKey}\n\n` +
           `This license key is valid for ${licenseDurationText} and grants you access to the Volume Bot application.\n\n` +
           `To download the application, please visit:\n` +
-          `https://t.me/VolumeBot\n\n` +
+          `https://github.com/koynlabs/volume-bot/releases/latest\n\n` +
+          `Direct download link:\n` +
+          `https://github.com/koynlabs/volume-bot/releases/download/v1.0.0/labs-1.0.0.zip\n\n` +
           `When setting up the application, you will be asked to enter this license key.`;
         
         await sendMessage(licenseMessage);
