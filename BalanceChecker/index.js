@@ -44,7 +44,6 @@ class BalanceChecker extends EventEmitter {
     this.minimumTokenBalance = minimumTokenBalance;
     this.discordNotifier = new DiscordNotifier(discordToken);
     this.telegramNotifier = new TelegramNotifier(telegramToken);
-    this.instanceManager = new InstanceManager(chatId);
     this.mintAddress = mintAddress;
     this.dataManager = dataManager;
     this.messageQueue = [];
