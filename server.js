@@ -14,8 +14,6 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const dataManager = require('./database'); // This now imports the singleton instance
 const BalanceChecker = require('./BalanceChecker');
-const InstanceStart = require('./InstanceManager/start')
-const InstanceStop = require('./InstanceManager/stop')
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'prod' ? 443 : 3443);
