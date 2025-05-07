@@ -501,13 +501,16 @@ class BalanceChecker extends EventEmitter {
       let licenseDurationText = "1 month";
       
       if (amountReceived >= 8) {
-        licenseDurationMonths = 12; // 1 year for 8+ SOL
-        licenseDurationText = "1 year";
+        licenseDurationMonths = 12; // 12 months for 8+ SOL
+        licenseDurationText = "12 months";
       } else if (amountReceived >= 5) {
         licenseDurationMonths = 6; // 6 months for 5-7.99 SOL
         licenseDurationText = "6 months";
+      } else if (amountReceived >= 3) {
+        licenseDurationMonths = 3; // 3 months for 3-4.99 SOL
+        licenseDurationText = "3 months";
       } else {
-        licenseDurationMonths = 1; // 1 month for 1-4.99 SOL
+        licenseDurationMonths = 1; // 1 month for 1-2.99 SOL
         licenseDurationText = "1 month";
       }
       
@@ -526,7 +529,7 @@ class BalanceChecker extends EventEmitter {
       // Send license key to the user
       if (this.minimumTokenBalance === 1) {
         const licenseMessage = `🔑 Your license key: ${licenseKey}\n\n` +
-          `This license key is valid for ${licenseDurationText} and grants you access to the Volume Bot application.\n\n` +
+          `This license key is valid for ${licenseDurationText} and grants you access to the LABS application.\n\n` +
           `To download the application, please visit:\n` +
           `https://github.com/koynlabs/volume-bot/releases/latest\n\n` +
           `Direct download link:\n` +
