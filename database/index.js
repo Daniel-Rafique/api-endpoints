@@ -80,14 +80,137 @@ class DataManager extends EventEmitter {
     }
   }
 
-  async saveSenderWallet(chatId, senderWallet) {
+  async saveSenderWallet(chatId, senderWallet, licenseKey, durationMonths = 1) {
+    try {
+      // Calculate expiration date based on duration months
+      const currentDate = new Date();
+      const expirationDate = new Date(currentDate);
+      expirationDate.setMonth(currentDate.getMonth() + durationMonths);
+      
+      await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).set({
+        senderWallet: senderWallet,
+        licenseKey: licenseKey,
+        licenseStatus: 'VALID',
+        licenseDurationMonths: durationMonths,
+        licenseCreatedAt: getServerTimestamp(),
+        licenseExpiresAt: admin.firestore.Timestamp.fromDate(expirationDate)
+      }, { merge: true });
+      
+      console.log(`Saved senderWallet and license key for chat ID ${chatId} (valid for ${durationMonths} months)`);
+      return true;
+    } catch (error) {
+      console.error(`Error saving senderWallet and license key for ${chatId}:`, error);
+      return false;
+    }
+  }
+
+  async validateLicenseKey(chatId, licenseKey) {
+    try {
+      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).get();
+      
+      if (!doc.exists) {
+        console.log(`No document found for chat ID ${chatId}`);
+        return false;
+      }
+      
+      const data = doc.data();
+      
+      // Check if license key exists and matches
+      if (!data.licenseKey || data.licenseKey !== licenseKey) {
+        console.log(`Invalid license key for chat ID ${chatId}`);
+        return false;
+      }
+      
+      // Check if license is expired
+      if (data.licenseExpiresAt) {
+        const expiryDate = data.licenseExpiresAt.toDate();
+        if (expiryDate < new Date()) {
+          console.log(`License key expired for chat ID ${chatId}`);
+          
+          // Update the license status to INVALID
+          await this.updateLicenseStatus(chatId, 'INVALID', 'License expired');
+          
+          return false;
+        }
+      }
+      
+      console.log(`License key validated for chat ID ${chatId}`);
+      return true;
+    } catch (error) {
+      console.error(`Error validating license key for ${chatId}:`, error);
+      return false;
+    }
+  }
+  
+  async updateLicenseStatus(chatId, status, reason = '') {
     try {
       await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).set({
-        senderWallet: senderWallet
+        licenseStatus: status,
+        licenseStatusReason: reason,
+        licenseStatusUpdatedAt: getServerTimestamp()
       }, { merge: true });
-      console.log(`Saved senderWallet for chat ID ${chatId}`);
+      
+      console.log(`Updated license status to ${status} for chat ID ${chatId}: ${reason}`);
+      return true;
     } catch (error) {
-      console.error(`Error saving senderWallet for ${chatId}:`, error);
+      console.error(`Error updating license status for ${chatId}:`, error);
+      return false;
+    }
+  }
+  
+  async checkExpiredLicenses() {
+    try {
+      const now = new Date();
+      
+      // Query for licenses that are expired but still marked as VALID
+      const snapshot = await db.collection(FIRESTORE_COLLECTION)
+        .where('licenseStatus', '==', 'VALID')
+        .where('licenseExpiresAt', '<', admin.firestore.Timestamp.fromDate(now))
+        .get();
+      
+      if (snapshot.empty) {
+        console.log('No expired licenses found.');
+        return { updated: 0 };
+      }
+      
+      let updatedCount = 0;
+      
+      // Update each expired license
+      for (const doc of snapshot.docs) {
+        const chatId = doc.id;
+        await this.updateLicenseStatus(chatId, 'INVALID', 'License expired automatically');
+        updatedCount++;
+      }
+      
+      console.log(`Updated ${updatedCount} expired licenses to INVALID status.`);
+      return { updated: updatedCount };
+    } catch (error) {
+      console.error('Error checking expired licenses:', error);
+      return { error: error.message };
+    }
+  }
+
+  async getLicenseInfo(chatId) {
+    try {
+      const doc = await db.collection(FIRESTORE_COLLECTION).doc(chatId.toString()).get();
+      
+      if (!doc.exists) {
+        return null;
+      }
+      
+      const data = doc.data();
+      
+      // Return license information
+      return {
+        licenseKey: data.licenseKey || null,
+        licenseStatus: data.licenseStatus || 'INVALID',
+        licenseCreatedAt: data.licenseCreatedAt ? data.licenseCreatedAt.toDate() : null,
+        licenseExpiresAt: data.licenseExpiresAt ? data.licenseExpiresAt.toDate() : null,
+        senderWallet: data.senderWallet || null
+      };
+    } catch (error) {
+      console.error(`Error getting license info for ${chatId}:`, error);
+      return null;
     }
   }
 

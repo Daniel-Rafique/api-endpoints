@@ -270,10 +270,164 @@ app.post('/api/top-up', async (req, res) => {
   }
 });
 
+// License verification endpoint
+app.post('/api/verify-license', async (req, res) => {
+  try {
+    const { chatId, licenseKey, timestamp, hash } = req.body;
+    
+    // Validate parameters
+    if (!chatId || !licenseKey || !hash) {
+      console.log('Missing required license verification parameters');
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    
+    // Validate the hash
+    const expectedHash = generateHash(chatId, timestamp);
+    if (hash !== expectedHash) {
+      console.log(`License hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
+      return res.status(403).json({ error: 'Invalid request signature' });
+    }
+    
+    // Validate the license key
+    const isValid = await dataManager.validateLicenseKey(chatId, licenseKey);
+    
+    if (isValid) {
+      // Get license info
+      const licenseInfo = await dataManager.getLicenseInfo(chatId);
+      
+      return res.status(200).json({
+        valid: true,
+        message: 'License key is valid',
+        expiresAt: licenseInfo?.licenseExpiresAt || null,
+        senderWallet: licenseInfo?.senderWallet || null
+      });
+    } else {
+      return res.status(401).json({
+        valid: false,
+        message: 'Invalid or expired license key'
+      });
+    }
+  } catch (error) {
+    console.error('License verification error:', error);
+    return res.status(500).json({
+      error: 'Internal server error during license verification'
+    });
+  }
+});
+
+// Generate master license key endpoint (protected by admin token)
+app.post('/api/generate-master-license', async (req, res) => {
+  try {
+    const { adminToken, durationMonths = 12 } = req.body;
+    
+    // Validate admin token (compare with environment variable)
+    if (!adminToken || adminToken !== process.env.ADMIN_API_TOKEN) {
+      console.log('Invalid admin token');
+      return res.status(403).json({ error: 'Unauthorized access' });
+    }
+    
+    // Generate a master license key
+    const masterKey = generateMasterLicenseKey();
+    
+    // Calculate expiration date based on duration months
+    const currentDate = new Date();
+    const expirationDate = new Date(currentDate);
+    expirationDate.setMonth(currentDate.getMonth() + durationMonths);
+    
+    // Store the master license key in a separate collection for admin reference
+    try {
+      const db = admin.firestore();
+      await db.collection('master_licenses').add({
+        licenseKey: masterKey,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        licenseDurationMonths: durationMonths,
+        expiresAt: admin.firestore.Timestamp.fromDate(expirationDate),
+        isAdmin: true,
+        status: 'VALID'
+      });
+    } catch (dbError) {
+      console.error('Error storing master license:', dbError);
+    }
+    
+    return res.status(200).json({
+      licenseKey: masterKey,
+      duration: `${durationMonths} months`,
+      expiresAt: expirationDate.toISOString(),
+      message: 'Master license key generated successfully'
+    });
+  } catch (error) {
+    console.error('Error generating master license:', error);
+    return res.status(500).json({
+      error: 'Internal server error during license generation'
+    });
+  }
+});
+
+// Generate a master license key
+function generateMasterLicenseKey() {
+  try {
+    // Generate a more complex master key with additional entropy
+    const timestamp = Date.now();
+    const randomValue = crypto.randomBytes(16).toString('hex');
+    
+    // Create a string to hash
+    const dataToHash = `MASTER-${timestamp}-${randomValue}-${ENCRYPTION_KEY}`;
+    
+    // Use crypto to create a SHA-256 hash and take a portion of it
+    const hash = crypto.createHash('sha256').update(dataToHash).digest('hex');
+    
+    // Format the license key to be user-friendly with MASTER prefix
+    const formattedKey = `MASTER-${hash.substring(0, 4)}-${hash.substring(4, 8)}-${hash.substring(8, 12)}-${hash.substring(12, 16)}`;
+    
+    console.log(`Generated master license key: ${formattedKey}`);
+    return formattedKey;
+  } catch (error) {
+    console.error('Error generating master license key:', error);
+    return 'ERROR-GENERATING-MASTER-KEY';
+  }
+}
+
+// Endpoint to check for expired licenses (admin only)
+app.post('/api/check-expired-licenses', async (req, res) => {
+  try {
+    const { adminToken } = req.body;
+    
+    // Validate admin token
+    if (!adminToken || adminToken !== process.env.ADMIN_API_TOKEN) {
+      console.log('Invalid admin token for expired license check');
+      return res.status(403).json({ error: 'Unauthorized access' });
+    }
+    
+    // Run the expired license check
+    const result = await dataManager.checkExpiredLicenses();
+    
+    return res.status(200).json({
+      ...result,
+      message: `License check completed. Updated ${result.updated || 0} expired licenses.`
+    });
+  } catch (error) {
+    console.error('Error checking expired licenses:', error);
+    return res.status(500).json({
+      error: 'Internal server error during expired license check'
+    });
+  }
+});
+
 // Create HTTPS server
 const server = https.createServer(options, app);
 server.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes
 server.listen(port, () => {
   console.log(`HTTPS server is running on port ${port}`);
+  
+  // Set up a scheduled task to check for expired licenses daily
+  setInterval(async () => {
+    try {
+      console.log('Running scheduled check for expired licenses...');
+      const result = await dataManager.checkExpiredLicenses();
+      console.log(`Scheduled license check completed. Updated ${result.updated || 0} expired licenses.`);
+    } catch (error) {
+      console.error('Error in scheduled expired license check:', error);
+    }
+  }, 24 * 60 * 60 * 1000); // Run every 24 hours
 });
 

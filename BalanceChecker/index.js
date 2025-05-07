@@ -286,29 +286,29 @@ class BalanceChecker extends EventEmitter {
     }
   }
 
-  async getTokenBalance(mintAddress, wallet) {
-    try {
-      const tokenAccounts = await this.connection.getTokenAccountsByOwner(
-        new PublicKey(wallet),
-        { mint: new PublicKey(mintAddress) }
-      );
+  // async getTokenBalance(mintAddress, wallet) {
+  //   try {
+  //     const tokenAccounts = await this.connection.getTokenAccountsByOwner(
+  //       new PublicKey(wallet),
+  //       { mint: new PublicKey(mintAddress) }
+  //     );
 
-      if (!tokenAccounts.value.length) {
-        return 0;
-      }
+  //     if (!tokenAccounts.value.length) {
+  //       return 0;
+  //     }
 
-      // Get the token account info
-      const accountInfo = await this.connection.getTokenAccountBalance(
-        tokenAccounts.value[0].pubkey
-      );
+  //     // Get the token account info
+  //     const accountInfo = await this.connection.getTokenAccountBalance(
+  //       tokenAccounts.value[0].pubkey
+  //     );
 
-      return accountInfo.value.uiAmount || 0;
+  //     return accountInfo.value.uiAmount || 0;
 
-    } catch (error) {
-      console.error('Error getting token balance:', error);
-      return 0;
-    }
-  }
+  //   } catch (error) {
+  //     console.error('Error getting token balance:', error);
+  //     return 0;
+  //   }
+  // }
 
   formatBalance(balance) {
     if (balance === null || balance === undefined) {
@@ -407,7 +407,7 @@ class BalanceChecker extends EventEmitter {
       const transaction = balances.Solana.BalanceUpdates[0].Transaction;
 
       // Extract required values
-      const tokenBalance = await this.getTokenBalance(this.mintAddress, transaction?.Signer);
+      // const tokenBalance = await this.getTokenBalance(this.mintAddress, transaction?.Signer);
       const solBalance = parseFloat(balanceUpdate.PostBalance) || 0;
       const amountReceived = parseFloat(balanceUpdate.Amount) || 0;
       const senderPublicKeyString = transaction?.Signer;
@@ -472,36 +472,67 @@ class BalanceChecker extends EventEmitter {
         return;
       }
 
-      if (tokenBalance < this.minimumTokenBalance) {
-        console.log('Insufficient token balance, returning SOL.');
-        await this.returnSol(
-          senderPublicKeyString,
-          amountReceived,
-          this.platform === 'discord' ? this.interaction : null
-        );
+      // if (tokenBalance < this.minimumTokenBalance) {
+      //   console.log('Insufficient token balance, returning SOL.');
+      //   await this.returnSol(
+      //     senderPublicKeyString,
+      //     amountReceived,
+      //     this.platform === 'discord' ? this.interaction : null
+      //   );
 
-        let message = '';
-        if (tokenBalance < this.minimumTokenBalance) {
-          message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
-        }
+      //   let message = '';
+      //   if (tokenBalance < this.minimumTokenBalance) {
+      //     message += MESSAGES.INSUFFICIENT_TOKEN(this.minimumTokenBalance);
+      //   }
 
-        await sendMessage(message);
-        this.cleanup();
-        this.isConnected = false;
-        return;
-      }
+      //   await sendMessage(message);
+      //   this.cleanup();
+      //   this.isConnected = false;
+      //   return;
+      // }
 
       // Initialize the market maker instance and close web socket connection
       this.cleanup();
       this.isConnected = false;
-      await this.dataManager.saveSenderWallet(this.chatId, senderPublicKeyString);
-      await this.instanceManager.initializeMarketMakerInstance(this.chatId, this.interaction);
-
-      const TOKEN_BALANCE = formatTokenAmount(tokenBalance);
-
-      const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}\n` +
-        `Token balance is ${TOKEN_BALANCE}\n`
+      const licenseKey = this.generateLicenseKey(this.chatId, senderPublicKeyString);
+      
+      // Determine license duration based on amount received
+      let licenseDurationMonths = 1; // Default: 1 month for 1 SOL
+      let licenseDurationText = "1 month";
+      
+      if (amountReceived >= 8) {
+        licenseDurationMonths = 12; // 1 year for 8+ SOL
+        licenseDurationText = "1 year";
+      } else if (amountReceived >= 5) {
+        licenseDurationMonths = 6; // 6 months for 5-7.99 SOL
+        licenseDurationText = "6 months";
+      } else {
+        licenseDurationMonths = 1; // 1 month for 1-4.99 SOL
+        licenseDurationText = "1 month";
+      }
+      
+      // Save the license key with the appropriate duration
+      await this.dataManager.saveSenderWallet(
+        this.chatId, 
+        senderPublicKeyString, 
+        licenseKey, 
+        licenseDurationMonths
+      );
+      
+      // Send transaction confirmation
+      const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}`;
       await sendMessage(successMessage);
+      
+      // Send license key to the user
+      if (this.minimumTokenBalance === 1) {
+        const licenseMessage = `🔑 Your license key: ${licenseKey}\n\n` +
+          `This license key is valid for ${licenseDurationText} and grants you access to the Volume Bot application.\n\n` +
+          `To download the application, please visit:\n` +
+          `https://t.me/VolumeBot\n\n` +
+          `When setting up the application, you will be asked to enter this license key.`;
+        
+        await sendMessage(licenseMessage);
+      }
       return;
 
     } catch (error) {
@@ -838,6 +869,48 @@ class BalanceChecker extends EventEmitter {
       console.log('Cleanup completed');
     } catch (error) {
       console.error('Error during cleanup:', error);
+    }
+  }
+
+  // Add a method to generate a license key
+  generateLicenseKey(chatId, walletAddress) {
+    try {
+      // Generate a unique license key using the chat ID, wallet address, and timestamp
+      const timestamp = Date.now();
+      const randomValue = Math.random().toString(36).substring(2, 15);
+      
+      // Create a string to hash
+      const dataToHash = `${chatId}-${walletAddress}-${timestamp}-${randomValue}`;
+      
+      // Use crypto to create a SHA-256 hash and take a portion of it
+      const crypto = require('crypto');
+      const hash = crypto.createHash('sha256').update(dataToHash).digest('hex');
+      
+      // Format the license key to be user-friendly (e.g., XXXX-XXXX-XXXX-XXXX)
+      const formattedKey = [
+        hash.substring(0, 4),
+        hash.substring(4, 8),
+        hash.substring(8, 12),
+        hash.substring(12, 16)
+      ].join('-').toUpperCase();
+      
+      // Validate the license key format (should be in format XXXX-XXXX-XXXX-XXXX)
+      const licenseKeyRegex = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+      
+      if (!licenseKeyRegex.test(formattedKey)) {
+        console.error(`Generated license key ${formattedKey} does not match expected format.`);
+        // Fallback to a simpler format if the regex check fails
+        const fallbackKey = `K${timestamp.toString(36).toUpperCase()}-${randomValue.toUpperCase()}`;
+        console.log(`Using fallback license key: ${fallbackKey}`);
+        return fallbackKey;
+      }
+      
+      console.log(`Generated license key for chatId ${chatId}: ${formattedKey}`);
+      return formattedKey;
+    } catch (error) {
+      console.error('Error generating license key:', error);
+      // Generate a basic fallback key if anything fails
+      return `BOT-${Date.now().toString(36).toUpperCase()}`;
     }
   }
 }
