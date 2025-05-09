@@ -129,9 +129,8 @@ class BalanceChecker extends EventEmitter {
           if (response.payload.data?.Solana?.BalanceUpdates?.[0]?.Transaction?.Hash) {
             transactionSignature = response.payload.data.Solana.BalanceUpdates[0].Transaction.Hash;
             console.log("Transaction signature:", transactionSignature);
+            this.handleTransaction(response.payload.data, transactionSignature);
           }
-
-          this.handleTransaction(response.payload.data, transactionSignature);
         }
         if (response.type === "error") {
           console.error("Received error from Bitquery:", response.payload.errors[0].message);
@@ -615,14 +614,14 @@ class BalanceChecker extends EventEmitter {
         SystemProgram.transfer({
           fromPubkey: this.receiverKeypair.publicKey,
           toPubkey: senderPubKey,
-          lamports: Math.round(amountReceived * 1_000_000_000)
+          lamports: Math.round(amount * 1_000_000_000)
         })
       );
 
       // Calculate fee
       const message = transaction.compileMessage();
       const { value: fee } = await this.connection.getFeeForMessage(message);
-      const adjustedAmount = amountReceived - (fee / 1_000_000_000);
+      const adjustedAmount = amount - (fee / 1_000_000_000);
 
       // Check if amount is too small
       // if (adjustedAmount <= 0) {
