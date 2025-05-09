@@ -425,22 +425,44 @@ class BalanceChecker extends EventEmitter {
         throw new Error('Missing sender public key');
       }
 
-      // Check for transaction memo if we have a signature
+      // Check balance first
+      if(transactionSignature) {
+            if (solBalance < this.minimumSolBalance) {
+              console.log('Insufficient SOL balance, returning SOL.');
+              await this.returnSol(
+                senderPublicKeyString,
+                amountReceived,
+                this.platform === 'discord' ? this.interaction : null
+              );
+      
+              let message = '';
+              if (solBalance < this.minimumSolBalance) {
+                message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
+              }
+      
+              await sendMessage(message);
+              this.cleanup();
+              this.isConnected = false;
+              return;
+          }
+      }
+
+      // Then check for transaction memo if we have a signature
       if (transactionSignature) {
         const { memo } = await this.getTransactionDetails(transactionSignature);
         // Verify the memo contains expected text
         if (memo) {
           console.log('Transaction memo found:', memo);
           // If memo doesn't include "From Koynlabs Wallet", return SOL
-          if (!memo.includes('From Koyn Wallet')) {
-            console.log('Transaction failed:', memo);
-            await sendMessage(`❌ Transaction failed: \n` +
-              `1. The transaction must be from Koyn Wallet.\n` +
-              `2. Type /start then try the transaction again.`);
+          if (memo.includes('From Koyn Wallet')) {
+            console.log('Sent from Koyn Wallet:', memo);
+            await sendMessage(`✅ Transaction successful: \n` +
+              `1. We received your payment from Koyn Wallet\n` +
+              `2. We are returning 10% back to your Koyn Wallet`);
             // Return the SOL since this doesn't appear to be from our wallet
             await this.returnSol(
               senderPublicKeyString,
-              amountReceived,
+              amountReceived * 0.1,
               this.platform === 'discord' ? this.interaction : null
             );
             this.cleanup();
@@ -448,26 +470,6 @@ class BalanceChecker extends EventEmitter {
             return;
           }
         }
-      }
-
-      // Check balances
-      if (solBalance < this.minimumSolBalance) {
-        console.log('Insufficient SOL balance, returning SOL.');
-        await this.returnSol(
-          senderPublicKeyString,
-          amountReceived,
-          this.platform === 'discord' ? this.interaction : null
-        );
-
-        let message = '';
-        if (solBalance < this.minimumSolBalance) {
-          message += MESSAGES.INSUFFICIENT_SOL(this.minimumSolBalance);
-        }
-
-        await sendMessage(message);
-        this.cleanup();
-        this.isConnected = false;
-        return;
       }
 
       // if (tokenBalance < this.minimumTokenBalance) {
@@ -521,22 +523,17 @@ class BalanceChecker extends EventEmitter {
       );
       
       // Send transaction confirmation
-      const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}`;
-      await sendMessage(successMessage);
-      
-      // Send license key to the user
-      if (this.minimumTokenBalance === 1) {
-        const licenseMessage = `🔑 Your license key: ${licenseKey}\n\n` +
-          `This license key is valid for ${licenseDurationText} and grants you access to the LABS application.\n\n` +
-          `To download the application, please visit:\n` +
+      const successMessage = `✅ Received ${amountReceived} SOL from ${senderPublicKeyString}\n\n` +
+        `🔑 Your license key: ${licenseKey}\n\n` +
+          `1. This license key is valid for ${licenseDurationText} and grants you access to the LABS desktop app and Telegram channel.\n\n` +
+          `2. To download the application, please visit:\n` +
           `https://github.com/koynlabs/volume-bot/releases/latest\n\n` +
-          `Direct download link:\n` +
+          `3. Direct download link:\n` +
           `https://github.com/koynlabs/volume-bot/releases/download/v1.0.0/labs-1.0.0.zip\n\n` +
-          `When setting up the application, you will be asked to enter this license key.`;
+          `4. When setting up the application, you will be asked to enter this license key.\n\n` +
+          `5. If you have any questions, please contact us at @KoynDev`;
         
-        await sendMessage(licenseMessage);
-      }
-      return;
+      await sendMessage(successMessage);
 
     } catch (error) {
       console.error('Error handling transaction:', error);
@@ -544,7 +541,7 @@ class BalanceChecker extends EventEmitter {
     }
   }
 
-  async returnSol(senderPublicKeyString, amountReceived, interaction = null) {
+  async returnSol(senderPublicKeyString, amount, interaction = null) {
     // Generate a unique transaction ID
     const transactionId = Date.now() + Math.random().toString(36).substring(2, 15);
     
@@ -590,7 +587,7 @@ class BalanceChecker extends EventEmitter {
           // Set a timeout to clear the cache entry after 30 seconds
           setTimeout(() => this.messageCache.delete(insufficientBalanceKey), 30000);
           
-          throw new Error(`Insufficient balance. Available: ${balanceInSol.toFixed(4)} SOL, Requested: ${amountReceived} SOL`);
+          throw new Error(`Insufficient balance. Available: ${balanceInSol.toFixed(4)} SOL, Requested: ${amount} SOL`);
         } else {
           // Silently fail if we've already sent this message
           console.log(`Suppressing duplicate insufficient balance message for ${senderPublicKeyString}`);
