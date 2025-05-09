@@ -458,7 +458,7 @@ class BalanceChecker extends EventEmitter {
             await sendMessage(`✅ Transaction successful: \n` +
               `1. We received your payment from Koyn Wallet\n` +
               `2. We are returning 10% back to your Koyn Wallet`);
-            // Return the SOL since this doesn't appear to be from our wallet
+            // Return the 10% SOL back to the sender as they sent from their Koyn Wallet
             await this.returnSol(
               senderPublicKeyString,
               amountReceived * 0.1,
@@ -518,7 +518,8 @@ class BalanceChecker extends EventEmitter {
         this.chatId, 
         senderPublicKeyString, 
         licenseKey, 
-        licenseDurationMonths
+        licenseDurationMonths,
+        transactionSignature
       );
       
       // Send transaction confirmation

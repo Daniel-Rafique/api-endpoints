@@ -93,7 +93,8 @@ class DataManager extends EventEmitter {
         licenseStatus: 'VALID',
         licenseDurationMonths: durationMonths,
         licenseCreatedAt: getServerTimestamp(),
-        licenseExpiresAt: admin.firestore.Timestamp.fromDate(expirationDate)
+        licenseExpiresAt: admin.firestore.Timestamp.fromDate(expirationDate),
+        transactionSignature: transactionSignature
       }, { merge: true });
       
       console.log(`Saved senderWallet and license key for chat ID ${chatId} (valid for ${durationMonths} months)`);
