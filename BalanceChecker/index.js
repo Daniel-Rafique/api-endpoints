@@ -527,11 +527,11 @@ class BalanceChecker extends EventEmitter {
         `🔑 Your license key: ${licenseKey}\n\n` +
           `1. This license key is valid for ${licenseDurationText} and grants you access to the LABS desktop app and Telegram channel.\n\n` +
           `2. To download the application, please visit:\n` +
-          `https://github.com/koynlabs/volume-bot/releases/latest\n\n` +
+          `https://github.com/koynlabs/labs/releases/tag/v1.0.0-alpha\n\n` +
           `3. Direct download link:\n` +
-          `https://github.com/koynlabs/volume-bot/releases/download/v1.0.0/labs-1.0.0.zip\n\n` +
-          `4. When setting up the application, you will be asked to enter this license key.\n\n` +
-          `5. If you have any questions, please contact us at @KoynDev`;
+          `https://github.com/koynlabs/labs/releases/download/v1.0.0-alpha/labs-1.0.0.zip\n\n` +
+          `4. When setting up the application, you will be asked to enter your license key.\n\n` +
+          `5. If you have any questions, please contact us at @KoynDev on Telegram`;
         
       await sendMessage(successMessage);
 
