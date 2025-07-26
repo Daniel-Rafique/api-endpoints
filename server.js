@@ -273,6 +273,7 @@ app.post('/api/top-up', async (req, res) => {
 app.post('/api/verify-license', async (req, res) => {
   try {
     const { licenseKey } = req.body;
+    const MASTER_KEY = process.env.MASTER_KEY;
     
     // Validate parameters
     if (!licenseKey) {
@@ -281,7 +282,7 @@ app.post('/api/verify-license', async (req, res) => {
     }
     
     // Check if it's a master license key (for admin/testing)
-    if (licenseKey.startsWith('MASTER-')) {
+    if (licenseKey === MASTER_KEY) {
       console.log(`Master license key verification: ${licenseKey}`);
       return res.status(200).json({
         valid: true,
