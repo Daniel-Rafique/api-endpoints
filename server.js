@@ -12,6 +12,7 @@ const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
+const axios = require('axios');
 const dataManager = require('./database'); // This now imports the singleton instance
 const BalanceChecker = require('./BalanceChecker');
 
@@ -268,42 +269,93 @@ app.post('/api/top-up', async (req, res) => {
   }
 });
 
-// License verification endpoint
+// License verification endpoint (proxy to Helio API)
 app.post('/api/verify-license', async (req, res) => {
   try {
-    const { chatId, licenseKey, timestamp, hash } = req.body;
+    const { licenseKey } = req.body;
     
     // Validate parameters
-    if (!chatId || !licenseKey || !hash) {
-      console.log('Missing required license verification parameters');
-      return res.status(400).json({ error: 'Missing required parameters' });
+    if (!licenseKey) {
+      console.log('Missing license key in verification request');
+      return res.status(400).json({ error: 'License key is required' });
     }
     
-    // Validate the hash
-    const expectedHash = generateHash(chatId, timestamp);
-    if (hash !== expectedHash) {
-      console.log(`License hash mismatch! Expected: ${expectedHash}, Received: ${hash}`);
-      return res.status(403).json({ error: 'Invalid request signature' });
-    }
-    
-    // Validate the license key
-    const isValid = await dataManager.validateLicenseKey(chatId, licenseKey);
-    
-    if (isValid) {
-      // Get license info
-      const licenseInfo = await dataManager.getLicenseInfo(chatId);
-      
+    // Check if it's a master license key (for admin/testing)
+    if (licenseKey.startsWith('MASTER-')) {
       return res.status(200).json({
         valid: true,
-        message: 'License key is valid',
-        expiresAt: licenseInfo?.licenseExpiresAt || null,
-        senderWallet: licenseInfo?.senderWallet || null
+        message: 'Master license key verified',
+        features: ['basic_functionality', 'volume_bot', 'comment_bot', 'master_access'],
+        tier: 'master',
+        expiresAt: null // Master keys don't expire
       });
-    } else {
-      return res.status(401).json({
-        valid: false,
-        message: 'Invalid or expired license key'
+    }
+    
+    // For regular license keys (Helio subscription IDs), proxy to Helio API
+    try {
+      const helioApiKey = process.env.HELIO_API_KEY;
+      if (!helioApiKey) {
+        console.error('HELIO_API_KEY not configured');
+        return res.status(500).json({
+          error: 'Server configuration error'
+        });
+      }
+      
+      // Call Helio API to check subscription status
+      const helioResponse = await axios.get(`https://api.hel.io/v1/subscriptions/${licenseKey}`, {
+        headers: {
+          'Authorization': `Bearer ${helioApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
       });
+      
+      if (helioResponse.status === 200) {
+        const subscription = helioResponse.data;
+        
+        // Check subscription status
+        const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+        const expiresAt = subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null;
+        const isExpired = expiresAt && expiresAt < new Date();
+        
+        if (isActive && !isExpired) {
+          return res.status(200).json({
+            valid: true,
+            message: 'Subscription verified with Helio',
+            features: ['basic_functionality', 'volume_bot', 'comment_bot'],
+            tier: subscription.price_id ? 'premium' : 'basic',
+            expiresAt: expiresAt ? expiresAt.toISOString() : null
+          });
+        } else {
+          return res.status(401).json({
+            valid: false,
+            message: `Subscription is ${subscription.status}${isExpired ? ' (expired)' : ''}`
+          });
+        }
+      } else {
+        return res.status(401).json({
+          valid: false,
+          message: 'Subscription not found'
+        });
+      }
+    } catch (helioError) {
+      console.error('Helio API error:', helioError.message);
+      
+      // Handle specific Helio API errors
+      if (helioError.response?.status === 404) {
+        return res.status(401).json({
+          valid: false,
+          message: 'Subscription not found'
+        });
+      } else if (helioError.response?.status === 401) {
+        return res.status(500).json({
+          error: 'Invalid Helio API credentials'
+        });
+      } else {
+        return res.status(500).json({
+          error: 'Unable to verify subscription with Helio API'
+        });
+      }
     }
   } catch (error) {
     console.error('License verification error:', error);
