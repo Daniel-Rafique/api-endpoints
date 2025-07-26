@@ -282,6 +282,7 @@ app.post('/api/verify-license', async (req, res) => {
     
     // Check if it's a master license key (for admin/testing)
     if (licenseKey.startsWith('MASTER-')) {
+      console.log(`Master license key verification: ${licenseKey}`);
       return res.status(200).json({
         valid: true,
         message: 'Master license key verified',
